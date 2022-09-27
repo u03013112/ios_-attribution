@@ -1,0 +1,16 @@
+version: '2'
+
+services: 
+  ios_attribution:
+    image: u03013112/ios_attribution:v1
+    container_name: 'ios_attribution'
+    tty: true
+    volumes:
+        - ../:/src:cached
+    working_dir: /src/
+    network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"
