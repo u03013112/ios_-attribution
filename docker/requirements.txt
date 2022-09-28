@@ -1,2 +1,5 @@
 pyodps
 pandas
+ThinkingDataSdk
+matplotlib
+sqlalchemy
