@@ -89,9 +89,9 @@ class Data:
                 'uid':uid,
                 'installDate':installDate,
                 'media':media,
+                'country':country,
                 'campaign':campaign,
                 'idfa':idfa,
-                'country':country,
                 'iOSVersion':iOSVersion,
                 'usd':usd
             }

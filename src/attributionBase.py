@@ -21,12 +21,16 @@ class AttributionBase:
         data = Data(since=since,until=until).get24HPayUserInfo()
         
         for uid in data.keys():
+            uidData = data[uid]
+            # 应该在这里准备概率归因，base就直接都填None值了
             ret.append({
                 'uid':uid,
-                'installDate':data[uid]['installDate'],
-                'media':None,
-                'country':None,
-                'campaign':None,
+                'installDate':uidData['installDate'],
+                'media':uidData['media'],
+                'country':uidData['country'],
+                'campaign':uidData['campaign'],
+                'pMedia':None,
+                'pCampaign':None
             })
 
         return ret

@@ -25,20 +25,52 @@ batchConsumer = BatchConsumer(server_uri=uri, appid=appid,compress=False)
 
 ta = TGAnalytics(batchConsumer)
 
+# 先将所有的归因结论按照事件上传数数，算是留个记录
+# try:
+#     for ret in retList:
+#         account_id = ret['uid']
+
+#         properties = {
+#             "#time":ret['installDate'],
+#             "name":attribution.name,
+#             "version":attribution.version,
+#             "media":ret['media'],
+#             "country":ret['country'],
+#             "campaign":ret['campaign'],
+#         }
+#         ta.track(account_id = account_id, event_name = event_name, properties = properties)
+#     ta.flush()
+#     print('发送事件成功:',len(retList))
+# except Exception as e:
+#     print(e)
+
+# 然后更新用户属性，用于数数上快速的查看准确率
+# 用户属性会有后缀，用于保存多套结论
+# 暂时只针对media和campaign进行匹配测试，国家部分暂时没有想到价值
 try:
     for ret in retList:
         account_id = ret['uid']
-
+        propertiesSuffix = attribution.name + attribution.version
+        pCampaignMatch = None
+        if 'campaign' in ret :
+            if 'pCampaign' in ret and ret['campaign'] == ret['pCampaign']:
+                pCampaignMatch = 1
+            else:
+                pCampaignMatch = 0
+        if 'media' in ret :
+            if 'pMedia' in ret and ret['media'] == ret['pMedia']:
+                pMediaMatch = 1
+            else:
+                pMediaMatch = 0
+        
         properties = {
-            "#time":ret['installDate'],
-            "name":attribution.name,
-            "version":attribution.version,
-            "media":ret['media'],
-            "country":ret['country'],
-            "campaign":ret['campaign'],
+            'pMedia'+propertiesSuffix:ret['pMedia'],
+            'pCampaign'+propertiesSuffix:ret['pCampaign'],
+            'pMediaMatch'+propertiesSuffix:pMediaMatch,
+            'pCampaignMatch'+propertiesSuffix:pCampaignMatch,
         }
-        ta.track(account_id = account_id, event_name = event_name, properties = properties)
+        ta.user_set(account_id = account_id,properties = properties)
     ta.flush()
-    print('发送事件成功:',len(retList))
+    print('发送用户属性成功:',len(retList))
 except Exception as e:
     print(e)
