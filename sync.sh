@@ -7,6 +7,6 @@ while :
         echo '----------------------------------------------------------------'
         fswatch -r -L -1 ${SRC}
         date
-        rsync -av --exclude={".*","__pycache__/*"} --delete ${SRC} ${DST}
-        say 啊啊啊啊
+        rsync -av --exclude={".*","__pycache__/*","*.csv"} --delete ${SRC} ${DST}
+        say 红鲤鱼与绿鲤鱼与驴
     done

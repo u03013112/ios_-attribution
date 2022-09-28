@@ -131,3 +131,5 @@ dmypy.json
 # secret
 src/config.py
 sync.sh
+
+*.csv
