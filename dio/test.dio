@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="uXP6OfcG_mSpFMv9VUkl" name="Page-1">
-        <mxGraphModel dx="1764" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="937" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -8,7 +8,7 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="31" value="测试指定归因算法" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="80" y="40" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="205" y="40" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="34" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="32" target="33">
                     <mxGeometry relative="1" as="geometry"/>
@@ -17,7 +17,7 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="32" value="归因算法协议" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="680" y="40" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="497" y="40" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="36" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="33" target="35">
                     <mxGeometry relative="1" as="geometry"/>
@@ -31,45 +31,45 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="33" value="拥有属性&lt;br&gt;name&lt;br&gt;version" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="680" y="180" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="497" y="180" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="44" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="35" target="43">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="35" value="去数数中找到需要归因的用户" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="680" y="320" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="497" y="320" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="40" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="39" target="35">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="39" value="补充说明：&lt;br&gt;数数和af的归因结论一致，并且可以查到更多的用户信息，比如ios操作系统版本" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="880" y="290" width="120" height="100" as="geometry"/>
+                    <mxGeometry x="697" y="300" width="120" height="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="42" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="41">
+                <mxCell id="42" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="41">
                     <mxGeometry relative="1" as="geometry">
-                        <mxPoint x="800" y="350" as="targetPoint"/>
+                        <mxPoint x="617" y="350" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="41" value="补充说明2：&lt;br&gt;某些算法只能对部分用户归因，比如以cv值为主的算法只能针对24小时内付过费用户进行归因" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="880" y="400" width="120" height="100" as="geometry"/>
+                    <mxGeometry x="697" y="410" width="120" height="100" as="geometry"/>
                 </mxCell>
                 <mxCell id="46" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="43" target="45">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="43" value="进行归因" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="680" y="460" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="497" y="460" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="45" value="归因结论为：&lt;br&gt;{uid,media,&lt;br&gt;country,campaign}" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="680" y="600" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="497" y="600" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="65" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="49" target="64">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="49" value="调用指定归因算法" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="80" y="180" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="205" y="180" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="55" value="可以针对指定日期内&lt;br&gt;做归因，用于跑一些历史数据" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="880" y="180" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="697" y="180" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="67" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="64" target="66">
                     <mxGeometry relative="1" as="geometry"/>
@@ -78,7 +78,7 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="64" value="已有归因&lt;br&gt;结论" style="rhombus;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="100" y="310" width="80" height="80" as="geometry"/>
+                    <mxGeometry x="225" y="310" width="80" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="71" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="66" target="70">
                     <mxGeometry relative="1" as="geometry"/>
@@ -87,30 +87,30 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="66" value="对比归因结论&lt;br&gt;并给出判断，&lt;br&gt;是否匹配" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="80" y="480" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="205" y="480" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="74" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="68" target="72">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
-                            <mxPoint x="300" y="560"/>
-                            <mxPoint x="140" y="560"/>
+                            <mxPoint x="425" y="560"/>
+                            <mxPoint x="265" y="560"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="68" value="不做匹配判断" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="240" y="320" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="365" y="320" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="70" value="用于准确率计算" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="-120" y="480" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="12" y="480" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="76" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="72" target="75">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="72" value="上传用户属性" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="80" y="620" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="205" y="620" width="120" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="75" value="在数数上查看准确率" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="80" y="730" width="120" height="60" as="geometry"/>
+                    <mxGeometry x="205" y="730" width="120" height="60" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
