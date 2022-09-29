@@ -1,156 +1,141 @@
 <mxfile host="65bd71144e">
     <diagram id="WFY63m4EWmTpPSLQk0RR" name="Page-1">
-        <mxGraphModel dx="1138" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="937" dy="525" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="4" value="" style="edgeStyle=none;html=1;" parent="1" source="2" target="3" edge="1">
+                <mxCell id="73" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="71" target="72">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="2" value="&lt;pre style=&quot;background-color: rgb(255 , 255 , 255) ; font-family: &amp;#34;jetbrains mono&amp;#34; , monospace ; font-size: 9.8pt&quot;&gt;&lt;span style=&quot;color: #660e7a ; font-weight: bold&quot;&gt;ods_platform_appsflyer_skad_details&lt;/span&gt;&lt;/pre&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="70" y="40" width="350" height="60" as="geometry"/>
+                <mxCell id="71" value="cv映射&lt;br&gt;归因&lt;br&gt;基础线" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="30" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="3" value="所有ios14以上的&lt;br&gt;转化结果" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="185" y="180" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="7" value="" style="edgeStyle=none;html=1;" parent="1" source="5" target="6" edge="1">
+                <mxCell id="75" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="72" target="74">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="5" value="&lt;pre style=&quot;background-color: rgb(255 , 255 , 255) ; font-family: &amp;#34;jetbrains mono&amp;#34; , monospace ; font-size: 9.8pt&quot;&gt;&lt;span style=&quot;color: #660e7a ; font-weight: bold&quot;&gt;ods_platform_appsflyer_events&lt;/span&gt;&lt;/pre&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="630" y="40" width="290" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="6" value="ios14以下&lt;br&gt;或&lt;br&gt;ATT允许的（有idfa）转化结果" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="715" y="180" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="33" value="" style="edgeStyle=none;html=1;" parent="1" source="27" target="32" edge="1">
+                <mxCell id="77" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="72" target="76">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="27" value="两张表，&lt;br&gt;尝试进行映射" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="140" y="430" width="120" height="60" as="geometry"/>
+                <mxCell id="72" value="获得数数的&lt;br&gt;待归因用户数据" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="146" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="31" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="29" target="27" edge="1">
+                <mxCell id="74" value="ios 24小时内付费用户&lt;br&gt;数据包括付费金额、国家、ios版本等" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="146" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="79" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="76" target="78">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="29" value="思路1" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="140" y="340" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="35" value="" style="edgeStyle=none;html=1;" parent="1" source="32" target="34" edge="1">
+                <mxCell id="83" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="76" target="82">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="49" value="" style="edgeStyle=none;html=1;" parent="1" source="32" target="48" edge="1">
+                <mxCell id="76" value="获得skan对应&lt;br&gt;数据" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="276" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="81" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="78" target="80">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="58" value="" style="edgeStyle=orthogonalEdgeStyle;curved=1;html=1;" parent="1" source="32" target="57" edge="1">
+                <mxCell id="101" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="78" target="100">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="32" value="指定维度上可以匹配&lt;br&gt;的条件下" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="140" y="590" width="120" height="60" as="geometry"/>
+                <mxCell id="78" value="安装日期+1day时间区间&lt;br&gt;cv值&amp;gt;0" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="276" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="37" value="" style="edgeStyle=none;html=1;" parent="1" source="34" target="36" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
+                <mxCell id="80" value="给这个数据添加一列&lt;br&gt;是否已经被分配&lt;br&gt;初始值为否" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="276" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="41" value="" style="edgeStyle=none;html=1;" parent="1" source="34" target="40" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="43" value="" style="edgeStyle=none;html=1;" parent="1" source="34" target="42" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="34" value="应该会有3种情况" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="140" y="730" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="39" value="" style="edgeStyle=none;html=1;" parent="1" source="36" target="38" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="36" value="1:1" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="340" y="730" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="38" value="完美" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="540" y="730" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="45" value="" style="edgeStyle=none;html=1;" parent="1" source="40" target="44" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="40" value="1：多&lt;br&gt;或&lt;br&gt;多：1" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="340" y="820" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="47" value="" style="edgeStyle=none;html=1;" parent="1" source="42" target="46" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="52" value="" style="edgeStyle=none;html=1;" parent="1" source="42" target="51" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="42" value="多：多" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="340" y="920" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="44" value="部分属性补充" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="540" y="820" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="46" value="放弃归因" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="540" y="920" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="56" value="" style="edgeStyle=orthogonalEdgeStyle;curved=1;html=1;" parent="1" source="48" target="55" edge="1">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="48" value="所有条目" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="340" y="490" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="53" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;curved=1;" parent="1" source="51" target="32" edge="1">
+                <mxCell id="85" value="" style="edgeStyle=none;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="82" target="88">
                     <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="120" y="566" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="82" value="遍历待归因用户数据" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="416" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="90" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="88" target="89">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="88" value="匹配时间&lt;br&gt;skan的时间戳介于安装时间（数数中用户注册时间）+ 24hours ~48hours之间" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="510" width="120" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="107" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="89" target="106">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="89" value="cv值匹配" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="660" width="120" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="94" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="91" target="93">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="91" value="随机选一条" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="890" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="96" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="93" target="95">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="93" value="将skan归因&lt;br&gt;分配给待归因用户" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="1010" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="99" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="95" target="98">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="95" value="skan对应条目标注已分配" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="1120" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="97" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="95" target="82">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="330" y="1020" as="sourcePoint"/>
+                        <mxPoint x="380" y="970" as="targetPoint"/>
                         <Array as="points">
-                            <mxPoint x="50" y="950"/>
-                            <mxPoint x="50" y="620"/>
+                            <mxPoint x="400" y="1150"/>
+                            <mxPoint x="400" y="440"/>
+                            <mxPoint x="180" y="440"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="54" value="可以调整&lt;br&gt;或&lt;br&gt;修改维度" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="53" vertex="1" connectable="0">
-                    <mxGeometry x="-0.0098" y="-1" relative="1" as="geometry">
-                        <mxPoint y="1" as="offset"/>
+                <mxCell id="98" value="结束后test" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="60" y="1240" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="103" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="100" target="102">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="100" value="这个可能要进一步处理" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="366" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="105" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="102" target="104">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="102" value="有一些用户是可以通过network&lt;br&gt;匹配到media的" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="366" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="104" value="做初级基础线&lt;br&gt;暂时不做处理" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="660" y="366" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="108" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="106" target="91">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="110" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="106" target="109">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="106" value="有未分配&lt;br&gt;匹配&lt;br&gt;skan数据" style="rhombus;whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="760" width="80" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="111" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="109">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="180" y="440" as="targetPoint"/>
+                        <Array as="points">
+                            <mxPoint x="400" y="800"/>
+                            <mxPoint x="400" y="440"/>
+                        </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="51" value="为了尽可能不出现或少出现这种情况" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="140" y="920" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="55" value="&lt;span&gt;cv&lt;/span&gt;&lt;br&gt;&lt;span&gt;安装日期&lt;/span&gt;" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="540" y="490" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="60" value="" style="edgeStyle=orthogonalEdgeStyle;curved=1;html=1;" parent="1" source="57" target="59" edge="1">
+                <mxCell id="113" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="1" source="109" target="112">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="57" value="有idfa的条目" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="340" y="590" width="120" height="60" as="geometry"/>
+                <mxCell id="109" value="将待归因用户标记为&lt;br&gt;匹配异常" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="220" y="770" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="59" value="campaign" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="540" y="590" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="63" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="61" target="62">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="61" value="结论&lt;br&gt;将会是类似如下内容" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="770" y="730" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="65" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="62" target="64">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="62" value="完美归因数量&lt;br&gt;占比（分母是所有ios付费用户？）" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="770" y="870" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="67" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="64" target="66">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="64" value="完全无可奈何数量&lt;br&gt;占比&lt;br&gt;类似上面完美" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="770" y="1010" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="66" value="其他，暂时没想明白" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="770" y="1150" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="70" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="68" target="69">
-                    <mxGeometry relative="1" as="geometry"/>
-                </mxCell>
-                <mxCell id="68" value="思路2" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-                    <mxGeometry x="1030" y="340" width="120" height="60" as="geometry"/>
-                </mxCell>
-                <mxCell id="69" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="1030" y="480" width="120" height="60" as="geometry"/>
+                <mxCell id="112" value="基础线只统计一下&lt;br&gt;匹配异常记作&lt;br&gt;归因不正确" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="220" y="890" width="120" height="60" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
