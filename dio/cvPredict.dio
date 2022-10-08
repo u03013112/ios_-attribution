@@ -1,0 +1,142 @@
+<mxfile host="65bd71144e">
+    <diagram id="xROlc6mwYwu2OEyD-exM" name="Page-1">
+        <mxGraphModel dx="916" dy="593" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="4" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="10">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="自然量预测" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="&lt;div&gt;&lt;span&gt;输入&lt;/span&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;rounded=0;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="180" width="350" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="自然量&lt;br&gt;的比例&lt;br&gt;&lt;br&gt;可能是最近一周的一个序列" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="140" y="200" width="120" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="被预测当日&lt;br&gt;非自然量cv&lt;br&gt;&lt;br&gt;多余cv" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="200" width="120" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="7" target="14">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="&lt;div&gt;&lt;span&gt;输出&lt;/span&gt;&lt;/div&gt;" style="whiteSpace=wrap;html=1;rounded=0;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="470" width="340" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="自然量cv值&lt;br&gt;汇总表" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="170" y="500" width="120" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="10" target="12">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="自然量的&lt;br&gt;人数是可以确定的" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="所以要预测的是&lt;br&gt;每个人的cv值" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="480" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="34" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="14" target="33">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="验证 cv与总cv的差？" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="190" y="750" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="16" target="17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="16" target="19">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="null预测" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="690" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="28" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="17" target="27">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="输入" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="690" y="180" width="360" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="19" target="21">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="每个媒体的null值&lt;br&gt;人数是可以确认的" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="890" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="&lt;span&gt;所以要预测的是&lt;/span&gt;&lt;br&gt;&lt;span&gt;每个人的cv值&lt;/span&gt;" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="1090" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="指定媒体null值比例&lt;br&gt;&lt;br&gt;可能是最近一周的一个序列" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="720" y="200" width="120" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="被预测媒体当日&lt;br&gt;非null cv&lt;br&gt;&lt;br&gt;多余cv" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="890" y="200" width="120" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="31" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="27" target="30">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="输出" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="690" y="480" width="360" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="29" value="null cv值&lt;br&gt;汇总表" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="810" y="500" width="120" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="30" value="可以和自然量预测加在一起做最终的预测验算" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="810" y="750" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="32" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="14" target="30">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="570" y="820" as="sourcePoint"/>
+                        <mxPoint x="620" y="770" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="36" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="33" target="35">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="41" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="33" target="40">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="33" value="可能需要&lt;br&gt;偏高估&lt;br&gt;或者&lt;br&gt;偏低估" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="190" y="890" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="38" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="35" target="37">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="43" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="35" target="42">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="35" value="偏高估可以直接用总值，即用skan cv + 自然量预测cv 与 总cv做校准" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="390" y="890" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="45" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="37" target="44">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="37" value="偏低估可以用人数，即用skan cv + 自然量预测cv *((自然量+null人数)/自然量人数) 与 总cv做校准" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="390" y="1000" width="120" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="39" value="" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="37">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="310" y="920" as="sourcePoint"/>
+                        <mxPoint x="670" y="890" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="40" value="可以生成不同的模型" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="190" y="1030" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="42" value="得到的cv必定是偏大的" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="590" y="890" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="44" value="得到的cv有可能偏小" style="whiteSpace=wrap;html=1;align=left;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="590" y="1015" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
