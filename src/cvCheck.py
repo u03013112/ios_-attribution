@@ -242,6 +242,79 @@ def cvToUSD(retDf):
     return retDf
 
 
+# 获取大盘所有cv，用于验证，不再区分media，因为区分不开
+def getAFEventsDataFromSmartComputeTotal(sinceTimeStr,unitlTimeStr,filename):
+    whenStr = ''
+    afCvMapDataFrame = pd.read_csv('/src/afCvMap.csv')
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when sum(event_revenue_usd)>%d and sum(event_revenue_usd)<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+
+    sql='''
+        select
+            customer_user_id,
+            case
+                when sum(event_revenue_usd)=0 or sum(event_revenue_usd) is null then 0
+                %s
+                else 63
+            end as cv
+            from (
+                select
+                    customer_user_id,cast (event_revenue_usd as double )
+                from ods_platform_appsflyer_events
+                where
+                    app_id='id1479198816'
+                    and event_timestamp-install_timestamp<=24*3600
+                    and event_name in ('af_purchase','install')
+                    and zone=0
+                    and day>=%s and day<=%s
+                union all
+                select
+                    customer_user_id, cast (event_revenue_usd as double )
+                from tmp_ods_platform_appsflyer_origin_install_data
+                where
+                    app_id='id1479198816'
+                    and zone='0'
+                    and install_time >="%s" and install_time<="%s"
+                )
+            group by
+            customer_user_id
+            ;
+        '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    smartCompute.writeCsv(pd_df,getFilename(filename))
+
+# total汇总
+def cvTotalForAFTotal(filename):
+    df = pd.read_csv(getFilename(filename))
+    ret = {
+        'total':[]
+    }
+    
+    for cv in range(0,64):
+        count = len(df[(df.cv == cv)])
+        ret['total'].append(count)
+        
+    retDf = pd.DataFrame(data = ret)
+    return retDf
+
+
 from src.ss import Data
 def getCVFromSS(sinceTimeStr,unitlTimeStr):
     ret = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -327,5 +400,11 @@ if __name__ == '__main__':
 
 
     # getAFEventsDataFromSmartComputeIdfa('20220501','20220531','202205idfa')
-    ret = cvToUSD(cvTotalForAFIdfa('202205idfa'))
-    ret.to_csv(getFilename('202205idfaUsd'))
+    # ret = cvToUSD(cvTotalForAFIdfa('202205idfa'))
+    # ret.to_csv(getFilename('202205idfaUsd'))
+    
+    # getAFEventsDataFromSmartComputeTotal('20220501','20220531','202205total')
+    ret = cvTotalForAFTotal('202205total')
+    ret.to_csv(getFilename('202205totalCv'))
+    ret = cvToUSD(ret)
+    ret.to_csv(getFilename('202205totalUsd'))
