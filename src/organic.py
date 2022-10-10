@@ -56,7 +56,7 @@ def getAFInstallCount(sinceTimeStr,unitlTimeStr):
         )
         ;
         '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
-    print(sql)
+    # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     
@@ -88,7 +88,7 @@ def getSkanInstallCount(sinceTimeStr,unitlTimeStr):
             and day>=%s and day <=%s
             and install_date >="%s" and install_date<="%s"
     '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
-    print(sql)
+    # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     
@@ -157,13 +157,13 @@ def getIdfaCv(sinceTimeStr,unitlTimeStr):
             media_source
         ;
         '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
-    print(sql)
+    # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     return pd_df
 
 def predictCv(idfaCvRet,organicCount):
-    ret = []
+    data = {'cv':[],'count':[]}
     df = idfaCvRet
     idfaOrganicTotalCount = df[(pd.isna(df.media_source))]['count'].sum()
     for i in range(0,64):
@@ -175,8 +175,9 @@ def predictCv(idfaCvRet,organicCount):
             count = 0
         
         c = organicCount * (count/idfaOrganicTotalCount)
-        ret.append(round(c))
-    return pd.DataFrame(data = {'cv':ret})
+        data['cv'].append(i)
+        data['count'].append(round(c))
+    return pd.DataFrame(data = data)
 
 # cv转成usd，暂时用最大值来做
 def cvToUSD(retDf):
@@ -224,7 +225,7 @@ def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
             cv
         ;
     '''%(whenStr,sinceTimeStr,unitlTimeStr)
-    print(sql)
+    # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     df = cvToUSD(pd_df)
@@ -242,7 +243,7 @@ def getSkanCvUsd(sinceTimeStr,unitlTimeStr):
             and day>=%s and day <=%s
         group by skad_conversion_value
     '''%(sinceTimeStr,unitlTimeStr)
-    print(sql)
+    # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     # 这里做的save+load是必须的，可能是什么奇怪的bug，只有这样才能有效的后续计算
@@ -266,8 +267,14 @@ def main(sinceTimeStr,unitlTimeStr):
     for i in range((unitlTime - sinceTime).days + 1):
         day = sinceTime + datetime.timedelta(days=i)
         dayStr = day.strftime('%Y%m%d')
-
-        organicCount = getAFInstallCount(dayStr,dayStr) - getSkanInstallCount(dayStr,dayStr)
+        print('开始预测自然量：',dayStr)
+        afInstallCount = getAFInstallCount(dayStr,dayStr)
+        print('获得af安装数：',afInstallCount)
+        skanInstallCount = getSkanInstallCount(dayStr,dayStr)
+        print('获得skan安装数：',skanInstallCount)
+        organicCount = afInstallCount - skanInstallCount
+        print('自然量安装数：',organicCount)
+        
 
         # 获得参考数值，应该是day-n~day-1，共n天
         day_n = day - datetime.timedelta(days=n)
@@ -278,7 +285,7 @@ def main(sinceTimeStr,unitlTimeStr):
         idfaCvRet = getIdfaCv(day_nStr,day_1Str)
         df = predictCv(idfaCvRet,organicCount)
         predictCvSumDf += df
-        print('预测%s结果：'%(dayStr),df)
+        print('预测结果：',df)
         print('暂时汇总结果：',predictCvSumDf)
     predictCvSumDf.to_csv(getFilename('mainTmp'))
     predictUsdSumDf = cvToUSD(predictCvSumDf)
