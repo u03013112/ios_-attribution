@@ -178,22 +178,135 @@ def predictCv(idfaCvRet,organicCount):
         ret.append(round(c))
     return pd.DataFrame(data = {'cv':ret})
 
+# cv转成usd，暂时用最大值来做
+def cvToUSD(retDf):
+    for i in range(len(afCvMapDataFrame)):
+        # min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(max_event_revenue):
+            max_event_revenue = 0
+        # retDf.iloc[i]*=max_event_revenue
+        print(i,max_event_revenue)
+        retDf.loc[retDf.cv==i,'count']*=max_event_revenue
+    return retDf
 
-def getAFCvUsd(sinceTimeStr,unitlTimeStr):
-    pass
+def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
+    # 先要获得AF cv，然后再转成usd
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when sum(event_revenue_usd)>%d and sum(event_revenue_usd)<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    sql='''
+        select
+            cv,count(*) as count
+        from (
+            select
+                case
+                    when sum(event_revenue_usd)=0 or sum(event_revenue_usd) is null then 0
+                    %s
+                    else 63
+                end as cv
+            from ods_platform_appsflyer_events
+            where
+                app_id='id1479198816'
+                and event_timestamp-install_timestamp<=24*3600
+                and event_name='af_purchase'
+                and zone=0
+                and day>=%s and day<=%s
+            group by
+                customer_user_id
+        )
+        group by
+            cv
+        ;
+    '''%(whenStr,sinceTimeStr,unitlTimeStr)
+    print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    df = cvToUSD(pd_df)
+    return df['count'].sum()
 
 def getSkanCvUsd(sinceTimeStr,unitlTimeStr):
-    pass
+    sql='''
+        select
+            skad_conversion_value as cv,count(*) as count
+        from ods_platform_appsflyer_skad_details
+        where
+            app_id="id1479198816"
+            and skad_conversion_value>0
+            and event_name='af_skad_revenue'
+            and day>=%s and day <=%s
+        group by skad_conversion_value
+    '''%(sinceTimeStr,unitlTimeStr)
+    print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    # 这里做的save+load是必须的，可能是什么奇怪的bug，只有这样才能有效的后续计算
+    pd_df.to_csv(getFilename('tmp'))
+    pd_df= pd.read_csv(getFilename('tmp'))
+    df = cvToUSD(pd_df)
+    return df['count'].sum()
 
+# 预测，预测需要前7日数据
+# 由于目前只有5月1~5月31的数据，所以sinceTimeStr,unitlTimeStr暂时只能是 '20220508','20220531'
 def main(sinceTimeStr,unitlTimeStr):
-    pass
+    # 参考数值，n指的是利用前n天的数据作为参考数值
+    n = 7
+    predictCvSumDf = pd.DataFrame(data={
+        'cv':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63],
+        'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        })
+    # for sinceTimeStr->unitlTimeStr
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+    for i in range((unitlTime - sinceTime).days + 1):
+        day = sinceTime + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y%m%d')
+
+        organicCount = getAFInstallCount(dayStr,dayStr) - getSkanInstallCount(dayStr,dayStr)
+
+        # 获得参考数值，应该是day-n~day-1，共n天
+        day_n = day - datetime.timedelta(days=n)
+        day_nStr = day_n.strftime('%Y%m%d')
+        day_1 = day - datetime.timedelta(days=1)
+        day_1Str = day_1.strftime('%Y%m%d')
+
+        idfaCvRet = getIdfaCv(day_nStr,day_1Str)
+        df = predictCv(idfaCvRet,organicCount)
+        predictCvSumDf += df
+        print('预测%s结果：'%(dayStr),df)
+        print('暂时汇总结果：',predictCvSumDf)
+    predictCvSumDf.to_csv(getFilename('mainTmp'))
+    predictUsdSumDf = cvToUSD(predictCvSumDf)
+    print('cv->df:',predictUsdSumDf)
+    predictUsdSum = predictUsdSumDf['count'].sum()
+    print('预测自然量付费总金额：',predictUsdSum)
+    
+    afUsdSum = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
+    print('AF付费总金额：',afUsdSum)
+    skanUsdSum = getSkanCvUsd(sinceTimeStr,unitlTimeStr)
+    print('skan付费总金额：',skanUsdSum)
+
+    print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
 
 if __name__ == "__main__":
-    # organicCount = getAFInstallCount('20220508','20220508') - getSkanInstallCount('20220508','20220508')
-    organicCount = 7444
-    print(organicCount)
-    # idfaCvRet = getIdfaCv('20220501','20220507')
-    # idfaCvRet.to_csv(getFilename('20220507IdfaCv'))
-    idfaCvRet=pd.read_csv(getFilename('20220507IdfaCv'))
-    df = predictCv(idfaCvRet,organicCount)
-    df.to_csv(getFilename('20220508predictCv'))
+    # # organicCount = getAFInstallCount('20220508','20220508') - getSkanInstallCount('20220508','20220508')
+    # organicCount = 7444
+    # print(organicCount)
+    # # idfaCvRet = getIdfaCv('20220501','20220507')
+    # # idfaCvRet.to_csv(getFilename('20220507IdfaCv'))
+    # idfaCvRet=pd.read_csv(getFilename('20220507IdfaCv'))
+    # df = predictCv(idfaCvRet,organicCount)
+    # df.to_csv(getFilename('20220508predictCv'))
+    # df = getAFCvUsdSum('20220508','20220531')
+    # print(df)
+
+    # df = getSkanCvUsd('20220508','20220531')
+    # print(df)
+
+    main('20220508','20220531')
+    
