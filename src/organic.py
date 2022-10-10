@@ -301,11 +301,62 @@ def main(sinceTimeStr,unitlTimeStr):
 
     print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
 
+# 直接简单粗暴的试试
+def main2(sinceTimeStr,unitlTimeStr):
+    
+    afInstallCount = getAFInstallCount(sinceTimeStr,unitlTimeStr)
+    print('获得af安装数：',afInstallCount)
+    skanInstallCount = getSkanInstallCount(sinceTimeStr,unitlTimeStr)
+    print('获得skan安装数：',skanInstallCount)
+    organicCount = afInstallCount - skanInstallCount
+    print('自然量安装数：',organicCount)
+
+    idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
+    df = predictCv(idfaCvRet,organicCount)
+    print('预测结果：',df)
+
+    predictUsdSumDf = cvToUSD(df)
+    print('cv->df:',predictUsdSumDf)
+    predictUsdSum = predictUsdSumDf['count'].sum()
+    print('预测自然量付费总金额：',predictUsdSum)
+    
+    afUsdSum = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
+    print('AF付费总金额：',afUsdSum)
+    skanUsdSum = getSkanCvUsd(sinceTimeStr,unitlTimeStr)
+    print('skan付费总金额：',skanUsdSum)
+
+    print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
+
+def test(sinceTimeStr,unitlTimeStr):
+    idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
+    idfaCvRet.to_csv(getFilename('test'))
+    idfaCvRet = pd.read_csv(getFilename('test'))
+    organicDf = idfaCvRet[(pd.isna(idfaCvRet.media_source))]
+    organicCv = organicDf['count'].sum()
+    totalCv = idfaCvRet['count'].sum()
+    print(organicCv,totalCv)
+    df = cvToUSD(idfaCvRet)
+    # print(df)
+    
+    organicDf = df[(pd.isna(df.media_source))]
+    organicUsd = organicDf['count'].sum()
+    totalUsd = df['count'].sum()
+    print(organicUsd,totalUsd)
+
 if __name__ == "__main__":
     # 预测自然量付费总金额： 7502
     # AF付费总金额： 66338
     # skan付费总金额： 47753
     # 总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额： 0.8329313515632066
-    main('20220508','20220528')
+    # main('20220508','20220528')
+
+    # 预测自然量付费总金额： 8706
+    # AF付费总金额： 66338
+    # skan付费总金额： 47753
+    # 总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额： 0.8510808284844282
+    # main2('20220508','20220528')
+
+    # test('20220508','20220528')
+    print(getAFInstallCount('20220508','20220528'))
 
     
