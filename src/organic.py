@@ -187,7 +187,7 @@ def cvToUSD(retDf):
         if pd.isna(max_event_revenue):
             max_event_revenue = 0
         # retDf.iloc[i]*=max_event_revenue
-        print(i,max_event_revenue)
+        # print(i,max_event_revenue)
         retDf.loc[retDf.cv==i,'count']*=max_event_revenue
     return retDf
 
@@ -284,7 +284,8 @@ def main(sinceTimeStr,unitlTimeStr):
 
         idfaCvRet = getIdfaCv(day_nStr,day_1Str)
         df = predictCv(idfaCvRet,organicCount)
-        predictCvSumDf += df
+        # 由于预测出来的顺序是一致的，所以直接加就好了
+        predictCvSumDf['count'] += df['count']
         print('预测结果：',df)
         print('暂时汇总结果：',predictCvSumDf)
     predictCvSumDf.to_csv(getFilename('mainTmp'))
@@ -301,19 +302,10 @@ def main(sinceTimeStr,unitlTimeStr):
     print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
 
 if __name__ == "__main__":
-    # # organicCount = getAFInstallCount('20220508','20220508') - getSkanInstallCount('20220508','20220508')
-    # organicCount = 7444
-    # print(organicCount)
-    # # idfaCvRet = getIdfaCv('20220501','20220507')
-    # # idfaCvRet.to_csv(getFilename('20220507IdfaCv'))
-    # idfaCvRet=pd.read_csv(getFilename('20220507IdfaCv'))
-    # df = predictCv(idfaCvRet,organicCount)
-    # df.to_csv(getFilename('20220508predictCv'))
-    # df = getAFCvUsdSum('20220508','20220531')
-    # print(df)
+    # 预测自然量付费总金额： 7502
+    # AF付费总金额： 66338
+    # skan付费总金额： 47753
+    # 总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额： 0.8329313515632066
+    main('20220508','20220528')
 
-    # df = getSkanCvUsd('20220508','20220531')
-    # print(df)
-
-    main('20220508','20220531')
     
