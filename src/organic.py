@@ -310,8 +310,8 @@ def main(sinceTimeStr,unitlTimeStr):
         df = predictCv(idfaCvRet,organicCount)
         # 由于预测出来的顺序是一致的，所以直接加就好了
         predictCvSumDf['count'] += df['count']
-        print('预测结果：',df)
-        print('暂时汇总结果：',predictCvSumDf)
+        # print('预测结果：',df)
+        # print('暂时汇总结果：',predictCvSumDf)
     predictCvSumDf.to_csv(getFilename('mainTmp'))
     predictUsdSumDf = cvToUSD(predictCvSumDf)
     print('cv->df:',predictUsdSumDf)
@@ -381,7 +381,13 @@ if __name__ == "__main__":
     # main2('20220508','20220528')
 
     # test('20220508','20220528')
-    print(getAFInstallCount('20220601','20220630'))
-    print(getSkanInstallCount('20220601','20220630'))
+    # print(getAFInstallCount('20220601','20220630'))
+    # print(getSkanInstallCount('20220601','20220630'))
+
+    # 预测自然量付费总金额： 14217
+    # AF付费总金额： 157988
+    # skan付费总金额： 128188
+    # 总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额： 0.9013659265260653
+    main('20220601','20220630')
 
     
