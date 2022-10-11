@@ -33,12 +33,36 @@ def getAFInstallCount(sinceTimeStr,unitlTimeStr):
     unitlTimeStr2.insert(4,'-')
     unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
 
+    # sql='''
+    #     select
+    #         count(distinct customer_user_id) as count
+    #     from (
+    #         select
+    #             customer_user_id
+    #         from ods_platform_appsflyer_events
+    #         where
+    #             app_id='id1479198816'
+    #             and event_name='install'
+    #             and zone=0
+    #             and day>=%s and day<=%s
+    #         union all
+    #         select
+    #             customer_user_id
+    #         from tmp_ods_platform_appsflyer_origin_install_data
+    #         where
+    #             app_id='id1479198816'
+    #             and zone='0'
+    #             and install_time >="%s" and install_time<="%s"
+    #     )
+    #     ;
+    #     '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    
     sql='''
         select
-            count(distinct customer_user_id) as count
+            sum(count) as count
         from (
             select
-                customer_user_id
+                count(*) as count
             from ods_platform_appsflyer_events
             where
                 app_id='id1479198816'
@@ -47,15 +71,15 @@ def getAFInstallCount(sinceTimeStr,unitlTimeStr):
                 and day>=%s and day<=%s
             union all
             select
-                customer_user_id
-                from tmp_ods_platform_appsflyer_origin_install_data
+                count(*) as count
+            from tmp_ods_platform_appsflyer_origin_install_data
             where
                 app_id='id1479198816'
                 and zone='0'
                 and install_time >="%s" and install_time<="%s"
         )
         ;
-        '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
     # print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
@@ -357,6 +381,7 @@ if __name__ == "__main__":
     # main2('20220508','20220528')
 
     # test('20220508','20220528')
-    print(getAFInstallCount('20220508','20220528'))
+    print(getAFInstallCount('20220601','20220630'))
+    print(getSkanInstallCount('20220601','20220630'))
 
     
