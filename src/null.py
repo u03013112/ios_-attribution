@@ -171,7 +171,7 @@ def predictCv(idfaCvRet,skanInstallCountRet):
             print('暂时预测结论：',data['count'])
         else:
             print(indexes)
-            print()
+            print(media,'没有null值')
             continue
     
     return pd.DataFrame(data = data)
