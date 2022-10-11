@@ -125,18 +125,24 @@ def predictCv(idfaCvRet,skanInstallCountRet):
     # 1、遍历各媒体，找到cv null值数量
     # 2、找到各媒体参考比率
     # 3、进行预测
+    skanInstallCountRet.to_csv(getFilename('skanInstallCountTmp'))
+    skanInstallCountRet = pd.read_csv(getFilename('skanInstallCountTmp'))
+    # print(len(skanInstallCountRet),skanInstallCountRet)
+    
     data = {
         'cv':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63],
         'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     }
+    totalCount = skanInstallCountRet[(pd.isna(skanInstallCountRet.cv))]['count'].sum()
+    print('共需预测人数：',totalCount)
 
     medias = skanInstallCountRet['media_source'].unique()
     for media in medias:
-        print('预测',media)
-        indexes = skanInstallCountRet[(skanInstallCountRet.media_source == media)].index
+        indexes = skanInstallCountRet[(skanInstallCountRet.media_source == media) & (pd.isna(skanInstallCountRet.cv))].index
         if len(indexes) == 1:
             index = indexes[0]
             nullCount = skanInstallCountRet['count'].get(index)
+            print(media,'待预测用户数：',nullCount)
             # 这个数值如果太小，可能预测就会偏小，所以预测这个并不能直接用人数*比例，而是要尝试进行随机？
             # idfaOrganicTotalCount = idfaCvRet[(idfaCvRet.media_source == media)]['count'].sum()
             # ruler：一个尺子，直接随机一个上限数值，落在哪个区间，就给那个cv count+1，这个算法效率担忧
@@ -152,9 +158,10 @@ def predictCv(idfaCvRet,skanInstallCountRet):
                     count = 0
                 max += count
                 ruler.append(count)
-            print(ruler,max)
-            m = 0
+            # print(ruler,max)
+            
             for i in range(nullCount):
+                m = 0
                 r = random.randint(0,max)
                 for index in range(len(ruler)):
                     m += ruler[index]
@@ -163,6 +170,8 @@ def predictCv(idfaCvRet,skanInstallCountRet):
                         break
             print('暂时预测结论：',data['count'])
         else:
+            print(indexes)
+            print()
             continue
     
     return pd.DataFrame(data = data)
@@ -194,10 +203,9 @@ def main(sinceTimeStr,unitlTimeStr):
     for i in range((unitlTime - sinceTime).days + 1):
         day = sinceTime + datetime.timedelta(days=i)
         dayStr = day.strftime('%Y%m%d')
-        
+        print('开始预测：',dayStr)
         # 找到指定日的skan各媒体安装数，与各媒体null值安装数
         skanInstallCount = getSkanInstallCount(dayStr,dayStr)
-        
 
         # 获得参考数值，应该是day-n~day-1，共n天
         day_n = day - datetime.timedelta(days=n)
@@ -217,7 +225,37 @@ def main(sinceTimeStr,unitlTimeStr):
     predictUsdSum = predictUsdSumDf['count'].sum()
     print('预测自然量付费总金额：',predictUsdSum)
     
+def test():
+    skanInstallCount = getSkanInstallCount('20220601','20220601')
+    skanInstallCount.to_csv(getFilename('skanInstallCount'))
+    skanInstallCount = pd.read_csv(getFilename('skanInstallCount'))
+    print(len(skanInstallCount),skanInstallCount)
+    return
+    # idfaCvRet = getIdfaCv('20220601','20220607')
+    # idfaCvRet.to_csv(getFilename('idfaCvRet'))
+    idfaCvRet = pd.read_csv(getFilename('idfaCvRet'))
+    ret = predictCv(idfaCvRet,skanInstallCount)
+    print(ret)
 
-
+def randomTest():
+    data = {
+        'cv':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63],
+        'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    }
+    ruler = [2924, 13, 12, 7, 6, 5, 1, 2, 1, 1, 2, 1, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    max = 2981
+    
+    for i in range(536):
+        m = 0
+        r = random.randint(0,max)
+        for index in range(len(ruler)):
+            m += ruler[index]
+            if m >=r :
+                data['count'][index] += 1
+                break
+    
+    print(data)
 if __name__ == "__main__":
     main('20220601','20220630')
+    # test()
+    # randomTest()
