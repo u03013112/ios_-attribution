@@ -314,16 +314,12 @@ def main(sinceTimeStr,unitlTimeStr):
         # print('暂时汇总结果：',predictCvSumDf)
     predictCvSumDf.to_csv(getFilename('mainTmp'))
     predictUsdSumDf = cvToUSD(predictCvSumDf)
-    print('cv->df:',predictUsdSumDf)
+    # print('cv->df:',predictUsdSumDf)
     predictUsdSum = predictUsdSumDf['count'].sum()
-    print('预测自然量付费总金额：',predictUsdSum)
+    # print('预测自然量付费总金额：',predictUsdSum)
     
-    afUsdSum = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
-    print('AF付费总金额：',afUsdSum)
-    skanUsdSum = getSkanCvUsd(sinceTimeStr,unitlTimeStr)
-    print('skan付费总金额：',skanUsdSum)
-
-    print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
+    return predictUsdSum
+    
 
 # 直接简单粗暴的试试
 def main2(sinceTimeStr,unitlTimeStr):

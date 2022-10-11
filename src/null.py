@@ -221,9 +221,10 @@ def main(sinceTimeStr,unitlTimeStr):
         # print('暂时汇总结果：',predictCvSumDf)
     predictCvSumDf.to_csv(getFilename('mainTmp'))
     predictUsdSumDf = cvToUSD(predictCvSumDf)
-    print('cv->df:',predictUsdSumDf)
+    # print('cv->df:',predictUsdSumDf)
     predictUsdSum = predictUsdSumDf['count'].sum()
-    print('预测自然量付费总金额：',predictUsdSum)
+    # print('预测null付费总金额：',predictUsdSum)
+    return predictUsdSum
     
 def test():
     skanInstallCount = getSkanInstallCount('20220601','20220601')
@@ -256,6 +257,7 @@ def randomTest():
     
     print(data)
 if __name__ == "__main__":
+    # 预测null付费总金额： 3567
     main('20220601','20220630')
     # test()
     # randomTest()
