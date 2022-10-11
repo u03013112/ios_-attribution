@@ -8,8 +8,8 @@ from src.null import main as nullMain
 
 def main(sinceTimeStr,unitlTimeStr):
     predictOrganicUsdSum = organicMain(sinceTimeStr,unitlTimeStr)
-    print('预测自然量付费总金额：',predictOrganicUsdSum)
     predictNullUsdSum = nullMain(sinceTimeStr,unitlTimeStr)
+    print('预测自然量付费总金额：',predictOrganicUsdSum)
     print('预测null付费总金额：',predictNullUsdSum)
     afUsdSum = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
     print('AF付费总金额：',afUsdSum)
