@@ -168,7 +168,7 @@ def predictCv(idfaCvRet,skanInstallCountRet):
                     if m >=r :
                         data['count'][index] += 1
                         break
-            print('暂时预测结论：',data['count'])
+            # print('暂时预测结论：',data['count'])
         else:
             print(indexes)
             print(media,'没有null值')
