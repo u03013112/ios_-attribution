@@ -155,7 +155,7 @@ def predictCv(idfaCvRet,skanInstallCountRet):
         'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     }
     totalCount = skanInstallCountRet[(pd.isna(skanInstallCountRet.cv))]['count'].sum()
-    print('共需预测人数：',totalCount)
+    # print('共需预测人数：',totalCount)
 
     medias = skanInstallCountRet['media_source'].unique()
     for media in medias:
@@ -163,7 +163,7 @@ def predictCv(idfaCvRet,skanInstallCountRet):
         if len(indexes) == 1:
             index = indexes[0]
             nullCount = skanInstallCountRet['count'].get(index)
-            print(media,'待预测用户数：',nullCount)
+            # print(media,'待预测用户数：',nullCount)
             # 这个数值如果太小，可能预测就会偏小，所以预测这个并不能直接用人数*比例，而是要尝试进行随机？
             # idfaOrganicTotalCount = idfaCvRet[(idfaCvRet.media_source == media)]['count'].sum()
             # ruler：一个尺子，直接随机一个上限数值，落在哪个区间，就给那个cv count+1，这个算法效率担忧
@@ -191,8 +191,8 @@ def predictCv(idfaCvRet,skanInstallCountRet):
                         break
             # print('暂时预测结论：',data['count'])
         else:
-            print(indexes)
-            print(media,'没有null值')
+            # print(indexes)
+            # print(media,'没有null值')
             continue
     
     return pd.DataFrame(data = data)
@@ -246,7 +246,24 @@ def main(sinceTimeStr,unitlTimeStr):
     predictUsdSum = predictUsdSumDf['count'].sum()
     # print('预测null付费总金额：',predictUsdSum)
     return predictUsdSum
-    
+
+# 仿照自然量，粗算
+def main3(sinceTimeStr,unitlTimeStr):
+    n = 30
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+    sinceTime = sinceTime - datetime.timedelta(days=n)
+    sinceTimeStr2 = sinceTime.strftime('%Y%m%d')
+    unitlTime = unitlTime - datetime.timedelta(days=1)
+    unitlTimeStr2 = unitlTime.strftime('%Y%m%d')
+
+    skanInstallCount = getSkanInstallCount(sinceTimeStr,unitlTimeStr)
+    idfaCvRet = getIdfaCv(sinceTimeStr2,unitlTimeStr2)
+    df = predictCv(idfaCvRet,skanInstallCount)
+    predictUsdSumDf = cvToUSD(df)
+    predictUsdSum = predictUsdSumDf['count'].sum()
+    return predictUsdSum
+ 
 def test():
     skanInstallCount = getSkanInstallCount('20220601','20220601')
     skanInstallCount.to_csv(getFilename('skanInstallCount'))

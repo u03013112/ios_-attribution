@@ -237,6 +237,21 @@ def cvToUSD(retDf):
         retDf.loc[retDf.cv==i,'count']*=max_event_revenue
     return retDf
 
+# 在原有df的基础上加一列来表示
+def cvToUSD2(retDf):
+    # 列名 usd
+    retDf['usd'] = 0
+    for i in range(len(afCvMapDataFrame)):
+        # min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(max_event_revenue):
+            max_event_revenue = 0
+        # retDf.iloc[i]*=max_event_revenue
+        # print(i,max_event_revenue)
+        count = retDf.loc[retDf.cv==i,'count']
+        retDf.loc[retDf.cv==i,'usd'] = count * max_event_revenue
+    return retDf
+
 def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
     # 先要获得AF cv，然后再转成usd
     whenStr = ''
@@ -343,9 +358,8 @@ def main(sinceTimeStr,unitlTimeStr):
     return predictUsdSum
     
 
-# 直接简单粗暴的试试
-def main2(sinceTimeStr,unitlTimeStr):
-    
+# 直接简单粗暴的试试，用一段时间的idfa数据直接评测这段时间的自然量，此方案用于快速验算
+def main2(sinceTimeStr,unitlTimeStr): 
     afInstallCount = getAFInstallCount(sinceTimeStr,unitlTimeStr)
     print('获得af安装数：',afInstallCount)
     skanInstallCount = getSkanInstallCount(sinceTimeStr,unitlTimeStr)
@@ -368,6 +382,33 @@ def main2(sinceTimeStr,unitlTimeStr):
     print('skan付费总金额：',skanUsdSum)
 
     print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
+
+# 用指定时间前一个月的时间，直接预测这一段时间的总值
+def main3(sinceTimeStr,unitlTimeStr): 
+    afInstallCount = getAFInstallCount(sinceTimeStr,unitlTimeStr)
+    # print('获得af安装数：',afInstallCount)
+    skanInstallCount = getSkanInstallCount(sinceTimeStr,unitlTimeStr)
+    # print('获得skan安装数：',skanInstallCount)
+    organicCount = afInstallCount - skanInstallCount
+    # print('自然量安装数：',organicCount)
+
+    n = 30
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+    sinceTime = sinceTime - datetime.timedelta(days=n)
+    sinceTimeStr2 = sinceTime.strftime('%Y%m%d')
+    unitlTime = unitlTime - datetime.timedelta(days=1)
+    unitlTimeStr2 = unitlTime.strftime('%Y%m%d')
+
+    idfaCvRet = getIdfaCv(sinceTimeStr2,unitlTimeStr2)
+    df = predictCv(idfaCvRet,organicCount)
+    # print('预测结果：',df)
+
+    predictUsdSumDf = cvToUSD(df)
+    # print('cv->df:',predictUsdSumDf)
+    predictUsdSum = predictUsdSumDf['count'].sum()
+    return predictUsdSum
+
 
 # 首日付费率计算
 def test(sinceTimeStr,unitlTimeStr):
@@ -660,6 +701,46 @@ def test3(sinceTimeStr,unitlTimeStr):
 
     print('idfa比率:',idfaCount/totalCount)
 
+# idfa数据中，各媒体对比
+def test4(sinceTimeStr,unitlTimeStr): 
+    print('idfa数据中，各媒体对比',sinceTimeStr,unitlTimeStr) 
+    idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
+    idfaCvRet.to_csv(getFilename('test4'))
+    idfaCvRet = pd.read_csv(getFilename('test4'))
+
+    idfaCvRet.loc[pd.isna(idfaCvRet.media_source),'media_source'] = 'organic'
+    idfaUsdRet = cvToUSD2(idfaCvRet)
+    medias = idfaUsdRet['media_source'].unique()
+    
+    for media in medias:
+        if media == None:
+            media = 'organic'
+        
+        
+        # 用户数量
+        userTotalCount = idfaUsdRet[(idfaUsdRet.media_source == media)]['count'].sum()
+        # print('用户数量',userTotalCount)
+        # 付费用户数量
+        payUserTotalCount = idfaUsdRet[(idfaUsdRet.media_source == media) & (idfaUsdRet.usd > 0)]['count'].sum()
+        # print('付费用户数量',payUserTotalCount)
+        # 付费金额
+        payTotalUsd = idfaUsdRet[(idfaUsdRet.media_source == media) & (idfaUsdRet.usd > 0)]['usd'].sum()
+        # print('付费金额',payTotalUsd)
+        
+        if userTotalCount > 0:
+            print('媒体',media)
+            # 付费率
+            payRate = payUserTotalCount/userTotalCount
+            print('\t付费率%.2f%%'%(payRate*100))
+            # 平均每用户付费金额
+            arpu = payTotalUsd/userTotalCount
+            print('\t平均每用户付费金额 $%.2f'%(arpu))
+        if payUserTotalCount > 0:
+            # 平均每付费用户付费金额
+            arppu = payTotalUsd/payUserTotalCount
+            print('\t平均每付费用户付费金额 $%.2f'%(arppu))
+
+
 if __name__ == "__main__":
     # 预测自然量付费总金额： 7502
     # AF付费总金额： 66338
@@ -695,7 +776,7 @@ if __name__ == "__main__":
     # print('自然量安装数：',organicCount)
     # main2('20220901','20220930')
     # main2('20220801','20220831')
-    main2('20220601','20220630')
+    # main2('20220601','20220630')
 
     # idfaCvRet = getIdfaCv('20220901','20220930')
     # idfaCvRet.to_csv(getFilename('idfaCvRet'))
@@ -714,3 +795,11 @@ if __name__ == "__main__":
     # test3('20220701','20220731')
     # test3('20220801','20220831')
     # test3('20220901','20220930')
+
+    # test4('20220601','20220630')
+    # test4('20220701','20220731')
+    # test4('20220801','20220831')
+    # test4('20220901','20220930')
+    # test4('20220601','20220930')
+
+    main3('20220901','20220930')
