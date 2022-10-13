@@ -355,10 +355,10 @@ def main2(sinceTimeStr,unitlTimeStr):
 
     idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
     df = predictCv(idfaCvRet,organicCount)
-    print('预测结果：',df)
+    # print('预测结果：',df)
 
     predictUsdSumDf = cvToUSD(df)
-    print('cv->df:',predictUsdSumDf)
+    # print('cv->df:',predictUsdSumDf)
     predictUsdSum = predictUsdSumDf['count'].sum()
     print('预测自然量付费总金额：',predictUsdSum)
     
@@ -694,14 +694,16 @@ if __name__ == "__main__":
     # organicCount = afInstallCount - skanInstallCount
     # print('自然量安装数：',organicCount)
     # main2('20220901','20220930')
+    # main2('20220801','20220831')
+    main2('20220601','20220630')
 
     # idfaCvRet = getIdfaCv('20220901','20220930')
     # idfaCvRet.to_csv(getFilename('idfaCvRet'))
 
-    test('20220601','20220630')
-    test('20220701','20220731')
-    test('20220801','20220831')
-    test('20220901','20220930')
+    # test('20220601','20220630')
+    # test('20220701','20220731')
+    # test('20220801','20220831')
+    # test('20220901','20220930')
 
     # test2('20220601','20220630')
     # test2('20220701','20220731')
