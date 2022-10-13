@@ -74,46 +74,67 @@ def getIdfaCv(sinceTimeStr,unitlTimeStr):
     unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
 
     sql='''
-        select 
-            cv,media_source,count(*) as count
-        from (
-            select
-                customer_user_id,
-                media_source,
-                case
-                    when sum(event_revenue_usd)=0 or sum(event_revenue_usd) is null then 0
-                    %s
-                    else 63
-                end as cv
-            from (
+        select
+            cv,
+            media_source,
+            count(*) as count
+        from
+            (
                 select
-                    customer_user_id,media_source,cast (event_revenue_usd as double )
-                from ods_platform_appsflyer_events
-                where
-                    app_id='id1479198816'
-                    and event_timestamp-install_timestamp<=24*3600
-                    and event_name in ('af_purchase','install')
-                    and idfa is not null
-                    and zone=0
-                    and day>=%s and day<=%s
-                union all
-                select
-                    customer_user_id,media_source, cast (event_revenue_usd as double )
-                from tmp_ods_platform_appsflyer_origin_install_data
-                where
-                    app_id='id1479198816'
-                    and zone='0'
-                    and idfa is not null
-                    and install_time >="%s" and install_time<="%s"
-                )
-            group by
-            customer_user_id,
-            media_source
-        )
+                    customer_user_id,
+                    media_source,
+                    sum(
+                        case
+                            when idfa is not null then 1
+                            else 0
+                        end
+                    ) as have_idfa,
+                    case
+                        when sum(event_revenue_usd) = 0
+                        or sum(event_revenue_usd) is null then 0 
+                        %s
+                        else 63
+                    end as cv
+                from
+                    (
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            ods_platform_appsflyer_events
+                        where
+                            app_id = 'id1479198816'
+                            and event_timestamp - install_timestamp <= 24 * 3600
+                            and event_name in ('af_purchase', 'install')
+                            and zone = 0 
+                            and day >= % s
+                            and day <= % s
+                        union
+                        all
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            tmp_ods_platform_appsflyer_origin_install_data
+                        where
+                            app_id = 'id1479198816'
+                            and zone = '0' 
+                            and install_time >= "%s"
+                            and install_time <= "%s"
+                    )
+                group by
+                    customer_user_id,
+                    media_source
+            )
+        where
+            have_idfa > 0
         group by
             cv,
-            media_source
-        ;
+            media_source;
         '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
     # print(sql)
     smartCompute = SmartCompute()

@@ -140,48 +140,70 @@ def getIdfaCv(sinceTimeStr,unitlTimeStr):
     unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
 
     sql='''
-        select 
-            cv,media_source,count(*) as count
-        from (
-            select
-                customer_user_id,
-                media_source,
-                case
-                    when sum(event_revenue_usd)=0 or sum(event_revenue_usd) is null then 0
-                    %s
-                    else 63
-                end as cv
-            from (
+        select
+            cv,
+            media_source,
+            count(*) as count
+        from
+            (
                 select
-                    customer_user_id,media_source,cast (event_revenue_usd as double )
-                from ods_platform_appsflyer_events
-                where
-                    app_id='id1479198816'
-                    and event_timestamp-install_timestamp<=24*3600
-                    and event_name in ('af_purchase','install')
-                    and idfa is not null
-                    and zone=0
-                    and day>=%s and day<=%s
-                union all
-                select
-                    customer_user_id,media_source, cast (event_revenue_usd as double )
-                from tmp_ods_platform_appsflyer_origin_install_data
-                where
-                    app_id='id1479198816'
-                    and zone='0'
-                    and idfa is not null
-                    and install_time >="%s" and install_time<="%s"
-                )
-            group by
-            customer_user_id,
-            media_source
-        )
+                    customer_user_id,
+                    media_source,
+                    sum(
+                        case
+                            when idfa is not null then 1
+                            else 0
+                        end
+                    ) as have_idfa,
+                    case
+                        when sum(event_revenue_usd) = 0
+                        or sum(event_revenue_usd) is null then 0 
+                        %s
+                        else 63
+                    end as cv
+                from
+                    (
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            ods_platform_appsflyer_events
+                        where
+                            app_id = 'id1479198816'
+                            and event_timestamp - install_timestamp <= 24 * 3600
+                            and event_name in ('af_purchase', 'install')
+                            and zone = 0 
+                            and day >= % s
+                            and day <= % s
+                        union
+                        all
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            tmp_ods_platform_appsflyer_origin_install_data
+                        where
+                            app_id = 'id1479198816'
+                            and zone = '0' 
+                            and install_time >= "%s"
+                            and install_time <= "%s"
+                    )
+                group by
+                    customer_user_id,
+                    media_source
+            )
+        where
+            have_idfa > 0
         group by
             cv,
-            media_source
-        ;
+            media_source;
         '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
     # print(sql)
+    # return
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     return pd_df
@@ -347,21 +369,296 @@ def main2(sinceTimeStr,unitlTimeStr):
 
     print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
 
+# 首日付费率计算
 def test(sinceTimeStr,unitlTimeStr):
-    idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
-    idfaCvRet.to_csv(getFilename('test'))
-    idfaCvRet = pd.read_csv(getFilename('test'))
-    organicDf = idfaCvRet[(pd.isna(idfaCvRet.media_source))]
-    organicCv = organicDf['count'].sum()
-    totalCv = idfaCvRet['count'].sum()
-    print(organicCv,totalCv)
-    df = cvToUSD(idfaCvRet)
-    # print(df)
+    print('首日付费率计算：',sinceTimeStr,unitlTimeStr)
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2)
+    sql='''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase', 'install')
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        union
+        all
+        select
+            customer_user_id,
+            media_source,
+            cast (event_revenue_usd as double)
+        from
+            tmp_ods_platform_appsflyer_origin_install_data
+        where
+            app_id = 'id1479198816'
+            and zone = '0'
+            and install_time >= "%s"
+            and install_time <= "%s"
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
     
-    organicDf = df[(pd.isna(df.media_source))]
-    organicUsd = organicDf['count'].sum()
-    totalUsd = df['count'].sum()
-    print(organicUsd,totalUsd)
+    totalCount = pd_df['total_count'].get(0)
+    print('总用户数：',totalCount)
+
+    sql = '''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase')
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    payCount = pd_df['total_count'].get(0)
+    print('付费用户数：',payCount)
+
+    print('付费率：',payCount/totalCount)
+
+
+# 拥有idfa首日付费率计算
+def test2(sinceTimeStr,unitlTimeStr):
+    print('拥有idfa首日付费率计算：',sinceTimeStr,unitlTimeStr)
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2)
+    sql='''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase', 'install')
+            and idfa is not null
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        union
+        all
+        select
+            customer_user_id,
+            media_source,
+            cast (event_revenue_usd as double)
+        from
+            tmp_ods_platform_appsflyer_origin_install_data
+        where
+            app_id = 'id1479198816'
+            and zone = '0'
+            and idfa is not null
+            and install_time >= "%s"
+            and install_time <= "%s"
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    totalCount = pd_df['total_count'].get(0)
+    print('总用户数：',totalCount)
+
+    sql = '''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase')
+            and idfa is not null
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    payCount = pd_df['total_count'].get(0)
+    print('付费用户数：',payCount)
+
+    print('付费率：',payCount/totalCount)
+
+def test3(sinceTimeStr,unitlTimeStr):
+    print('拥有idfa比率计算：',sinceTimeStr,unitlTimeStr)
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2)
+    sql='''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase', 'install')
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        union
+        all
+        select
+            customer_user_id,
+            media_source,
+            cast (event_revenue_usd as double)
+        from
+            tmp_ods_platform_appsflyer_origin_install_data
+        where
+            app_id = 'id1479198816'
+            and zone = '0'
+            and install_time >= "%s"
+            and install_time <= "%s"
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    totalCount = pd_df['total_count'].get(0)
+    print('总用户数：',totalCount)
+
+    sql='''
+        select
+            count(distinct customer_user_id) as total_count
+        from
+        (
+        select
+            customer_user_id,
+            media_source,
+            cast (sum(event_revenue_usd) as double) as event_revenue_usd
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'id1479198816'
+            and event_timestamp - install_timestamp <= 24 * 3600
+            and event_name in ('af_purchase', 'install')
+            and idfa is not null
+            and zone = 0
+            and day >= %s
+            and day <= %s
+            and install_time >= "%s"
+            and install_time <= "%s"
+        group by
+            customer_user_id,
+            media_source
+        union
+        all
+        select
+            customer_user_id,
+            media_source,
+            cast (event_revenue_usd as double)
+        from
+            tmp_ods_platform_appsflyer_origin_install_data
+        where
+            app_id = 'id1479198816'
+            and zone = '0'
+            and idfa is not null
+            and install_time >= "%s"
+            and install_time <= "%s"
+        )
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    idfaCount = pd_df['total_count'].get(0)
+    print('idfa总用户数：',idfaCount)
+
+    print('idfa比率:',idfaCount/totalCount)
 
 if __name__ == "__main__":
     # 预测自然量付费总金额： 7502
@@ -384,6 +681,34 @@ if __name__ == "__main__":
     # AF付费总金额： 157988
     # skan付费总金额： 128188
     # 总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额： 0.9013659265260653
-    main('20220601','20220630')
+    # main('20220601','20220630')
 
-    
+    # afInstallCount = getAFInstallCount('20220701','20220731')
+    # print('获得af安装数：',afInstallCount)
+
+    # afInstallCount = getAFInstallCount('20220801','20220831')
+    # print('获得af安装数：',afInstallCount)
+
+    # skanInstallCount = getSkanInstallCount('20220901','20220930')
+    # print('获得skan安装数：',skanInstallCount)
+    # organicCount = afInstallCount - skanInstallCount
+    # print('自然量安装数：',organicCount)
+    # main2('20220901','20220930')
+
+    # idfaCvRet = getIdfaCv('20220901','20220930')
+    # idfaCvRet.to_csv(getFilename('idfaCvRet'))
+
+    test('20220601','20220630')
+    test('20220701','20220731')
+    test('20220801','20220831')
+    test('20220901','20220930')
+
+    # test2('20220601','20220630')
+    # test2('20220701','20220731')
+    # test2('20220801','20220831')
+    # test2('20220901','20220930')
+
+    # test3('20220601','20220630')
+    # test3('20220701','20220731')
+    # test3('20220801','20220831')
+    # test3('20220901','20220930')
