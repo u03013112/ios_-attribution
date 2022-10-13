@@ -86,6 +86,58 @@ def getAFInstallCount(sinceTimeStr,unitlTimeStr):
     
     return pd_df['count'].get(0)
 
+# 新版本，group by install_time，这样可以一次取够数，不用来回sql
+# 返回 df 2列 count 和 install_date
+def getAFInstallCount2(sinceTimeStr,unitlTimeStr):
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+    
+    sql='''
+        select
+            sum(count) as count,install_date
+        from (
+            select
+                count(*) as count,
+                to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as install_date
+            from ods_platform_appsflyer_events
+            where
+                app_id='id1479198816'
+                and event_name='install'
+                and zone=0
+                and day>=%s and day<=%s
+            group by
+                install_date
+            union all
+            select
+                count(*) as count,
+                to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as install_date
+            from tmp_ods_platform_appsflyer_origin_install_data
+            where
+                app_id='id1479198816'
+                and zone='0'
+                and install_time >="%s" and install_time<="%s"
+            group by
+                install_date
+        )
+        group by
+            install_date
+        ;
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    return pd_df
+
 def getSkanInstallCount(sinceTimeStr,unitlTimeStr):
     # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
     sinceTimeStr2 = list(sinceTimeStr)
@@ -118,6 +170,40 @@ def getSkanInstallCount(sinceTimeStr,unitlTimeStr):
     
     return pd_df['count'].get(0)
     
+def getSkanInstallCount2(sinceTimeStr,unitlTimeStr):
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2)
+
+    # 由于skan报告普遍要晚2~3天，所以unitlTimeStr要往后延长3天
+    unitlTime = datetime.datetime.strptime(unitlTimeStr2,'%Y-%m-%d')
+    unitlTimeStr = (unitlTime+datetime.timedelta(days=3)).strftime('%Y%m%d')
+
+    sql='''
+        select
+            count(*) as count,
+            install_date
+        from ods_platform_appsflyer_skad_details
+        where
+            app_id="id1479198816"
+            and event_name in ('af_skad_redownload','af_skad_install')
+            and day>=%s and day <=%s
+            and install_date >="%s" and install_date<="%s"
+        group by
+            install_date
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    return pd_df
 
 def getIdfaCv(sinceTimeStr,unitlTimeStr):
     whenStr = ''
@@ -207,6 +293,103 @@ def getIdfaCv(sinceTimeStr,unitlTimeStr):
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     return pd_df
+
+def getIdfaCv2(sinceTimeStr,unitlTimeStr):
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when sum(event_revenue_usd)>%d and sum(event_revenue_usd)<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+
+    sql='''
+        select
+            cv,
+            media_source,
+            count(*) as count,
+            install_date
+        from
+            (
+                select
+                    customer_user_id,
+                    media_source,
+                    sum(
+                        case
+                            when idfa is not null then 1
+                            else 0
+                        end
+                    ) as have_idfa,
+                    case
+                        when sum(event_revenue_usd) = 0
+                        or sum(event_revenue_usd) is null then 0 
+                        %s
+                        else 63
+                    end as cv,
+                    install_date
+                from
+                    (
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa,
+                            to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as install_date
+                        from
+                            ods_platform_appsflyer_events
+                        where
+                            app_id = 'id1479198816'
+                            and event_timestamp - install_timestamp <= 24 * 3600
+                            and event_name in ('af_purchase', 'install')
+                            and zone = 0 
+                            and day >= % s
+                            and day <= % s
+                        union
+                        all
+                        select
+                            customer_user_id,
+                            media_source,
+                            cast (event_revenue_usd as double),
+                            idfa,
+                            to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as install_date
+                        from
+                            tmp_ods_platform_appsflyer_origin_install_data
+                        where
+                            app_id = 'id1479198816'
+                            and zone = '0' 
+                            and install_time >= "%s"
+                            and install_time <= "%s"
+                    )
+                group by
+                    customer_user_id,
+                    media_source,
+                    install_date
+            )
+        where
+            have_idfa > 0
+        group by
+            cv,
+            media_source,
+            install_date
+        ;
+        '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    # return
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    return pd_df
+
 
 def predictCv(idfaCvRet,organicCount):
     data = {'cv':[],'count':[]}
@@ -315,9 +498,8 @@ def getSkanCvUsd(sinceTimeStr,unitlTimeStr):
 
 # 预测，预测需要前7日数据
 # 由于目前只有5月1~5月31的数据，所以sinceTimeStr,unitlTimeStr暂时只能是 '20220508','20220531'
-def main(sinceTimeStr,unitlTimeStr):
-    # 参考数值，n指的是利用前n天的数据作为参考数值
-    n = 7
+# 参考数值，n指的是利用前n天的数据作为参考数值
+def main(sinceTimeStr,unitlTimeStr,n=7):
     predictCvSumDf = pd.DataFrame(data={
         'cv':[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63],
         'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -358,30 +540,57 @@ def main(sinceTimeStr,unitlTimeStr):
     return predictUsdSum
     
 
-# 直接简单粗暴的试试，用一段时间的idfa数据直接评测这段时间的自然量，此方案用于快速验算
-def main2(sinceTimeStr,unitlTimeStr): 
-    afInstallCount = getAFInstallCount(sinceTimeStr,unitlTimeStr)
-    print('获得af安装数：',afInstallCount)
-    skanInstallCount = getSkanInstallCount(sinceTimeStr,unitlTimeStr)
-    print('获得skan安装数：',skanInstallCount)
-    organicCount = afInstallCount - skanInstallCount
-    print('自然量安装数：',organicCount)
+# 更加快速，不用反复request
+# 返回一个df，列 install_date,usd
+def main2(sinceTimeStr,unitlTimeStr,n=7): 
+    ret = {
+        'install_date':[],
+        'usd':[]
+    }
 
-    idfaCvRet = getIdfaCv(sinceTimeStr,unitlTimeStr)
-    df = predictCv(idfaCvRet,organicCount)
-    # print('预测结果：',df)
-
-    predictUsdSumDf = cvToUSD(df)
-    # print('cv->df:',predictUsdSumDf)
-    predictUsdSum = predictUsdSumDf['count'].sum()
-    print('预测自然量付费总金额：',predictUsdSum)
+    afInstallCountDf = getAFInstallCount2(sinceTimeStr,unitlTimeStr)
+    skanInstallCountDf = getSkanInstallCount2(sinceTimeStr,unitlTimeStr)
     
-    afUsdSum = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
-    print('AF付费总金额：',afUsdSum)
-    skanUsdSum = getSkanCvUsd(sinceTimeStr,unitlTimeStr)
-    print('skan付费总金额：',skanUsdSum)
+    # for sinceTimeStr->unitlTimeStr
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
 
-    print('总金额差（skan付费总金额 + 预测自然量付费总金额） / AF付费总金额：',(skanUsdSum + predictUsdSum)/afUsdSum)
+    day_n = sinceTime - datetime.timedelta(days=n)
+    day_nStr = day_n.strftime('%Y-%m-%d')
+    day_1 = unitlTime - datetime.timedelta(days=1)
+    day_1Str = day_1.strftime('%Y-%m-%d')
+    # 从起始日往前n天，到截止日往前1天的所有idfa数值
+    idfaCvRetDf = getIdfaCv2(day_nStr,day_1Str)
+
+    for i in range((unitlTime - sinceTime).days + 1):
+        day = sinceTime + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+        print('开始预测自然量：',dayStr)
+        afInstallCount = afInstallCountDf[afInstallCountDf.install_date == dayStr,'count']
+        skanInstallCount = skanInstallCountDf[skanInstallCountDf.install_date == dayStr,'count']
+        organicCount = afInstallCount - skanInstallCount
+        print('获得af安装数：',afInstallCount)
+        print('获得skan安装数：',skanInstallCount)
+        print('自然量安装数：',organicCount)
+
+        # 获得参考数值，应该是day-n~day-1，共n天
+        day_n = day - datetime.timedelta(days=n)
+        day_nStr = day_n.strftime('%Y-%m-%d')
+        day_1 = day - datetime.timedelta(days=1)
+        day_1Str = day_1.strftime('%Y-%m-%d')
+
+        idfaCvRet = idfaCvRetDf[(idfaCvRetDf.install_date >= day_nStr) & (idfaCvRetDf.install_date <= day_1Str)]
+        predictCvDf = predictCv(idfaCvRet,organicCount)
+    
+        predictUsdDf = cvToUSD2(predictCvDf)
+        # print('cv->df:',predictUsdDf)
+        predictUsd = predictUsdDf['usd'].sum()
+        # print('预测自然量付费总金额：',predictUsdSum)
+
+        ret['install_date'].append(dayStr)
+        ret['usd'].append(predictUsd)
+    
+    return ret
 
 # 用指定时间前一个月的时间，直接预测这一段时间的总值
 def main3(sinceTimeStr,unitlTimeStr): 
@@ -802,4 +1011,6 @@ if __name__ == "__main__":
     # test4('20220901','20220930')
     # test4('20220601','20220930')
 
-    main3('20220901','20220930')
+    # main3('20220901','20220930')
+    print(getIdfaCv2('20220901','20220902'))
+    
