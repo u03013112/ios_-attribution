@@ -5,11 +5,8 @@ import sys
 sys.path.append('/src')
 from src.smartCompute import SmartCompute
 
-def getFilename(filename):
-    return '/src/data/%s.csv'%(filename)
-
-# cvMap here
-afCvMapDataFrame = pd.read_csv('/src/afCvMap.csv')
+from src.tools import afCvMapDataFrame
+from src.tools import cvToUSD2,getFilename
 
 # 流程思路
 # 1、找到指定日期的af events安装数
@@ -398,7 +395,7 @@ def predictCv(idfaCvRet,organicCount):
     if idfaOrganicTotalCount > 0:
         for i in range(0,64):
             count = df.loc[(df.cv == i) & pd.isna(df.media_source),'count'].sum()
-            print(i,count,idfaOrganicTotalCount)
+            # print(i,count,idfaOrganicTotalCount)
             c = organicCount * (count/idfaOrganicTotalCount)
             data['cv'].append(i)
             data['count'].append(round(c))
@@ -428,21 +425,6 @@ def cvToUSD(retDf):
         # retDf.iloc[i]*=max_event_revenue
         # print(i,max_event_revenue)
         retDf.loc[retDf.cv==i,'count']*=max_event_revenue
-    return retDf
-
-# 在原有df的基础上加一列来表示
-def cvToUSD2(retDf):
-    # 列名 usd
-    retDf['usd'] = 0
-    for i in range(len(afCvMapDataFrame)):
-        # min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
-        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
-        if pd.isna(max_event_revenue):
-            max_event_revenue = 0
-        # retDf.iloc[i]*=max_event_revenue
-        # print(i,max_event_revenue)
-        count = retDf.loc[retDf.cv==i,'count']
-        retDf.loc[retDf.cv==i,'usd'] = count * max_event_revenue
     return retDf
 
 def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
@@ -616,7 +598,7 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         # print(day_nStr,day_1Str)
         idfaCvRet = idfaCvRetDf[(idfaCvRetDf.install_date >= day_nStr) & (idfaCvRetDf.install_date <= day_1Str)]
         # print(idfaCvRet)
-        predictCvDf = predictCv(idfaCvRet,organicCount)
+        predictCvDf = predictCv2(idfaCvRet,organicCount)
         # print(predictCvDf)
         # log cv
         for i in range(0,64):

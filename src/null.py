@@ -6,11 +6,8 @@ import sys
 sys.path.append('/src')
 from src.smartCompute import SmartCompute
 
-def getFilename(filename):
-    return '/src/data/%s.csv'%(filename)
-
-# cvMap here
-afCvMapDataFrame = pd.read_csv('/src/afCvMap.csv')
+from src.tools import afCvMapDataFrame
+from src.tools import cvToUSD2,getFilename
 
 # 流程思路
 # 1、找到指定日的skan各媒体安装数，与各媒体null值安装数
@@ -377,21 +374,6 @@ def cvToUSD(retDf):
         # retDf.iloc[i]*=max_event_revenue
         # print(i,max_event_revenue)
         retDf.loc[retDf.cv==i,'count']*=max_event_revenue
-    return retDf
-
-# 在原有df的基础上加一列来表示
-def cvToUSD2(retDf):
-    # 列名 usd
-    retDf['usd'] = 0
-    for i in range(len(afCvMapDataFrame)):
-        # min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
-        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
-        if pd.isna(max_event_revenue):
-            max_event_revenue = 0
-        # retDf.iloc[i]*=max_event_revenue
-        # print(i,max_event_revenue)
-        count = retDf.loc[retDf.cv==i,'count']
-        retDf.loc[retDf.cv==i,'usd'] = count * max_event_revenue
     return retDf
 
 # 预测，预测需要前7日数据
