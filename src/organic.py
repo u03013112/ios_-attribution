@@ -397,13 +397,8 @@ def predictCv(idfaCvRet,organicCount):
     idfaOrganicTotalCount = df[(pd.isna(df.media_source))]['count'].sum()
     if idfaOrganicTotalCount > 0:
         for i in range(0,64):
-            indexes = df[(df.cv == i) & pd.isna(df.media_source)].index
-            if len(indexes) == 1:
-                index = indexes[0]
-                count = df['count'].get(index)
-            else:
-                count = 0
-            
+            count = df.loc[(df.cv == i) & pd.isna(df.media_source),'count'].sum()
+            print(i,count,idfaOrganicTotalCount)
             c = organicCount * (count/idfaOrganicTotalCount)
             data['cv'].append(i)
             data['count'].append(round(c))
@@ -558,6 +553,12 @@ def main(sinceTimeStr,unitlTimeStr,n=7):
 # 更加快速，不用反复request
 # 返回一个df，列 install_date,usd
 def main2(sinceTimeStr,unitlTimeStr,n=7): 
+    log = {
+        'install_date':[],
+        'af_install_count':[],
+        'skan_install_count':[],
+        'usd':[]
+    }
     ret = {
         'install_date':[],
         'usd':[]
@@ -596,11 +597,15 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         day = sinceTime + datetime.timedelta(days=i)
         dayStr = day.strftime('%Y-%m-%d')
         # print('开始预测自然量：',dayStr)
+        log['install_date'].append(dayStr)
         afInstallCount = afInstallCountDf.loc[afInstallCountDf.install_date == dayStr,'count'].sum()
         skanInstallCount = skanInstallCountDf.loc[skanInstallCountDf.install_date == dayStr,'count'].sum()
         organicCount = afInstallCount - skanInstallCount
         # print('获得af安装数：',afInstallCount)
+        log['af_install_count'].append(afInstallCount)
         # print('获得skan安装数：',skanInstallCount)
+        log['skan_install_count'].append(skanInstallCount)
+        
         # print('自然量安装数：',organicCount)
 
         # 获得参考数值，应该是day-n~day-1，共n天
@@ -611,8 +616,16 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         # print(day_nStr,day_1Str)
         idfaCvRet = idfaCvRetDf[(idfaCvRetDf.install_date >= day_nStr) & (idfaCvRetDf.install_date <= day_1Str)]
         # print(idfaCvRet)
-        predictCvDf = predictCv2(idfaCvRet,organicCount)
+        predictCvDf = predictCv(idfaCvRet,organicCount)
         # print(predictCvDf)
+        # log cv
+        for i in range(0,64):
+            key = 'cv'+str(i)
+            v = predictCvDf.loc[predictCvDf.cv == i,'count'].sum()
+            if key in log:
+                log[key].append(v)
+            else:
+                log[key]=[v]
         predictUsdDf = cvToUSD2(predictCvDf)
         # print('cv->df:',predictUsdDf)
         predictUsd = predictUsdDf['usd'].sum()
@@ -620,7 +633,11 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
 
         ret['install_date'].append(dayStr)
         ret['usd'].append(predictUsd)
+
+        log['usd'].append(predictUsd)
     
+    logDf = pd.DataFrame(data=log)
+    logDf.to_csv(getFilename('log%s_%s_%d_%s_%s'%(sinceTimeStr,unitlTimeStr,n,'sample','organic')))
     return pd.DataFrame(data = ret)
 
 # 用指定时间前一个月的时间，直接预测这一段时间的总值
