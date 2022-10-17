@@ -343,6 +343,12 @@ def predictCv2(idfaCvRet,skanInstallCountRet):
         'count':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     })
 
+    # 额外添加一个分media的结论
+    predictCvMedia = {
+        'media':[],
+        'cv':[],
+        'count':[],
+    }
     medias = skanInstallCountRet['media_source'].unique()
     for media in medias:
         # 每个media有个cv表,media没有null值
@@ -358,11 +364,15 @@ def predictCv2(idfaCvRet,skanInstallCountRet):
             c = len(sampleRet.loc[(sampleRet.cv == i)])
             data['cv'].append(i)
             data['count'].append(round(c))
-            
+
+            predictCvMedia['cv'].append(i)
+            predictCvMedia['count'].append(c)
+            predictCvMedia['media'].append(media)
+
         dataDf = pd.DataFrame(data = data)
         # 将不同media的预测数据加到一起
         predictCvSumDf['count'] += dataDf['count']
-    return predictCvSumDf
+    return predictCvSumDf,pd.DataFrame(data = predictCvMedia)
 
 # cv转成usd，暂时用最大值来做
 def cvToUSD(retDf):
@@ -421,6 +431,13 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         # 'skan_install_count':[],
         'usd':[]
     }
+    # 按照media细分的log
+    logByMedia = {
+        'install_date':[],
+        'media':[],
+        'revenueUsd':[],
+        'nullUsd':[]
+    }
     ret = {
         'install_date':[],
         'usd':[]
@@ -467,7 +484,7 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         idfaCvRet = idfaCvRetDf[(idfaCvRetDf.install_date >= day_nStr) & (idfaCvRetDf.install_date <= day_1Str)]
         # print(day_nStr,day_1Str,idfaCvRet)
         skanInstallCount = skanInstallCountDf[skanInstallCountDf.install_date == dayStr]
-        predictCvDf = predictCv2(idfaCvRet,skanInstallCount)
+        predictCvDf,predictCvMediaDf = predictCv2(idfaCvRet,skanInstallCount)
 
         # log cv
         for i in range(0,64):
@@ -477,6 +494,18 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
                 log[key].append(v)
             else:
                 log[key]=[v]
+        # log by media
+        predictUsdMediaDf = cvToUSD2(predictCvMediaDf)
+        skanUsdDf = cvToUSD2(skanInstallCount)
+        medias = predictUsdMediaDf['media'].unique()
+        for media in medias:
+            revenueUsd = skanUsdDf.loc[(skanUsdDf.media_source == media),'usd'].sum()
+            nullUsd = predictUsdMediaDf.loc[(predictUsdMediaDf.media == media),'usd'].sum()
+            logByMedia['install_date'].append(dayStr)
+            logByMedia['media'].append(media)
+            logByMedia['revenueUsd'].append(revenueUsd)
+            logByMedia['nullUsd'].append(nullUsd)
+                
         predictUsdDf = cvToUSD2(predictCvDf)
         # print('cv->df:',predictUsdDf)
         predictUsd = predictUsdDf['usd'].sum()
@@ -489,6 +518,9 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
     # print(log)
     logDf = pd.DataFrame(data=log)
     logDf.to_csv(getFilename('log%s_%s_%d_%s_%s'%(sinceTimeStr,unitlTimeStr,n,'sample','media')))
+
+    logByMediaDf = pd.DataFrame(data=logByMedia)
+    logByMediaDf.to_csv(getFilename('log%s_%s_%d_%s_%s_byMedia'%(sinceTimeStr,unitlTimeStr,n,'sample','media')))
     return pd.DataFrame(data = ret)
 
 # 仿照自然量，粗算
@@ -539,19 +571,6 @@ def randomTest():
     
     print(data)
 
-# 不同媒体的收入变化
-def revenueChangedByMedia(sinceTimeStr,unitlTimeStr,n=7):
-    log = {
-        'install_date':[],
-        'media':[],
-        'revenueUsd':[],
-        'nullUsd':[]
-    }
-    # 每天的各媒体收入
-    # 每天的各媒体预测
-    # 分别统计
-    # 再找到媒体每天广告花费
-
     
 
 if __name__ == "__main__":
@@ -560,6 +579,6 @@ if __name__ == "__main__":
     # test()
     # randomTest()
 
-    ret = main2('20220601','20220630')
+    ret = main2('20220601','20220930',n=28)
     print(ret)
     
