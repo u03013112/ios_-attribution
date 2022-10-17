@@ -76,12 +76,16 @@ from src.tools import getFilename
 # except Exception as e:
 #     print(e)
 
+from sklearn import metrics
+import numpy as np
 import pandas as pd
+
+def mapeFunc(y_true, y_pred):
+    return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
+def smapeFunc(a, f):
+    return 1/len(a) * np.sum(2 * np.abs(f-a) / (np.abs(a) + np.abs(f))*100)
+
 def test(logFileName):
-    from sklearn import metrics
-    import numpy as np
-    def mapeFunc(y_true, y_pred):
-        return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
     df = pd.read_csv(getFilename(logFileName))
     y_true = df['afUsd']
     y_pred = df['skanUsd']+df['organicUsd']+df['nullUsd']
@@ -89,7 +93,28 @@ def test(logFileName):
     mape = mapeFunc(y_true,y_pred)
     print('filename:%s,r2:%.2f,mape:%.2f%%'%(logFileName,r2,mape))
 
+# 用差值来做指标
+def test2(logFileName,n=3):
+    df = pd.read_csv(getFilename(logFileName))
+    # print(df)
+    # df.loc[(df.afUsd<df.skanUsd),'afUsd']=df.skanUsd
+    df = df[['skanUsd','organicUsd','nullUsd','afUsd']]
+    
+    dfSum = df.groupby(df.index//n).sum()
+    # print(df)
+
+    y_true = dfSum['afUsd'] - dfSum['skanUsd']
+    y_pred = dfSum['organicUsd'] + dfSum['nullUsd']
+    # print(y_true,y_pred)
+
+    r2 = metrics.r2_score(y_true,y_pred)
+    mape = mapeFunc(y_true,y_pred)
+    print('filename:%s,n:%d,r2:%.2f,mape:%.2f%%'%(logFileName,n,r2,mape))
 if __name__ == '__main__':
-    test('log20220601_20220930_7_sample_predict')
-    test('log20220601_20220930_14_sample_predict')
-    test('log20220601_20220930_28_sample_predict')
+    # test('log20220601_20220930_7_sample_predict')
+    # test('log20220601_20220930_14_sample_predict')
+    # test('log20220601_20220930_28_sample_predict')
+
+    # test2('log20220601_20220930_7_sample_predict')
+    # test2('log20220601_20220930_14_sample_predict')
+    test2('log20220601_20220930_28_sample_predict')
