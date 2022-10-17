@@ -538,6 +538,22 @@ def randomTest():
                 break
     
     print(data)
+
+# 不同媒体的收入变化
+def revenueChangedByMedia(sinceTimeStr,unitlTimeStr,n=7):
+    log = {
+        'install_date':[],
+        'media':[],
+        'revenueUsd':[],
+        'nullUsd':[]
+    }
+    # 每天的各媒体收入
+    # 每天的各媒体预测
+    # 分别统计
+    # 再找到媒体每天广告花费
+
+    
+
 if __name__ == "__main__":
     # 预测null付费总金额： 3567
     # main('20220601','20220630')

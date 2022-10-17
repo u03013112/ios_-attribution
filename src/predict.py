@@ -18,6 +18,45 @@ from src.null import main3 as nullMain3
 import pandas as pd
 
 
+def getAFRealUsdSum(sinceTimeStr,unitlTimeStr):
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+
+    # 由于skan报告普遍要晚2~3天，所以unitlTimeStr要往后延长3天
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+    unitlTimeStr = (unitlTime+datetime.timedelta(days=3)).strftime('%Y%m%d')
+
+    sql='''
+        select
+            sum(event_revenue_usd) as usd,
+            to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as install_date
+        from ods_platform_appsflyer_events
+        where
+            app_id='id1479198816'
+            and event_timestamp-install_timestamp<=24*3600
+            and event_name='af_purchase'
+            and zone=0
+            and day>=%s and day<=%s
+            and install_time >="%s" and install_time<="%s"
+        group by
+            install_date
+        ;
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    
+    return pd_df
+
+
 def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
     # 先要获得AF cv，然后再转成usd
     whenStr = ''
@@ -78,6 +117,14 @@ def getAFCvUsdSum(sinceTimeStr,unitlTimeStr):
     pd_df = smartCompute.execSql(sql)
     df = cvToUSD2(pd_df)
     return df
+
+# 计算AF cv金额与实际金额差距
+def AFCvAndRealDiff(sinceTimeStr,unitlTimeStr):
+    realDf = getAFRealUsdSum(sinceTimeStr,unitlTimeStr)
+    cvDf = getAFCvUsdSum(sinceTimeStr,unitlTimeStr)
+    realUsd = realDf['usd'].sum()
+    cvUsd = cvDf['usd'].sum()
+    print('%s~%s:真实付费：%.2f,cv付费：%.2f,(真实付费-cv付费)/真实付费=%.2f%%'%(sinceTimeStr,unitlTimeStr,realUsd,cvUsd,(realUsd-cvUsd)/realUsd*100))
 
 def getSkanCvUsd(sinceTimeStr,unitlTimeStr):
     # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
@@ -235,6 +282,12 @@ if __name__ == "__main__":
 
     # print(getSkanCvUsd('20220901','20220930'))
 
-    main2('20220601','20220930',n=7)
-    main2('20220601','20220930',n=14)
-    main2('20220601','20220930',n=28)
+    # main2('20220601','20220930',n=7)
+    # main2('20220601','20220930',n=14)
+    # main2('20220601','20220930',n=28)
+
+    # AFCvAndRealDiff('20220601','20220930')
+    AFCvAndRealDiff('20220601','20220630')
+    AFCvAndRealDiff('20220701','20220731')
+    AFCvAndRealDiff('20220801','20220831')
+    AFCvAndRealDiff('20220901','20220930')

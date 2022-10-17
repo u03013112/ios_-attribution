@@ -579,10 +579,12 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
         day = sinceTime + datetime.timedelta(days=i)
         dayStr = day.strftime('%Y-%m-%d')
         # print('开始预测自然量：',dayStr)
-        log['install_date'].append(dayStr)
+        
         afInstallCount = afInstallCountDf.loc[afInstallCountDf.install_date == dayStr,'count'].sum()
         skanInstallCount = skanInstallCountDf.loc[skanInstallCountDf.install_date == dayStr,'count'].sum()
         organicCount = afInstallCount - skanInstallCount
+        if organicCount <= 0:
+            continue
         # print('获得af安装数：',afInstallCount)
         log['af_install_count'].append(afInstallCount)
         # print('获得skan安装数：',skanInstallCount)
@@ -615,7 +617,8 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
 
         ret['install_date'].append(dayStr)
         ret['usd'].append(predictUsd)
-
+        
+        log['install_date'].append(dayStr)
         log['usd'].append(predictUsd)
     
     logDf = pd.DataFrame(data=log)
