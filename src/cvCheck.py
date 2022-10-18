@@ -1,28 +1,49 @@
 # 尝试比如数数中的cv值总量与skan中的cv值总量是否有线性关系
 import pandas as pd
+import datetime
 
 import sys
 sys.path.append('/src')
 
 from src.smartCompute import SmartCompute
 
-def getFilename(filename):
-    return '/src/data/%s.csv'%(filename)
+from src.tools import afCvMapDataFrame
+from src.tools import cvToUSD2,getFilename
+
+from src.null import getIdfaCv2
 
 def getSkanDataFromSmartCompute(sinceTimeStr,unitlTimeStr,filename):
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2)
+
+    # 由于skan报告普遍要晚2~3天，所以unitlTimeStr要往后延长3天
+    unitlTime = datetime.datetime.strptime(unitlTimeStr2,'%Y-%m-%d')
+    unitlTimeStr = (unitlTime+datetime.timedelta(days=3)).strftime('%Y%m%d')
     sql='''
-            select
-                *
-            from ods_platform_appsflyer_skad_details
-            where
-                app_id="id1479198816"
-                and skad_conversion_value>0
-                and event_name='af_skad_revenue'
-                and day>=%s and day <=%s
-        '''%(sinceTimeStr,unitlTimeStr)
+        select
+            skad_conversion_value as cv,
+            count(*) as count
+        from ods_platform_appsflyer_skad_details
+        where
+            app_id="id1479198816"
+            and skad_conversion_value>0
+            and event_name='af_skad_revenue'
+            and day>=%s and day <=%s
+            and install_date >="%s" and install_date<="%s"
+        group by 
+            skad_conversion_value
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     smartCompute.writeCsv(pd_df,getFilename(filename))
+    return pd_df
 
 # 与 getSkanDataFromSmartCompute 区别是包含cv是0的用户
 def getSkanDataFromSmartCompute2(sinceTimeStr,unitlTimeStr,filename):
@@ -34,8 +55,10 @@ def getSkanDataFromSmartCompute2(sinceTimeStr,unitlTimeStr,filename):
                 app_id="id1479198816"
                 and event_name in ('af_skad_redownload','af_skad_install')
                 and day>=%s and day <=%s
-            group by skad_conversion_value
+            group by 
+                skad_conversion_value
         '''%(sinceTimeStr,unitlTimeStr)
+    print(sql)
     smartCompute = SmartCompute()
     pd_df = smartCompute.execSql(sql)
     smartCompute.writeCsv(pd_df,getFilename(filename))
@@ -336,6 +359,172 @@ def getCVFromSS(sinceTimeStr,unitlTimeStr):
         retStr += ',%d'%(ret[i])
     return retStr
 
+def getIdfaCv(sinceTimeStr,unitlTimeStr):
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when sum(event_revenue_usd)>%d and sum(event_revenue_usd)<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+
+    sql='''
+        select
+            cv,
+            count(*) as count
+        from
+            (
+                select
+                    customer_user_id,
+                    sum(
+                        case
+                            when idfa is not null then 1
+                            else 0
+                        end
+                    ) as have_idfa,
+                    case
+                        when sum(event_revenue_usd) = 0
+                        or sum(event_revenue_usd) is null then 0 
+                        %s
+                        else 63
+                    end as cv
+                from
+                    (
+                        select
+                            customer_user_id,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            ods_platform_appsflyer_events
+                        where
+                            app_id = 'id1479198816'
+                            and event_timestamp - install_timestamp <= 24 * 3600
+                            and event_name in ('af_purchase', 'install')
+                            and zone = 0 
+                            and day >= % s
+                            and day <= % s
+                        union
+                        all
+                        select
+                            customer_user_id,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            tmp_ods_platform_appsflyer_origin_install_data
+                        where
+                            app_id = 'id1479198816'
+                            and zone = '0' 
+                            and install_time >= "%s"
+                            and install_time <= "%s"
+                    )
+                group by
+                    customer_user_id
+            )
+        where
+            have_idfa > 0
+        group by
+            cv
+        ;
+        '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    # return
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    return pd_df
+
+def getAfCv(sinceTimeStr,unitlTimeStr):
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when sum(event_revenue_usd)>%d and sum(event_revenue_usd)<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    # 将day的格式改为install_time格式，即 20220501 =》2022-05-01
+    sinceTimeStr2 = list(sinceTimeStr)
+    sinceTimeStr2.insert(6,'-')
+    sinceTimeStr2.insert(4,'-')
+    sinceTimeStr2 = ''.join(sinceTimeStr2)
+
+    unitlTimeStr2 = list(unitlTimeStr)
+    unitlTimeStr2.insert(6,'-')
+    unitlTimeStr2.insert(4,'-')
+    unitlTimeStr2 = ''.join(unitlTimeStr2) + ' 23:59:59'
+
+    sql='''
+        select
+            cv,
+            count(*) as count
+        from
+            (
+                select
+                    customer_user_id,
+                    sum(
+                        case
+                            when idfa is not null then 1
+                            else 0
+                        end
+                    ) as have_idfa,
+                    case
+                        when sum(event_revenue_usd) = 0
+                        or sum(event_revenue_usd) is null then 0 
+                        %s
+                        else 63
+                    end as cv
+                from
+                    (
+                        select
+                            customer_user_id,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            ods_platform_appsflyer_events
+                        where
+                            app_id = 'id1479198816'
+                            and event_timestamp - install_timestamp <= 24 * 3600
+                            and event_name in ('af_purchase', 'install')
+                            and zone = 0 
+                            and day >= % s
+                            and day <= % s
+                        union
+                        all
+                        select
+                            customer_user_id,
+                            cast (event_revenue_usd as double),
+                            idfa
+                        from
+                            tmp_ods_platform_appsflyer_origin_install_data
+                        where
+                            app_id = 'id1479198816'
+                            and zone = '0' 
+                            and install_time >= "%s"
+                            and install_time <= "%s"
+                    )
+                group by
+                    customer_user_id
+            )
+        group by
+            cv
+        ;
+        '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+    # print(sql)
+    # return
+    smartCompute = SmartCompute()
+    pd_df = smartCompute.execSql(sql)
+    return pd_df
+
 
 if __name__ == '__main__':
     # taskList = [
@@ -347,27 +536,27 @@ if __name__ == '__main__':
     #     ['20220801','20220831','202208'],
     # ]
     # for i in range(len(taskList)):
-    #     getSkanDataFromSmartCompute(taskList[i][0],taskList[i][1],taskList[i][2])
-    #     cvTotal(taskList[i][2])
+    #     df = getSkanDataFromSmartCompute(taskList[i][0],taskList[i][1],taskList[i][2])
+    #     df = pd.read_csv(getFilename(taskList[i][2]))
+    #     dfUsd = cvToUSD2(df)
+    #     print(taskList[i][2],dfUsd['usd'].sum())
+    
+    
 
-    # taskList = [
-    #     # 开始日期，结束日期，文件名
-    #     ['20220401','20220430','202204cv0'],
-    #     ['20220501','20220531','202205cv0'],
-    #     ['20220601','20220630','202206cv0'],
-    #     ['20220701','20220731','202207cv0'],
-    #     ['20220801','20220831','202208cv0'],
-    # ]
-    # for i in range(len(taskList)):
-    #     getSkanDataFromSmartCompute2(taskList[i][0],taskList[i][1],taskList[i][2])
-    #     cvTotal2(taskList[i][2])
+    taskList = [
+        # 开始日期，结束日期，文件名
+        # ['20220401','20220430','202204cv0'],
+        # ['20220501','20220531','202205cv0'],
+        # ['20220601','20220630','202206cv0'],
+        # ['20220701','20220731','202207cv0'],
+        # ['20220801','20220831','202208cv0'],
+        ['20220501','20220831','Skan202205'],
+    ]
+    for i in range(len(taskList)):
+        getSkanDataFromSmartCompute2(taskList[i][0],taskList[i][1],taskList[i][2])
+        # cvTotal2(taskList[i][2])
 
-    # print('2022-04',getCVFromSS('2022-04-01','2022-04-30'))
-    # print('2022-05',getCVFromSS('2022-05-01','2022-05-31'))
-    # print('2022-06',getCVFromSS('2022-06-01','2022-06-30'))
-    # print('2022-07',getCVFromSS('2022-07-01','2022-07-31'))
-    # print('2022-08',getCVFromSS('2022-08-01','2022-08-31'))
-
+    
 
     # afTaskList = [
     #     # 开始日期，结束日期，文件名
@@ -404,7 +593,25 @@ if __name__ == '__main__':
     # ret.to_csv(getFilename('202205idfaUsd'))
     
     # getAFEventsDataFromSmartComputeTotal('20220501','20220531','202205total')
-    ret = cvTotalForAFTotal('202205total')
-    ret.to_csv(getFilename('202205totalCv'))
-    ret = cvToUSD(ret)
-    ret.to_csv(getFilename('202205totalUsd'))
+    # ret = cvTotalForAFTotal('202205total')
+    # ret.to_csv(getFilename('202205totalCv'))
+    # ret = cvToUSD(ret)
+    # ret.to_csv(getFilename('202205totalUsd'))
+
+    # idfaTaskList = [
+    #     # 开始日期，结束日期，文件名
+    #     ['20220501','20220831','Idfa202205']
+    # ]
+    # for i in range(len(idfaTaskList)):
+    #     df = getIdfaCv(idfaTaskList[i][0],idfaTaskList[i][1])
+
+    #     df.to_csv(getFilename(idfaTaskList[i][2]))
+
+    # afTaskList = [
+    #     # 开始日期，结束日期，文件名
+    #     ['20220501','20220831','Af202205']
+    # ]
+    # for i in range(len(afTaskList)):
+    #     df = getAfCv(afTaskList[i][0],afTaskList[i][1])
+
+    #     df.to_csv(getFilename(afTaskList[i][2]))
