@@ -9,11 +9,6 @@ sys.path.append(os.path.dirname(os.path.abspath('config.py'))) #引入资源至�
 
 from config import accessId,secretAccessKey,defaultProject,endPoint
 
-# accessId = 'LTAI5tCegy5gcM9wnGbxmh3v'
-# secretAccessKey = 'WhGqOqdlLbkvW370W2tSPKtgeEdI0v'
-# defaultProject = 'rg_bi'
-# endPoint = 'http://service.us-west-1.maxcompute.aliyun.com/api'
-
 def execSql(sql):
     o = ODPS(accessId, secretAccessKey, defaultProject,
             endpoint=endPoint)
@@ -96,7 +91,6 @@ def predictCv2(historyDf,df):
     }
     medias = df['media_source'].unique()
     for media in medias:
-        # print(media)
         # 每个media有个cv表,media没有null值
         nullCount = df.loc[pd.isna(df.cv) & (df.media_source == media),'count'].sum()
         if nullCount == 0:
@@ -218,4 +212,6 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
 # sinceTimeStr = args['sinceTimeStr']
 # unitlTimeStr = args['unitlTimeStr']
 
-df = main2('20220601','20221015',n=28)
+main2('20220601','20220730',n=28)
+main2('20220801','20220930',n=28)
+main2('20221001','20221015',n=28)
