@@ -135,6 +135,7 @@ def writeTable(df,dayStr):
     o = ODPS(accessId, secretAccessKey, defaultProject,
             endpoint=endPoint)
     t = o.get_table('topwar_skan_media_null')
+    t.delete_partition('install_date=%s'%(dayStr), if_exists=True)
     with t.open_writer(partition='install_date=%s'%(dayStr), create_partition=True, arrow=True) as writer:
         # batch = pa.RecordBatch.from_pandas(df)
         # writer.write(batch)
