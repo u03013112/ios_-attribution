@@ -9,6 +9,10 @@ sys.path.append(os.path.dirname(os.path.abspath('config.py'))) #引入资源至�
 
 from config import accessId,secretAccessKey,defaultProject,endPoint
 
+# accessId = 'LTAI5tCegy5gcM9wnGbxmh3v'
+# secretAccessKey = 'WhGqOqdlLbkvW370W2tSPKtgeEdI0v'
+# defaultProject = 'rg_bi'
+# endPoint = 'http://service.us-west-1.maxcompute.aliyun.com/api'
 
 def execSql(sql):
     o = ODPS(accessId, secretAccessKey, defaultProject,
@@ -100,7 +104,9 @@ def predictCv2(historyDf,df):
             continue
         # historyDf.to_csv('/src/data/historyDf.csv')
         mediaHistory = historyDf.loc[(historyDf.media_source == media)].groupby('cv').agg('sum')
-        
+        if mediaHistory['count'].sum() <= 0:
+            # 没有足够的样本来做抽样，直接放弃
+            continue
         sampleRet = mediaHistory.sample(n = nullCount,weights = mediaHistory['count'],replace=True)
         sampleRet = sampleRet.reset_index()
         
@@ -135,8 +141,6 @@ def writeTable(df,dayStr):
     o = ODPS(accessId, secretAccessKey, defaultProject,
             endpoint=endPoint)
     t = o.get_table('topwar_skan_media_null')
-    # 每次都是覆盖性写入一个分区
-    t.delete_partition('install_date=%s'%(dayStr), if_exists=True)
     with t.open_writer(partition='install_date=%s'%(dayStr), create_partition=True, arrow=True) as writer:
         # batch = pa.RecordBatch.from_pandas(df)
         # writer.write(batch)
@@ -144,7 +148,7 @@ def writeTable(df,dayStr):
         writer.write(df)
 
 def main2(sinceTimeStr,unitlTimeStr,n=7):
-    print('create table',createTable())
+    createTable()
     # 按照media细分的log
     logByMedia = {
         'install_date':[],
@@ -210,4 +214,8 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
     # logByMediaDf.to_csv('/src/data/logNullS%s_%s_%d_byMedia.csv'%(sinceTimeStr,unitlTimeStr,n))
     return logByMediaDf
 
-df = main2('20220601','20220630',n=28)
+# start here!
+# sinceTimeStr = args['sinceTimeStr']
+# unitlTimeStr = args['unitlTimeStr']
+
+df = main2('20220601','20221015',n=28)
