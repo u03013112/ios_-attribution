@@ -2,16 +2,13 @@ import datetime
 import pandas as pd
 
 from odps import ODPS
-##@resource_reference{"config.py"}
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath('config.py'))) #引入资源至工作空间。
 
-from config import accessId,secretAccessKey,defaultProject,endPoint
+# 下面两行是本地调试时使用代码，dataworks把下面两行注释掉
+# from config import accessId,secretAccessKey,defaultProject,endPoint
+# o = ODPS(accessId, secretAccessKey, defaultProject,
+#                 endpoint=endPoint)
 
 def execSql(sql):
-    o = ODPS(accessId, secretAccessKey, defaultProject,
-            endpoint=endPoint)
     with o.execute_sql(sql).open_reader() as reader:
         pd_df = reader.to_pandas()
         return pd_df
@@ -25,7 +22,7 @@ sql = '''
 ;
 '''
 afCvMapDataFrame = execSql(sql)
-# print (afCvMapDataFrame)
+print (afCvMapDataFrame)
 
 def cvToUSD2(retDf):
     global afCvMapDataFrame
@@ -116,8 +113,6 @@ def predictCv2(historyDf,df):
 
 from odps.models import Schema, Column, Partition
 def createTable():
-    o = ODPS(accessId, secretAccessKey, defaultProject,
-            endpoint=endPoint)
     columns = [
         Column(name='media', type='string', comment='like applovin_int,bytedanceglobal_int,googleadwords_int'),
         Column(name='revenueusd', type='double', comment='the media skan revenue in usd'),
@@ -132,8 +127,6 @@ def createTable():
 
 # import pyarrow as pa
 def writeTable(df,dayStr):
-    o = ODPS(accessId, secretAccessKey, defaultProject,
-            endpoint=endPoint)
     t = o.get_table('topwar_skan_media_null')
     t.delete_partition('install_date=%s'%(dayStr), if_exists=True)
     with t.open_writer(partition='install_date=%s'%(dayStr), create_partition=True, arrow=True) as writer:
@@ -210,9 +203,9 @@ def main2(sinceTimeStr,unitlTimeStr,n=7):
     return logByMediaDf
 
 # start here!
-# sinceTimeStr = args['sinceTimeStr']
-# unitlTimeStr = args['unitlTimeStr']
-
-main2('20220601','20220730',n=28)
-main2('20220801','20220930',n=28)
-main2('20221001','20221015',n=28)
+sinceTimeStr = args['sinceTimeStr']
+unitlTimeStr = args['unitlTimeStr']
+main2(sinceTimeStr,unitlTimeStr,n=28)
+# main2('20220601','20220730',n=28)
+# main2('20220801','20220930',n=28)
+# main2('20221001','20221015',n=28)
