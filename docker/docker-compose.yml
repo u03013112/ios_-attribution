@@ -14,17 +14,3 @@ services:
       options:
         max-size: "10m"
         max-file: "1"
-
-  pred_skan:
-    image: tensorflow/tensorflow:latest
-    container_name: 'pred_skan'
-    tty: true
-    volumes:
-        - ../:/src:cached
-    working_dir: /src/
-    network_mode: host
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "1"
