@@ -59,8 +59,97 @@ def createMod():
         modList.append(mod)
     return modList
 
-def train(dataDf2,modList):
-    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
+def createMod2():
+    modList = []
+    for i in range(len(groupList)):
+        mod = keras.Sequential(
+            [
+                layers.Dense(10, activation="tanh",input_shape=(1,)),
+                layers.Dense(1, activation="tanh")
+            ]
+        )
+        mod.compile(optimizer='adadelta',loss='mape')
+        modList.append(mod)
+    return modList
+
+def createMod3():
+    modList = []
+    for i in range(len(groupList)):
+        mod = keras.Sequential(
+            [
+                layers.Dense(10, activation="relu",input_shape=(1,)),
+                layers.Dense(1, activation="relu")
+            ]
+        )
+        mod.compile(optimizer='adadelta',loss='mape')
+        modList.append(mod)
+    return modList
+
+def createMod4():
+    modList = []
+    for i in range(len(groupList)):
+        mod = keras.Sequential(
+            [
+                layers.Dense(100, activation="relu",input_shape=(1,)),
+                layers.Dense(1, activation="relu")
+            ]
+        )
+        mod.compile(optimizer='adadelta',loss='mape')
+        modList.append(mod)
+    return modList
+
+def createMod5():
+    modList = []
+    for i in range(len(groupList)):
+        mod = keras.Sequential(
+            [
+                layers.Dense(100, activation="relu",input_shape=(1,)),
+                layers.Dropout(0.3),
+                layers.Dense(100, activation="relu"),
+                layers.Dropout(0.3),
+                layers.Dense(1, activation="relu")
+            ]
+        )
+        mod.compile(optimizer='adadelta',loss='mape')
+        modList.append(mod)
+    return modList
+
+def createMod6():
+    modList = []
+    for i in range(len(groupList)):
+        mod = keras.Sequential(
+            [
+                layers.Dense(100, activation="tanh",input_shape=(1,)),
+                layers.Dropout(0.3),
+                layers.Dense(100, activation="tanh"),
+                layers.Dropout(0.3),
+                layers.Dense(1, activation="tanh")
+            ]
+        )
+        mod.compile(optimizer='adadelta',loss='mape')
+        modList.append(mod)
+    return modList
+
+createModList = [
+    {
+        'name':'mod2',
+        'createModFunc':createMod2
+    },{
+        'name':'mod3',
+        'createModFunc':createMod3
+    },{
+        'name':'mod4',
+        'createModFunc':createMod4
+    },{
+        'name':'mod5',
+        'createModFunc':createMod5
+    },{
+        'name':'mod6',
+        'createModFunc':createMod6
+    }
+]
+def train(dataDf2,modList,modName):
+    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
     for i in range(len(groupList)):
         trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
         testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
@@ -71,15 +160,15 @@ def train(dataDf2,modList):
         mod = modList[i]
         history = mod.fit(trainX, trainY, epochs=54321 , validation_data=(testX,testY),callbacks=[callback],verbose=0)
         historyDf = pd.DataFrame(data=history.history)
-        historyDf.to_csv(getFilename('history%d'+filenameSuffix))
-        modFileName = '/src/src/predSkan/mod/mTotal%d%s.h5'%(i,filenameSuffix)
+        historyDf.to_csv(getFilename('history%d_%s%s'%(i,modName,filenameSuffix)))
+        modFileName = '/src/src/predSkan/mod/mTotal%d_%s%s.h5'%(i,modName,filenameSuffix)
         mod.save(modFileName)
         print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
 
-def loadMod(suffix):
+def loadMod(modName,suffix):
     modList = []
     for i in range(len(groupList)):
-        modFileName = '/src/src/predSkan/mod/mTotal%d%s.h5'%(i,suffix)
+        modFileName = '/src/src/predSkan/mod/mTotal%d_%s_%s.h5'%(i,modName,suffix)
         mod = tf.keras.models.load_model(modFileName)
         modList.append(mod)
     return modList
@@ -124,9 +213,10 @@ def test(dataDf2,modList):
 if __name__ == '__main__':
     # dataStep0('20220501','20220930')
     df = dataStep1('20220501','20220930')
-    df2 =dataStep2(df)
-    modList = createMod()
-    train(df2,modList)
-    modList = loadMod(filenameSuffix)
-    test(df2,modList)
+    df2 = dataStep2(df)
+    for m in createModList:
+        modList = m['createModFunc']()
+        train(df2,modList,m['name'])
+        # modList = loadMod(filenameSuffix)
+        # test(df2,modList)
 

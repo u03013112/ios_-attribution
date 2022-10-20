@@ -149,9 +149,6 @@ def getTotalData(sinceTimeStr,unitlTimeStr):
     return pd_df
 
 if __name__ == '__main__':
-    df = getTotalData('20220601','20220630')
-    df.to_csv(getFilename('getTotalData20220601_20220630'))
-
-    df = pd.read_csv(getFilename('getTotalData20220601_20220630'))
-    print(df.loc[(df.install_date >= '2022-06-01') & (df.install_date <= '2022-06-10'),'sumr1usd'].sum())
-    print(df.loc[(df.install_date >= '2022-06-01') & (df.install_date <= '2022-06-10'),'sumr7usd'].sum())
+    df = pd.read_csv(getFilename('totalData%s_%s'%('20220501','20220930')))
+    df0 = df.loc[df.cv==0]
+    df0.to_csv(getFilename('total0'))
