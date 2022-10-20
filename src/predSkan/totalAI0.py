@@ -1,7 +1,6 @@
 # 大盘预测AI
 # 直接用大盘数据来做拟合
 
-# 然后对整体做测试
 # 流程确定后，尝试更改分组，查看效果
 import pandas as pd
 
@@ -12,6 +11,10 @@ from src.tools import getFilename
 # 暂定方案是先将数据分组，比如直接分为64组
 groupList = [[0],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10],[11],[12],[13],[14],[15],[16],[17],[18],[19],[20],[21],[22],[23],[24],[25],[26],[27],[28],[29],[30],[31],[32],[33],[34],[35],[36],[37],[38],[39],[40],[41],[42],[43],[44],[45],[46],[47],[48],[49],[50],[51],[52],[53],[54],[55],[56],[57],[58],[59],[60],[61],[62],[63]]
 # groupList = [[0],[1,2,3,4,5,6,7,8,9,10],[11,12,13,14,15,16,17,18,19,20],[21,22,23,24,25,26,27,28,29,30],[31,32,33,34,35,36,37,38,39,40],[41,42,43,44,45,46,47,48,49,50],[51,52,53,54,55,56,57,58,59,60],[61,62],[63]]
+
+import datetime
+# 各种命名都用这个后缀，防止重名
+filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H')
 
 # 从maxCompute取数据
 def dataStep0(sinceTimeStr,unitlTimeStr):
@@ -45,19 +48,85 @@ def createMod():
                 layers.Dense(1, input_shape=(1,))
             ]
         )
-        mod.compile(optimizer='adam',loss='mse')
+        # mod.compile(optimizer='adadelta',loss='mse')
+        mod.compile(optimizer='adadelta',loss='mape'
+        # ,metrics=[
+        #     tf.keras.metrics.MeanSquaredError(name="mse"),
+        #     tf.keras.metrics.MeanAbsoluteError(name="mae"),
+        #     tf.keras.metrics.MeanAbsolutePercentageError(name="mape")
+        # ]
+        )
         modList.append(mod)
     return modList
 
 def train(dataDf2,modList):
+    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
     for i in range(len(groupList)):
-        x = dataDf2.loc[dataDf2.group == i].groupby('install_date').agg('sum')
-        print(x)
+        trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
+        testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
+        trainX = trainDf['count'].to_numpy()
+        trainY = trainDf['sumr7usd'].to_numpy()
+        testX = testDf['count'].to_numpy()
+        testY = testDf['sumr7usd'].to_numpy()
+        mod = modList[i]
+        history = mod.fit(trainX, trainY, epochs=54321 , validation_data=(testX,testY),callbacks=[callback],verbose=0)
+        historyDf = pd.DataFrame(data=history.history)
+        historyDf.to_csv(getFilename('history%d'+filenameSuffix))
+        modFileName = '/src/src/predSkan/mod/mTotal%d%s.h5'%(i,filenameSuffix)
+        mod.save(modFileName)
+        print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
 
+def loadMod(suffix):
+    modList = []
+    for i in range(len(groupList)):
+        modFileName = '/src/src/predSkan/mod/mTotal%d%s.h5'%(i,suffix)
+        mod = tf.keras.models.load_model(modFileName)
+        modList.append(mod)
+    return modList
+
+import numpy as np
+# 然后对整体做测试
+def test(dataDf2,modList):
+    sinceTimeStr = '20220901'
+    unitlTimeStr = '20220930'
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+
+    y_true = np.array([])
+    y_pred = np.array([])
+    for i in range((unitlTime - sinceTime).days + 1):
+        day = sinceTime + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+
+        y_pred_day = 0
+        df = dataDf2.loc[(dataDf2.install_date == dayStr)]
+        for i in range(len(groupList)):
+            # count 就是预测的input
+            count = df.loc[df.group == i,'count'].sum()
+            if count == 0:
+                # 没有这种，就不预测
+                continue
+            x = np.array([count])
+            mod = modList[i]
+            y_pred_day += mod.predict(x).reshape(-1).sum()
+        y_pred = np.append(y_pred,y_pred_day)
+        y_true_day = dataDf2.loc[dataDf2.install_date == dayStr,'sumr7usd'].sum()
+        y_true = np.append(y_true,y_true_day)
+    
+    print(y_true.shape,y_pred.shape)
+
+    def mapeFunc(y_true, y_pred):
+        return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
+    
+    mape = mapeFunc(y_true,y_pred)
+    print(mape)
 
 if __name__ == '__main__':
     # dataStep0('20220501','20220930')
     df = dataStep1('20220501','20220930')
     df2 =dataStep2(df)
-    # print(df2)
-    train(df2,None)
+    modList = createMod()
+    train(df2,modList)
+    modList = loadMod(filenameSuffix)
+    test(df2,modList)
+
