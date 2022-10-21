@@ -1,5 +1,5 @@
 import gspread
-
+import time
 # 将log文件定期的同步到google sheet
 
 filename = 'ios predict'
@@ -20,3 +20,5 @@ for i in range(64):
     
     sheet.clear()
     sheet.update('A1',lines)
+    # 为了间隔限制
+    time.sleep(10.0)
