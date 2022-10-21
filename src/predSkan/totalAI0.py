@@ -68,7 +68,7 @@ def createMod2():
                 layers.Dense(1, activation="tanh")
             ]
         )
-        mod.compile(optimizer='adadelta',loss='mape')
+        mod.compile(optimizer='sgd',loss='mean_squared_error')
         modList.append(mod)
     return modList
 
@@ -132,6 +132,9 @@ def createMod6():
 
 createModList = [
     {
+        'name':'mod1',
+        'createModFunc':createMod
+    },{
         'name':'mod2',
         'createModFunc':createMod2
     },{
@@ -149,7 +152,7 @@ createModList = [
     }
 ]
 def train(dataDf2,modList,modName):
-    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
+    callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
     for i in range(len(groupList)):
         trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
         testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
@@ -158,7 +161,10 @@ def train(dataDf2,modList,modName):
         testX = testDf['count'].to_numpy()
         testY = testDf['sumr7usd'].to_numpy()
         mod = modList[i]
-        history = mod.fit(trainX, trainY, epochs=54321 , validation_data=(testX,testY),callbacks=[callback],verbose=0)
+        history = mod.fit(trainX, trainY, epochs=50000 , validation_data=(testX,testY)
+        ,callbacks=[callback]
+        ,verbose=0
+        )
         historyDf = pd.DataFrame(data=history.history)
         historyDf.to_csv(getFilename('history%d_%s%s'%(i,modName,filenameSuffix)))
         modFileName = '/src/src/predSkan/mod/mTotal%d_%s%s.h5'%(i,modName,filenameSuffix)
