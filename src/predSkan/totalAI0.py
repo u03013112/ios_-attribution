@@ -8,6 +8,7 @@ import sys
 sys.path.append('/src')
 from src.predSkan.data import getTotalData
 from src.tools import getFilename
+from src.googleSheet import GSheet
 # 暂定方案是先将数据分组，比如直接分为64组
 groupList = [[0],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10],[11],[12],[13],[14],[15],[16],[17],[18],[19],[20],[21],[22],[23],[24],[25],[26],[27],[28],[29],[30],[31],[32],[33],[34],[35],[36],[37],[38],[39],[40],[41],[42],[43],[44],[45],[46],[47],[48],[49],[50],[51],[52],[53],[54],[55],[56],[57],[58],[59],[60],[61],[62],[63]]
 # groupList = [[0],[1,2,3,4,5,6,7,8,9,10],[11,12,13,14,15,16,17,18,19,20],[21,22,23,24,25,26,27,28,29,30],[31,32,33,34,35,36,37,38,39,40],[41,42,43,44,45,46,47,48,49,50],[51,52,53,54,55,56,57,58,59,60],[61,62],[63]]
@@ -68,7 +69,7 @@ def createMod2():
                 layers.Dense(1, activation="tanh")
             ]
         )
-        mod.compile(optimizer='sgd',loss='mean_squared_error')
+        mod.compile(optimizer='sgd',loss='mape')
         modList.append(mod)
     return modList
 
@@ -152,7 +153,7 @@ createModList = [
     }
 ]
 def train(dataDf2,modList,modName):
-    callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
+    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
     for i in range(len(groupList)):
         trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
         testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
@@ -163,13 +164,17 @@ def train(dataDf2,modList,modName):
         mod = modList[i]
         history = mod.fit(trainX, trainY, epochs=50000 , validation_data=(testX,testY)
         ,callbacks=[callback]
-        ,verbose=0
+        # ,verbose=0
         )
         historyDf = pd.DataFrame(data=history.history)
         historyDf.to_csv(getFilename('history%d_%s%s'%(i,modName,filenameSuffix)))
         modFileName = '/src/src/predSkan/mod/mTotal%d_%s%s.h5'%(i,modName,filenameSuffix)
         mod.save(modFileName)
         print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
+        logFilename = '/src/src/predSkan/log/log%d.log'%(i)
+        # 记录日志文件
+        with open(logFilename, 'a+') as f:
+            f.write('%s %f %f\n'%(modFileName,history.history['loss'][-1],history.history['val_loss'][-1]))
 
 def loadMod(modName,suffix):
     modList = []
@@ -225,4 +230,3 @@ if __name__ == '__main__':
         train(df2,modList,m['name'])
         # modList = loadMod(filenameSuffix)
         # test(df2,modList)
-

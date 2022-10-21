@@ -133,3 +133,5 @@ src/config.py
 sync.sh
 
 *.csv
+
+service_account.json
