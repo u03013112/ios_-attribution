@@ -135,7 +135,8 @@ createModList = [
     }
 ]
 def train(dataDf2,modList,modName):
-    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
+    earlyStoppingLoss = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
+    earlyStoppingValLoss = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
     for i in range(len(groupList)):
         trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
         testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
@@ -145,7 +146,8 @@ def train(dataDf2,modList,modName):
         testY = testDf['sumr7usd'].to_numpy()
         mod = modList[i]
         history = mod.fit(trainX, trainY, epochs=500000, validation_data=(testX,testY)
-        ,callbacks=[callback]
+        ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
+        ,batch_size=16
         # ,verbose=0
         )
         historyDf = pd.DataFrame(data=history.history)
