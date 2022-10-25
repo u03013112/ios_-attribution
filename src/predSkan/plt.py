@@ -20,6 +20,7 @@ def totalCvR7():
         plt.plot(count,r7,'ro')
         plt.savefig('/src/data/totalCvR7_%d.png'%(cv))
         print('save to /src/data/totalCvR7_%d.png'%(cv))
+        plt.clf()
 
 def totalCvR7Less1000():
     print('画图，cv count 小于1000，每个cv一张图，count是x，7日总收入是y')
@@ -64,10 +65,11 @@ def totalCvR7F1():
         plt.plot(count,r7,'ro')
         plt.savefig('/src/data/totalCvR7F1_%d.png'%(cv))
         print('save to /src/data/totalCvR7F1_%d.png'%(cv))
+        plt.clf()
 
 
 if __name__ == '__main__':
-    # totalCvR7()
+    totalCvR7()
     # totalCvR7Less1000()
     # totalCvR7Less50()
-    totalCvR7F1()
+    # totalCvR7F1()
