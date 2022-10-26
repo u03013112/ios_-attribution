@@ -113,11 +113,13 @@ createModList = [
     }
 ]
 
+epochMax = 30000
+
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         if epoch > 0 and epoch%100 == 0:
             keys = list(logs.keys())
-            str = 'epoch %d:'%epoch
+            str = 'epoch %d/%d:'%(epoch,epochMax)
             for key in keys:
                 str += '[%s]:%.2f '%(key,logs[key])
             print(str)
@@ -144,7 +146,7 @@ def train(dataDf3,mod,modName):
     testSumByDay = testDf.groupby('install_date').agg(sum=('sumr7usd','sum'))
     testY = testSumByDay.to_numpy()
 
-    history = mod.fit(trainX, trainY, epochs=30000, validation_data=(testX,testY)
+    history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
         # ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
         # ,callbacks=[earlyStoppingValLoss]
         ,callbacks=[model_checkpoint_callback,LossAndErrorPrintingCallback()]
