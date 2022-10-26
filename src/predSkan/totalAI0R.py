@@ -70,7 +70,7 @@ def createModFunc2():
 def createModFunc3():
     mod = keras.Sequential(
         [
-            layers.Dense(10, activation="relu",input_shape=(1,)),
+            layers.Dense(10, kernel_initializer='random_uniform',bias_initializer='random_uniform',activation="relu",input_shape=(1,)),
             layers.Dense(1, activation="relu")
         ]
     )
@@ -80,7 +80,8 @@ def createModFunc3():
 def createModFunc4():
     mod = keras.Sequential(
         [
-            layers.Dense(100, activation="relu",input_shape=(1,)),
+            
+            layers.Dense(100, kernel_initializer='random_uniform',bias_initializer='random_uniform',activation="relu",input_shape=(1,)),
             layers.Dense(1, activation="relu")
         ]
     )
@@ -134,36 +135,49 @@ createModList = [
         'createModFunc':createModFunc2
     }
 ]
-def train(dataDf2,modList,modName):
+def train(dataDf2,modList,modName,cv):
     earlyStoppingLoss = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=15)
     earlyStoppingValLoss = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=15)
-    for i in range(len(groupList)):
-        if (i==46 or i==54 or i==57 or i==61) == False:
-            continue
-        trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
-        testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
-        trainX = trainDf['count'].to_numpy()
-        trainY = trainDf['sumr7usd'].to_numpy()
-        testX = testDf['count'].to_numpy()
-        testY = testDf['sumr7usd'].to_numpy()
-        mod = modList[i]
-        history = mod.fit(trainX, trainY, epochs=500000, validation_data=(testX,testY)
-        ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
-        ,batch_size=16
-        # ,verbose=0
-        )
-        historyDf = pd.DataFrame(data=history.history)
-        historyDf.to_csv(getFilename('history%d_%s%s'%(i,modName,filenameSuffix)))
-        modFileName = '/src/src/predSkan/mod/mTotal%d_%s%s.h5'%(i,modName,filenameSuffix)
-        mod.save(modFileName)
-        print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
-        logFilename = '/src/src/predSkan/log/log%d.log'%(i)
-        # 记录日志文件
-        with open(logFilename, 'a+') as f:
+    for i in range(10000):
+        for i in range(len(groupList)):
+            if (i!=cv):
+                continue
+            trainDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date < '2022-09-01')].groupby('install_date').agg('sum')
+            testDf = dataDf2.loc[(dataDf2.group == i) & (dataDf2.install_date >= '2022-09-01')].groupby('install_date').agg('sum')
+            trainX = trainDf['count'].to_numpy()
+            trainY = trainDf['sumr7usd'].to_numpy()
+            testX = testDf['count'].to_numpy()
+            testY = testDf['sumr7usd'].to_numpy()
+            mod = modList[i]
+            history = mod.fit(trainX, trainY, epochs=500000, validation_data=(testX,testY)
+            ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
+            # ,batch_size=16
+            ,verbose=0
+            )
+
             if 'val_loss' in history.history:
-                f.write('%s %f %f\n'%(modFileName,history.history['loss'][-1],history.history['val_loss'][-1]))
+                if history.history['val_loss'][-1] > 50:
+                    print('val_loss is %.2f,again'%(history.history['val_loss'][-1]))
+                    continue
             else:
-                f.write('%s %f -\n'%(modFileName,history.history['loss'][-1]))
+                if history.history['loss'][-1] > 50:
+                    print('loss is %.2f,again'%(history.history['loss'][-1]))
+                    continue
+            
+            historyDf = pd.DataFrame(data=history.history)
+            historyDf.to_csv(getFilename('history%d_%s%s'%(i,modName,filenameSuffix)))
+            modFileName = '/src/src/predSkan/mod/mTotal%d_%s%s.h5'%(i,modName,filenameSuffix)
+            mod.save(modFileName)
+            print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
+            logFilename = '/src/src/predSkan/log/log%d.log'%(i)
+            # 记录日志文件
+            with open(logFilename, 'a+') as f:
+                if 'val_loss' in history.history:
+                    f.write('%s %f %f\n'%(modFileName,history.history['loss'][-1],history.history['val_loss'][-1]))
+                else:
+                    f.write('%s %f -\n'%(modFileName,history.history['loss'][-1]))
+            break
+
 
 def loadMod(modName,suffix):
     modList = []
@@ -210,12 +224,21 @@ def test(dataDf2,modList):
     mape = mapeFunc(y_true,y_pred)
     print(mape)
 
+
+import sys
 if __name__ == '__main__':
+
+    cv = int(sys.argv[1])
+    modName = sys.argv[2]
+
     # dataStep0('20220501','20220930')
     df = dataStep1('20220501','20220930')
     df2 = dataStep2(df)
     for m in createModList:
-        modList = createMod(m['createModFunc'])
-        train(df2,modList,m['name'])
+        if m['name'] == modName:
+            modList = createMod(m['createModFunc'])
+            print('training %d %s'%(cv,modName))
+            train(df2,modList,m['name'],cv)
+            break
         # modList = loadMod(filenameSuffix)
         # test(df2,modList)
