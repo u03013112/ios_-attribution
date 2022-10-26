@@ -58,6 +58,23 @@ def createMod(createModFun):
     mod = createModFun()
     return mod
 
+def rmse(y_true, y_pred):
+    from keras import backend
+    return backend.sqrt(backend.mean(backend.square(y_pred - y_true), axis=-1))
+
+def r_square(y_true, y_pred):
+    from keras import backend as K
+    SS_res =  K.sum(K.square(y_true - y_pred)) 
+    SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
+    return ( 1 - SS_res/(SS_tot + K.epsilon()) )
+
+# r2作为loss，不再用1减，这个数值越小越好
+def loss_r_square(y_true, y_pred):
+    from keras import backend as K
+    SS_res =  K.sum(K.square(y_true - y_pred)) 
+    SS_tot = K.sum(K.square(y_true - K.mean(y_true))) 
+    return ( SS_res/(SS_tot + K.epsilon()) )
+
 def createModFunc1():
     mod = keras.Sequential(
         [
@@ -71,17 +88,51 @@ def createModFunc1():
     mod.compile(optimizer='adadelta',loss='mape')
     return mod
 
+def createModFunc2():
+    mod = keras.Sequential(
+        [
+            layers.Dense(256, activation="relu", input_shape=(64,)),
+            # layers.Dropout(0.3),
+            layers.Dense(256, activation="relu"),
+            # layers.Dropout(0.3),
+            layers.Dense(1, activation="relu")
+        ]
+    )
+    # mod.compile(optimizer="Nadam", loss=rmse, metrics=[r_square, rmse])
+    mod.compile(optimizer='adadelta',loss=loss_r_square,metrics=['mape',r_square])
+    return mod
+
 createModList = [
+    # {
+    #     'name':'mod1',
+    #     'createModFunc':createModFunc1
+    # },
     {
-        'name':'mod1',
-        'createModFunc':createModFunc1
+        'name':'mod2',
+        'createModFunc':createModFunc2
     }
 ]
+
+class LossAndErrorPrintingCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch > 0 and epoch%100 == 0:
+            keys = list(logs.keys())
+            str = 'epoch %d:'%epoch
+            for key in keys:
+                str += '[%s]:%.2f '%(key,logs[key])
+            print(str)
+
 
 def train(dataDf3,mod,modName):
     earlyStoppingLoss = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
     earlyStoppingValLoss = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
-    
+    checkpoint_filepath = '/src/src/predSkan/mod/t2/mod_%s_%s{epoch:05d}-{val_loss:.2f}.h5'%(modName,filenameSuffix)
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_filepath,
+        save_weights_only=False,
+        monitor='val_loss',
+        mode='min',
+        save_best_only=True)
 
     trainDf = dataDf3.loc[(dataDf3.install_date < '2022-09-01')].sort_values(by=['install_date','group'])
     trainX = trainDf['count'].to_numpy().reshape((-1,64))
@@ -93,17 +144,19 @@ def train(dataDf3,mod,modName):
     testSumByDay = testDf.groupby('install_date').agg(sum=('sumr7usd','sum'))
     testY = testSumByDay.to_numpy()
 
-    history = mod.fit(trainX, trainY, epochs=500000, validation_data=(testX,testY)
-        ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
-        ,batch_size=16
-        # ,verbose=0
+    history = mod.fit(trainX, trainY, epochs=30000, validation_data=(testX,testY)
+        # ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
+        # ,callbacks=[earlyStoppingValLoss]
+        ,callbacks=[model_checkpoint_callback,LossAndErrorPrintingCallback()]
+        ,batch_size=128
+        ,verbose=0
         )
 
     historyDf = pd.DataFrame(data=history.history)
     historyDf.to_csv(getFilename('historyT2_%s%s'%(modName,filenameSuffix)))
     modFileName = '/src/src/predSkan/mod/mTotalT2_%s%s.h5'%(modName,filenameSuffix)
     mod.save(modFileName)
-    print('save %s,loss:%f'%(modFileName,history.history['loss'][-1]))
+    print('save %s,val_loss:%f'%(modFileName,history.history['val_loss'][-1]))
     logFilename = '/src/src/predSkan/log/logT2.log'
     # 记录日志文件
     with open(logFilename, 'a+') as f:

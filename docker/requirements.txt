@@ -4,3 +4,4 @@ ThinkingDataSdk
 matplotlib
 sqlalchemy
 gspread
+sklearn

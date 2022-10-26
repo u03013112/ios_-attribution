@@ -11,6 +11,8 @@ from src.tools import getFilename
 
 from src.predSkan.totalAI0 import groupList,dataStep1,dataStep2
 
+from src.predSkan.totalAI2 import dataStep3
+
 def mapeFunc(y_true, y_pred):
     return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
     
@@ -138,6 +140,34 @@ def test(dataDf2,modList):
         print('save pic /src/data/testCv%d.png'%(i))
         plt.clf()
 
+from sklearn import metrics
+def test2():
+    modName = '/src/src/predSkan/mod/mod02582-23.44.h5'
+    df = dataStep1('20220501','20220930')
+    df2 = dataStep2(df)
+    dataDf3 = dataStep3(df2)
+
+    mod = tf.keras.models.load_model(modName)
+
+    testDf = dataDf3.loc[(dataDf3.install_date >= '2022-09-01')].sort_values(by=['install_date','group'])
+    testX = testDf['count'].to_numpy().reshape((-1,64))
+    testSumByDay = testDf.groupby('install_date').agg(sum=('sumr7usd','sum'))
+    testY = testSumByDay.to_numpy()
+
+    yp = mod.predict(testX)
+    print('mape:%.2f%%'%(mapeFunc(testY,yp)))
+    r2 = metrics.r2_score(testY,yp)
+    print('r2:%.2f%%'%(r2))
+
+    x = np.arange(len(yp))
+    plt.title("total ai 2") 
+    plt.xlabel("date 2022-09-01~2022-09-30 ") 
+    plt.ylabel("true blue,pred red") 
+    plt.plot(x,testY.reshape(-1),'b-')
+    plt.plot(x,yp.reshape(-1),'r-')
+    plt.savefig('/src/data/testT2.png')
+    print('save pic /src/data/testT2.png')
+
 if __name__ == '__main__':
     # modNameList = [
     #     '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
@@ -206,80 +236,82 @@ if __name__ == '__main__':
     #     '/src/src/predSkan/mod/mTotal63_mod4_20221022_15.h5',
     # ]
     
-    modNameList = [
-        '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal1_mod1_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal2_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal3_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal4_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal5_mod3_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal6_mod1_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal7_mod3_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal8_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal9_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal10_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal11_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal12_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal13_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal14_mod3_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal15_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal16_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal17_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal18_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal19_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal20_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal21_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal22_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal23_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal24_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal25_mod3_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal26_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal27_mod3_20221021_02.h5',
-        '/src/src/predSkan/mod/mTotal28_mod3_20221024_02.h5',
-        '/src/src/predSkan/mod/mTotal29_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal30_mod3_20221024_02.h5',
-        '/src/src/predSkan/mod/mTotal31_mod3_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal32_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal33_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal34_mod3_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal35_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal36_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal37_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal38_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal39_mod3_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal40_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal41_mod3_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal42_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal43_mod4_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal44_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal45_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal46_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal47_mod4_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal48_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal49_mod3_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal50_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal51_mod3_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal52_mod4_20221025_10.h5',
-        '/src/src/predSkan/mod/mTotal53_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal54_mod4_20221025_10.h5',
-        '/src/src/predSkan/mod/mTotal55_mod4_20221025_07.h5',
-        '/src/src/predSkan/mod/mTotal56_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal57_mod4_20221025_08.h5',
-        '/src/src/predSkan/mod/mTotal58_mod4_20221021_15.h5',
-        '/src/src/predSkan/mod/mTotal59_mod4_20221021_10.h5',
-        '/src/src/predSkan/mod/mTotal60_mod4_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal61_mod4_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal62_mod4_20221022_15.h5',
-        '/src/src/predSkan/mod/mTotal63_mod4_20221025_11.h5',
-    ]
+    # modNameList = [
+    #     '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal1_mod1_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal2_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal3_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal4_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal5_mod3_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal6_mod1_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal7_mod3_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal8_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal9_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal10_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal11_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal12_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal13_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal14_mod3_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal15_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal16_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal17_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal18_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal19_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal20_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal21_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal22_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal23_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal24_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal25_mod3_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal26_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal27_mod3_20221021_02.h5',
+    #     '/src/src/predSkan/mod/mTotal28_mod3_20221024_02.h5',
+    #     '/src/src/predSkan/mod/mTotal29_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal30_mod3_20221024_02.h5',
+    #     '/src/src/predSkan/mod/mTotal31_mod3_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal32_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal33_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal34_mod3_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal35_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal36_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal37_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal38_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal39_mod3_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal40_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal41_mod3_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal42_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal43_mod4_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal44_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal45_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal46_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal47_mod4_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal48_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal49_mod3_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal50_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal51_mod3_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal52_mod4_20221025_10.h5',
+    #     '/src/src/predSkan/mod/mTotal53_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal54_mod4_20221025_10.h5',
+    #     '/src/src/predSkan/mod/mTotal55_mod4_20221025_07.h5',
+    #     '/src/src/predSkan/mod/mTotal56_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal57_mod4_20221025_08.h5',
+    #     '/src/src/predSkan/mod/mTotal58_mod4_20221021_15.h5',
+    #     '/src/src/predSkan/mod/mTotal59_mod4_20221021_10.h5',
+    #     '/src/src/predSkan/mod/mTotal60_mod4_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal61_mod4_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal62_mod4_20221022_15.h5',
+    #     '/src/src/predSkan/mod/mTotal63_mod4_20221025_11.h5',
+    # ]
     
-    modList = []
-    for modName in modNameList:
-        mod = tf.keras.models.load_model(modName)
-        modList.append(mod)
+    # modList = []
+    # for modName in modNameList:
+    #     mod = tf.keras.models.load_model(modName)
+    #     modList.append(mod)
 
     
 
-    df = dataStep1('20220501','20220930')
-    df2 = dataStep2(df)
-    test(df2,modList)
+    # df = dataStep1('20220501','20220930')
+    # df2 = dataStep2(df)
+    # test(df2,modList)
+
+    test2()
