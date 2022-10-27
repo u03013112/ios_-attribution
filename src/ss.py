@@ -6,10 +6,15 @@ from urllib import parse
 import json
 import datetime
 
+import sys
+sys.path.append('/src')
+
+from src.config import ssToken
+
 # TODO:目前获得的都是从ss用api得到的数值，但是条目限制目前只有10000，如果有必要需要切换为sql获得
 class Data:
     def __init__(self,since=None,until=None,):
-        self.token = 'VxDWrAN3UiSr4Semp3gFuHv10wMeCSOWUhbSXLAImkFkTSo2AeJlApilwog4Yhcn'
+        self.token = ssToken
         if since is None:
             now = time.time()
             before1days = time.localtime(now - 3600 * 24)
@@ -49,7 +54,7 @@ class Data:
 
         # sql = sql.replace('googleadwords_int','Facebook Ads')
 
-        # print(sql)
+        print(sql)
 
         headers = {'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'}
         # 通过字典方式定义请求body

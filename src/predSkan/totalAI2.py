@@ -102,6 +102,20 @@ def createModFunc2():
     mod.compile(optimizer='adadelta',loss=loss_r_square,metrics=['mape',r_square])
     return mod
 
+def createModFunc3():
+    mod = keras.Sequential(
+        [
+            layers.Dense(256, activation="relu", input_shape=(64,)),
+            # layers.Dropout(0.3),
+            layers.Dense(256, activation="relu"),
+            # layers.Dropout(0.3),
+            layers.Dense(1, activation="relu")
+        ]
+    )
+    # mod.compile(optimizer="Nadam", loss=rmse, metrics=[r_square, rmse])
+    mod.compile(optimizer='adadelta',loss=loss_r_square,metrics=['mape',r_square])
+    return mod
+
 createModList = [
     # {
     #     'name':'mod1',
