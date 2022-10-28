@@ -86,6 +86,7 @@ def createModFunc1():
         ]
     )
     mod.compile(optimizer='adadelta',loss='mape')
+    mod.summary()
     return mod
 
 def createModFunc2():
