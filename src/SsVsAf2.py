@@ -118,6 +118,8 @@ def matchSsAndAf(ssDf,afDf):
     # 每条只能match一次
     afDf.insert(afDf.shape[1],'isMatched',0)
 
+    ssDf = ssDf.sort_values(by=['uid','eventTime'])
+
     orderIds = ssDf['orderId'].unique()
     orderCount = len(orderIds)
     notMatchedCount = 0
@@ -224,6 +226,67 @@ def matchSsAndAf2(ssDf,afDf):
                 break
     return ssDf,afDf
 
+def matchSsAndAf3(ssDf,afDf):
+    ssDf.insert(ssDf.shape[1],'afId','unknown')
+    ssDf.insert(ssDf.shape[1],'afInstallDate','-')
+    # 每条只能match一次
+    afDf.insert(afDf.shape[1],'isMatched',0)
+
+    orderIds = ssDf['orderId'].unique()
+    orderCount = len(orderIds)
+    notMatchedCount = 0
+    
+
+    ssDf = ssDf.sort_values(by=['uid','eventTime','usd']).reset_index(drop=True)
+    afDf = afDf.sort_values(by=['uid','af_event_time','event_revenue_usd']).reset_index(drop=True)
+
+    uids = ssDf['uid'].unique()
+    count = 0
+    for uid in uids:
+        ssUidDf = ssDf.loc[ssDf.uid == uid]
+        afUidDf = afDf.loc[afDf.uid == uid]
+
+        # print('ssUidDf:',ssUidDf)
+        # print('afUidDf:',afUidDf)
+        
+        if (len(ssUidDf) != len(afUidDf)):
+            print('uid:%s ssOrdersCount:%d != afOrdersCount:%d'%(uid,len(ssUidDf),len(afUidDf)))
+            # continue
+
+        for i in range(len(ssUidDf)):
+            count += 1
+            ssIndex = list(ssUidDf.iloc[[i]].index)[0]
+            eventTimeStr = ssDf.iloc[ssIndex]['eventTime']
+            usd = ssDf.iloc[ssIndex]['usd']
+            eventTime = datetime.datetime.strptime(eventTimeStr,'%Y-%m-%d %H:%M')
+            eventTimeMinStr = (eventTime + datetime.timedelta(minutes = -1)).strftime('%Y-%m-%d %H:%M')
+            eventTimeMaxStr = (eventTime + datetime.timedelta(minutes = +1)).strftime('%Y-%m-%d %H:%M')
+            usdMin = usd * 0.85
+            usdMax = usd * 1.15
+
+            # find from afDf
+            afDfFind = afDf[
+                (afDf.uid == uid) &
+                (afDf.af_event_time >= eventTimeMinStr) & (afDf.af_event_time <= eventTimeMaxStr) &
+                (afDf.event_revenue_usd >= usdMin) & (afDf.event_revenue_usd <= usdMax) &
+                (afDf.isMatched == 0)
+            ]
+            # print(uid,eventTimeStr,usd)
+            if len(afDfFind) > 0:
+                ssDf.loc[ssIndex,'afId'] = afDfFind.iloc[0]['appsflyer_id']
+                ssDf.loc[ssIndex,'afInstallDate'] = afDfFind.iloc[0]['af_install_date']
+                afIndex = list(afDfFind.index)[0]
+                # print('afDfFind:',afDfFind)
+                # print('afIndex:',afIndex)
+                # print('BBB:',afDf.loc[afIndex])
+                afDf.loc[afIndex,'isMatched'] = 1
+                # print('AAA:',afDf.loc[afIndex])
+            else:
+                # print('not match:',ssDf.iloc[[ssIndex]])
+                notMatchedCount += 1
+                print('not matched/total:%d/%d = %.2f%%'%(notMatchedCount,count, (notMatchedCount/count*100)))
+                # print(df)
+    return ssDf,afDf
 
 if __name__ == '__main__':
     # df = getSsPayUserData()
@@ -234,9 +297,9 @@ if __name__ == '__main__':
     
     ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
     afDf = pd.read_csv(getFilename('getAfPayUserData202206'))
-    ssDf,afDf = matchSsAndAf(ssDf, afDf)
-    # ssDf.to_csv(getFilename('getSsPayUserData202206-b'))
-    # afDf.to_csv(getFilename('getAfPayUserData202206-b'))
+    ssDf,afDf = matchSsAndAf3(ssDf, afDf)
+    ssDf.to_csv(getFilename('getSsPayUserData202206-c'))
+    afDf.to_csv(getFilename('getAfPayUserData202206-c'))
 
     # ssDf = pd.read_csv(getFilename('getSsPayUserData202206-b'))
     unknownDf = ssDf[(ssDf.afId == 'unknown')]
