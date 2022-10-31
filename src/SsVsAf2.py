@@ -121,9 +121,59 @@ def matchSsAndAf(ssDf,afDf):
     orderIds = ssDf['orderId'].unique()
     orderCount = len(orderIds)
     notMatchedCount = 0
+    
+    i = 0
+    # 用order来做容易出现冒领情况，由于时间与金额都是范围值，所以防止冒领的简单方式是按照时间顺序来做
+    for orderId in orderIds:
+        i += 1
+        df = ssDf.loc[ssDf.orderId == orderId]
+        uid = df.iloc[0]['uid']
+        eventTimeStr = df.iloc[0]['eventTime']
+        usd = df.iloc[0]['usd']
+        eventTime = datetime.datetime.strptime(eventTimeStr,'%Y-%m-%d %H:%M')
+        eventTimeMinStr = (eventTime + datetime.timedelta(minutes = -1)).strftime('%Y-%m-%d %H:%M')
+        eventTimeMaxStr = (eventTime + datetime.timedelta(minutes = +1)).strftime('%Y-%m-%d %H:%M')
+        usdMin = usd * 0.85
+        usdMax = usd * 1.15
 
-    ssDf.sort_values(by=['install_date'])
+        # find from afDf
+        afDfFind = afDf[
+            (afDf.uid == uid) &
+            (afDf.af_event_time >= eventTimeMinStr) & (afDf.af_event_time <= eventTimeMaxStr) &
+            (afDf.event_revenue_usd >= usdMin) & (afDf.event_revenue_usd <= usdMax) &
+            (afDf.isMatched == 0)
+        ]
 
+        if len(afDfFind) > 0:
+            ssDf.loc[ssDf.orderId==orderId,'afId'] = afDfFind.iloc[0]['appsflyer_id']
+            ssDf.loc[ssDf.orderId==orderId,'afInstallDate'] = afDfFind.iloc[0]['af_install_date']
+            index = list(afDfFind.index)[0]
+            # print(afDfFind)
+            afDf.loc[index,'isMatched'] = 1
+            # afDf.loc[
+            #     (afDf.uid == uid) &
+            #     (afDf.af_event_time >= eventTimeMinStr) & (afDf.af_event_time <= eventTimeMaxStr) &
+            #     (afDf.event_revenue_usd >= usdMin) & (afDf.event_revenue_usd <= usdMax) &
+            #     (afDf.isMatched == 0),'isMatched'
+            # ] = 1
+        else:
+            print('not match:',ssDf.iloc[[i]])
+            notMatchedCount += 1
+            print('not matched/total:%d/%d = %.2f%%'%(notMatchedCount,i, (notMatchedCount/i*100)))
+            # print(df)
+            if notMatchedCount >= 100:
+                break
+    return ssDf,afDf
+        
+def matchSsAndAf2(ssDf,afDf):
+    ssDf.insert(ssDf.shape[1],'afId','unknown')
+    ssDf.insert(ssDf.shape[1],'afInstallDate','-')
+    # 每条只能match一次
+    afDf.insert(afDf.shape[1],'isMatched',0)
+
+    orderIds = ssDf['orderId'].unique()
+    orderCount = len(orderIds)
+    notMatchedCount = 0
     
     # 用order来做容易出现冒领情况，由于时间与金额都是范围值，所以防止冒领的简单方式是按照时间顺序来做
     # for orderId in orderIds:
@@ -131,6 +181,8 @@ def matchSsAndAf(ssDf,afDf):
     #     uid = df.iloc[0]['uid']
     #     eventTimeStr = df.iloc[0]['eventTime']
     #     usd = df.iloc[0]['usd']
+
+    ssDf = ssDf.sort_values(by=['uid','eventTime'])
     for i in range(len(ssDf)):
         uid = ssDf.iloc[i]['uid']
         eventTimeStr = ssDf.iloc[i]['eventTime']
@@ -150,9 +202,10 @@ def matchSsAndAf(ssDf,afDf):
         ]
 
         if len(afDfFind) > 0:
-            # 可能会有更好的写法吧，暂时只会这么写，写得好啰嗦
-            ssDf.iloc[i,'afId'] = afDfFind.iloc[0]['appsflyer_id']
-            ssDf.iloc[i,'afInstallDate'] = afDfFind.iloc[0]['af_install_date']
+            # print(ssDf.loc[i])
+            ssDf.loc[i,'afId'] = afDfFind.iloc[0]['appsflyer_id']
+            ssDf.loc[i,'afInstallDate'] = afDfFind.iloc[0]['af_install_date']
+            # print(ssDf.loc[i])
             index = list(afDfFind.index)[0]
             # print(afDfFind)
             afDf.loc[index,'isMatched'] = 1
@@ -163,14 +216,14 @@ def matchSsAndAf(ssDf,afDf):
             #     (afDf.isMatched == 0),'isMatched'
             # ] = 1
         else:
-            # print('order id:%s not match!'%(orderId))
+            print('not match:',ssDf.iloc[[i]])
             notMatchedCount += 1
-            print('not matched/total:%d/%d = %.2f%%'%(notMatchedCount,orderCount, (notMatchedCount/orderCount*100)))
+            print('not matched/total:%d/%d = %.2f%%'%(notMatchedCount,i, (notMatchedCount/i*100)))
             # print(df)
-            # if notMatchedCount >= 100:
-            #     break
+            if notMatchedCount >= 100:
+                break
     return ssDf,afDf
-        
+
 
 if __name__ == '__main__':
     # df = getSsPayUserData()
@@ -182,15 +235,15 @@ if __name__ == '__main__':
     ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
     afDf = pd.read_csv(getFilename('getAfPayUserData202206'))
     ssDf,afDf = matchSsAndAf(ssDf, afDf)
-    ssDf.to_csv(getFilename('getSsPayUserData202206-b'))
-    afDf.to_csv(getFilename('getAfPayUserData202206-b'))
+    # ssDf.to_csv(getFilename('getSsPayUserData202206-b'))
+    # afDf.to_csv(getFilename('getAfPayUserData202206-b'))
 
     # ssDf = pd.read_csv(getFilename('getSsPayUserData202206-b'))
-    # unknownDf = ssDf[(ssDf.afId == 'unknown')]
-    # print('unknown %d,total %d,(unknown/total)=%.2f%%'%(len(unknownDf),len(ssDf),len(unknownDf)/len(ssDf)*100))
+    unknownDf = ssDf[(ssDf.afId == 'unknown')]
+    print('unknown %d,total %d,(unknown/total)=%.2f%%'%(len(unknownDf),len(ssDf),len(unknownDf)/len(ssDf)*100))
     # print(unknownDf)
 
 
     # afDf = pd.read_csv(getFilename('getAfPayUserData202206-b'))
-    # unMatched = afDf[(afDf.isMatched == 0)]
-    # print('unMatched %d,total %d,(unMatched/total)=%.2f%%'%(len(unMatched),len(afDf),len(unMatched)/len(afDf)*100))
+    unMatched = afDf[(afDf.isMatched == 0)]
+    print('unMatched %d,total %d,(unMatched/total)=%.2f%%'%(len(unMatched),len(afDf),len(unMatched)/len(afDf)*100))
