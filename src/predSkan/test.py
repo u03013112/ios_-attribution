@@ -134,7 +134,20 @@ def test2():
     plt.plot(x,yp.reshape(-1),'r-')
     plt.savefig('/src/data/testT2.png')
     print('save pic /src/data/testT2.png')
+    plt.clf()
+    
+    print(yp.reshape(-1))
+    print(testY.reshape(-1))
+    
 
+    cost = np.array([57034.42,95750.57,126744.26,143489.50,142104.70,134276.70,127092.36,117801.28,119383.61,131279.43,130407.37,117082.42,113094.84,110632.02,110886.79,119084.99,132653.75,137010.41,137844.95,137573.00,126642.97,122268.80,130570.28,147392.67,155731.68,143962.89,135094.40,124948.44,116235.33,129845.26,139265.62,143787.70,141225.32,123568.31,124753.01,123984.18,128913.85,146879.03,153982.17,163569.30,171097.67,161002.65,162102.65,162922.89,166237.05,180182.01,175119.18,174755.06,173332.52,177929.20])
+    plt.title("roi ai 2") 
+    plt.xlabel("date 2022-09-01~2022-10-20 ") 
+    plt.ylabel("true blue,pred red") 
+    plt.plot(x,np.divide(testY.reshape(-1),cost),'b-')
+    plt.plot(x,np.divide(yp.reshape(-1),cost),'r-')
+    plt.savefig('/src/data/testT2ROI.png')
+    print('save pic /src/data/testT2ROI.png')
 if __name__ == '__main__':
     # modNameList = [
     #     '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
