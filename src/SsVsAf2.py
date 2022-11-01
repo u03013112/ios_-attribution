@@ -422,42 +422,31 @@ def main(sinceTime,unitlTime):
     print('发送事件成功:',successCount)
     ta.close()
 
-if __name__ == '__main__':
-    # df = getSsPayUserData()
-    # df.to_csv(getFilename('getSsPayUserData202206'))
+def test():
+    afDf = pd.read_csv(getFilename('getAfOrderData'))
+    ssDf = pd.read_csv(getFilename('getSsOrderData'))
 
-    # df = getAfPayUserData()
-    # df.to_csv(getFilename('getAfPayUserData202206'))
-    # print(len(df))
-
+    # 尝试进行match
+    afDf = afDf.rename(columns={'order_id':'orderId'})
+    ssDf[['orderId']] = ssDf[['orderId']].astype(str)
+    afDf[['orderId']] = afDf[['orderId']].astype(str)
     
-    # ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
-    # afDf = pd.read_csv(getFilename('getAfPayUserData202206'))
-    # ssDf,afDf = matchSsAndAf3(ssDf, afDf)
-    # ssDf.to_csv(getFilename('getSsPayUserData202206-c'))
-    # afDf.to_csv(getFilename('getAfPayUserData202206-c'))
+    # ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
+    # ssDf2.insert(ssDf2.shape[1],'isMatched',1)
+    # afRet = afDf.merge(ssDf2,how='left',on='orderId')
+    # afLoss = afRet.loc[pd.isna(afRet.isMatched)]
+    # print('af能在ss中找到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
+    # print(afLoss)
 
-    # # ssDf = pd.read_csv(getFilename('getSsPayUserData202206-b'))
-    # unknownDf = ssDf[(ssDf.afId == 'unknown')]
-    # print('unknown %d,total %d,(unknown/total)=%.2f%%'%(len(unknownDf),len(ssDf),len(unknownDf)/len(ssDf)*100))
-    # # print(unknownDf)
+    ssRet = ssDf.merge(afDf,how='left',on='orderId')
+    ssLoss = ssRet.loc[pd.isna(ssRet.af_install_date)]
+    print('ss能在af中找到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
+    print(ssLoss)
 
-
-    # # afDf = pd.read_csv(getFilename('getAfPayUserData202206-b'))
-    # unMatched = afDf[(afDf.isMatched == 0)]
-    # print('unMatched %d,total %d,(unMatched/total)=%.2f%%'%(len(unMatched),len(afDf),len(unMatched)/len(afDf)*100))
-
-
-    # df = getAfPayUserDataWithOrderId()
-    # df.to_csv(getFilename('getAfPayUserData202206-order'))
-
-    # ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
-    # afDf = pd.read_csv(getFilename('getAfPayUserData202206-order'))
-
-    # ssRet = matchSsAndAfByOrderId(ssDf, afDf)
-    # ssRet.to_csv(getFilename('ssRet'))
-
+if __name__ == '__main__':
     sinceTime = datetime.date(2022,6,1)
     unitlTime = datetime.date(2022,6,30)
 
-    main(sinceTime,unitlTime)
+    # main(sinceTime,unitlTime)
+
+    test()
