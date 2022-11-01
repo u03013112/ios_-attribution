@@ -391,13 +391,20 @@ def main(sinceTime,unitlTime):
     event_name = 'afPurchase'
     successCount = 0
     for i in range(len(merge)):
-        account_id = merge['uid_x'].get(i)
+        account_id = str(merge['uid_x'].get(i))
         time = datetime.datetime.strptime(merge['eventTime'].get(i),'%Y-%m-%d %H:%M')
-        orderId = merge['orderId'].get(i)
-        usd = merge['usd'].get(i)
-        afUsd = merge['event_revenue_usd'].get(i)
-        afId = merge['appsflyer_id'].get(i)
+        orderId = str(merge['orderId'].get(i))
+        usd = float(merge['usd'].get(i))
+        afUsd = float(merge['event_revenue_usd'].get(i))
+        afId = str(merge['appsflyer_id'].get(i))
         afInstallDate = merge['af_install_date'].get(i)
+        
+        # print(type(orderId))
+        # print(type(usd))
+        # print(type(afUsd))
+        # print(type(afId))
+        # print(type(afInstallDate))
+
         properties = {
             "#time":time,
             "orderId":orderId,
@@ -411,9 +418,9 @@ def main(sinceTime,unitlTime):
             successCount += 1
         except Exception as e:
             print(e)  
-        ta.flush()
-        print('发送事件成功:',successCount)
-        ta.close()
+    ta.flush()
+    print('发送事件成功:',successCount)
+    ta.close()
 
 if __name__ == '__main__':
     # df = getSsPayUserData()
