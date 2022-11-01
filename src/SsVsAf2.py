@@ -5,6 +5,7 @@
 # af属性统计再和数数其他支付数据做覆盖率比对
 # 本质上覆盖率应该是足够高的，因为流水是能对的上的
 
+from ossaudiodev import SNDCTL_DSP_GETSPDIF
 import sys
 sys.path.append('/src')
 from src.config import ssToken
@@ -20,14 +21,15 @@ import json
 import pandas as pd
 import datetime
 
+from tgasdk.sdk import TGAnalytics, BatchConsumer
 
 # 开始日期与结束日期，utc0，自然日
-sinceTime = datetime.date(2022,6,1)
-unitlTime = datetime.date(2022,6,2)
+# sinceTime = datetime.date(2022,6,1)
+# unitlTime = datetime.date(2022,6,30)
 
 
-def getSsPayUserData():
-    global sinceTime,unitlTime
+def getSsPayUserData(sinceTime,unitlTime):
+    # global sinceTime,unitlTime
     # 数数的日期需求格式是%Y-%m-%d
     sinceTimeStr = sinceTime.strftime('%Y-%m-%d')
     unitlTimeStr = unitlTime.strftime('%Y-%m-%d')
@@ -88,8 +90,8 @@ def getSsPayUserData():
         )
     return pd.DataFrame(data = ret)
 
-def getAfPayUserData():
-    global sinceTime,unitlTime
+def getAfPayUserData(sinceTime,unitlTime):
+    # global sinceTime,unitlTime
     # 数数的日期需求格式是%Y-%m-%d
     sinceTimeStr = sinceTime.strftime('%Y%m%d')
     unitlTimeStr = unitlTime.strftime('%Y%m%d')
@@ -111,6 +113,30 @@ def getAfPayUserData():
     df = execSql(sql)
     return df
 
+# 直接获得订单id
+def getAfPayUserDataWithOrderId(sinceTime,unitlTime):
+    # global sinceTime,unitlTime
+    # 数数的日期需求格式是%Y-%m-%d
+    sinceTimeStr = sinceTime.strftime('%Y%m%d')
+    unitlTimeStr = unitlTime.strftime('%Y%m%d')
+    sql = '''
+        select
+            customer_user_id as uid,
+            to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd") as af_install_date,
+            to_char(to_date(event_time,"yyyy-mm-dd hh:mi:ss"),"yyyy-mm-dd hh:mi") as af_event_time,
+            event_revenue_usd,
+            appsflyer_id,
+            get_json_object(base64decode(event_value),'$.af_order_id') as order_id
+        from ods_platform_appsflyer_events
+        where
+            app_id='id1479198816'
+            and event_name in ('af_purchase','af_purchase_oldusers')
+            and zone=0
+            and day>=%s and day<=%s
+        ;
+    '''%(sinceTimeStr,unitlTimeStr)
+    df = execSql(sql)
+    return df
 
 def matchSsAndAf(ssDf,afDf):
     ssDf.insert(ssDf.shape[1],'afId','unknown')
@@ -288,25 +314,143 @@ def matchSsAndAf3(ssDf,afDf):
                 # print(df)
     return ssDf,afDf
 
+
+# 直接用数数与Af的orderId做匹配
+def matchSsAndAfByOrderId(ssDf,afDf):
+    afDf = afDf.rename(columns={'order_id':'orderId'})
+    ssDf[['orderId']] = ssDf[['orderId']].astype(str)
+    afDf[['orderId']] = afDf[['orderId']].astype(str)
+    
+    ssRet = ssDf.merge(afDf,how='left',on='orderId')
+
+    ssLoss = ssRet.loc[pd.isna(ssRet.af_install_date)]
+    print('ss能在af中找到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
+
+    ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
+    ssDf2.insert(ssDf2.shape[1],'isMatched',1)
+    # print(ssDf2)
+    afRet = afDf.merge(ssDf2,how='left',on='orderId')
+    # print(afRet)
+    afLoss = afRet.loc[pd.isna(afRet.isMatched)]
+    print('af能在ss中找到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
+
+    merge = ssDf.merge(afDf,how='inner',on='orderId')
+    # print('merge:',merge)
+    ssTotalUsd = merge['usd'].sum()
+    afTotalUsd = merge['event_revenue_usd'].sum()
+    print('ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
+
+    return ssRet
+
+
+def main(sinceTime,unitlTime):
+
+    if __debug__:
+        print('debug 模式，并未真的sql')
+    else:
+        afDf = getAfPayUserDataWithOrderId(sinceTime,unitlTime)
+        afDf.to_csv(getFilename('getAfOrderData'))
+        
+        ssDf = getSsPayUserData(sinceTime,unitlTime)
+        ssDf.to_csv(getFilename('getSsOrderData'))
+
+    afDf = pd.read_csv(getFilename('getAfOrderData'))
+    ssDf = pd.read_csv(getFilename('getSsOrderData'))
+
+    print('got af order data :%d'%(len(afDf)))
+    print('got ss order data :%d'%(len(ssDf)))
+
+    # 尝试进行match
+    afDf = afDf.rename(columns={'order_id':'orderId'})
+    ssDf[['orderId']] = ssDf[['orderId']].astype(str)
+    afDf[['orderId']] = afDf[['orderId']].astype(str)
+    
+    ssRet = ssDf.merge(afDf,how='left',on='orderId')
+    ssLoss = ssRet.loc[pd.isna(ssRet.af_install_date)]
+    print('ss能在af中找到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
+    ssTotalUsd = ssRet['usd'].sum()
+    afTotalUsd = ssRet['event_revenue_usd'].sum()
+    print('ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
+
+    ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
+    ssDf2.insert(ssDf2.shape[1],'isMatched',1)
+    afRet = afDf.merge(ssDf2,how='left',on='orderId')
+    afLoss = afRet.loc[pd.isna(afRet.isMatched)]
+    print('af能在ss中找到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
+
+    merge = ssDf.merge(afDf,how='inner',on='orderId')
+    ssTotalUsd = merge['usd'].sum()
+    afTotalUsd = merge['event_revenue_usd'].sum()
+    print('在能匹配的订单中金额差异 ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
+
+    # 将匹配到af订单的支付数据重新打点给BI
+    uri = 'https://tatracker.rivergame.net/'
+    appid = 'cf7a0712b2e44e4882973fa137969fff'
+    batchConsumer = BatchConsumer(server_uri=uri, appid=appid,compress=False)
+    ta = TGAnalytics(batchConsumer)
+    event_name = 'afPurchase'
+    successCount = 0
+    for i in range(len(merge)):
+        account_id = merge['uid_x'].get(i)
+        time = datetime.datetime.strptime(merge['eventTime'].get(i),'%Y-%m-%d %H:%M')
+        orderId = merge['orderId'].get(i)
+        usd = merge['usd'].get(i)
+        afUsd = merge['event_revenue_usd'].get(i)
+        afId = merge['appsflyer_id'].get(i)
+        afInstallDate = merge['af_install_date'].get(i)
+        properties = {
+            "#time":time,
+            "orderId":orderId,
+            "usd":usd,
+            "afId":afId,
+            "afUsd":afUsd,
+            "afInstallDate":afInstallDate
+        }
+        try:
+            ta.track(account_id = account_id, event_name = event_name, properties = properties)
+            successCount += 1
+        except Exception as e:
+            print(e)  
+        ta.flush()
+        print('发送事件成功:',successCount)
+        ta.close()
+
 if __name__ == '__main__':
     # df = getSsPayUserData()
     # df.to_csv(getFilename('getSsPayUserData202206'))
 
     # df = getAfPayUserData()
     # df.to_csv(getFilename('getAfPayUserData202206'))
+    # print(len(df))
+
     
-    ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
-    afDf = pd.read_csv(getFilename('getAfPayUserData202206'))
-    ssDf,afDf = matchSsAndAf3(ssDf, afDf)
-    ssDf.to_csv(getFilename('getSsPayUserData202206-c'))
-    afDf.to_csv(getFilename('getAfPayUserData202206-c'))
+    # ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
+    # afDf = pd.read_csv(getFilename('getAfPayUserData202206'))
+    # ssDf,afDf = matchSsAndAf3(ssDf, afDf)
+    # ssDf.to_csv(getFilename('getSsPayUserData202206-c'))
+    # afDf.to_csv(getFilename('getAfPayUserData202206-c'))
 
-    # ssDf = pd.read_csv(getFilename('getSsPayUserData202206-b'))
-    unknownDf = ssDf[(ssDf.afId == 'unknown')]
-    print('unknown %d,total %d,(unknown/total)=%.2f%%'%(len(unknownDf),len(ssDf),len(unknownDf)/len(ssDf)*100))
-    # print(unknownDf)
+    # # ssDf = pd.read_csv(getFilename('getSsPayUserData202206-b'))
+    # unknownDf = ssDf[(ssDf.afId == 'unknown')]
+    # print('unknown %d,total %d,(unknown/total)=%.2f%%'%(len(unknownDf),len(ssDf),len(unknownDf)/len(ssDf)*100))
+    # # print(unknownDf)
 
 
-    # afDf = pd.read_csv(getFilename('getAfPayUserData202206-b'))
-    unMatched = afDf[(afDf.isMatched == 0)]
-    print('unMatched %d,total %d,(unMatched/total)=%.2f%%'%(len(unMatched),len(afDf),len(unMatched)/len(afDf)*100))
+    # # afDf = pd.read_csv(getFilename('getAfPayUserData202206-b'))
+    # unMatched = afDf[(afDf.isMatched == 0)]
+    # print('unMatched %d,total %d,(unMatched/total)=%.2f%%'%(len(unMatched),len(afDf),len(unMatched)/len(afDf)*100))
+
+
+    # df = getAfPayUserDataWithOrderId()
+    # df.to_csv(getFilename('getAfPayUserData202206-order'))
+
+    # ssDf = pd.read_csv(getFilename('getSsPayUserData202206'))
+    # afDf = pd.read_csv(getFilename('getAfPayUserData202206-order'))
+
+    # ssRet = matchSsAndAfByOrderId(ssDf, afDf)
+    # ssRet.to_csv(getFilename('ssRet'))
+
+    sinceTime = datetime.date(2022,6,1)
+    unitlTime = datetime.date(2022,6,30)
+
+    main(sinceTime,unitlTime)
