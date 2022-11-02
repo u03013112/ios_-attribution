@@ -344,7 +344,7 @@ def matchSsAndAfByOrderId(ssDf,afDf):
 
 
 def main(sinceTime,unitlTime):
-
+    print(sinceTime,unitlTime)
     if __debug__:
         print('debug 模式，并未真的sql')
     else:
@@ -360,6 +360,10 @@ def main(sinceTime,unitlTime):
     print('got af order data :%d'%(len(afDf)))
     print('got ss order data :%d'%(len(ssDf)))
 
+    afTotalUsd = afDf['event_revenue_usd'].sum()
+    ssTotalUsd = ssDf['usd'].sum()
+    print('ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
+
     # 尝试进行match
     afDf = afDf.rename(columns={'order_id':'orderId'})
     ssDf[['orderId']] = ssDf[['orderId']].astype(str)
@@ -367,16 +371,13 @@ def main(sinceTime,unitlTime):
     
     ssRet = ssDf.merge(afDf,how='left',on='orderId')
     ssLoss = ssRet.loc[pd.isna(ssRet.af_install_date)]
-    print('ss能在af中找到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
-    ssTotalUsd = ssRet['usd'].sum()
-    afTotalUsd = ssRet['event_revenue_usd'].sum()
-    print('ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
+    print('ss在af中找不到对应订单的比例：（%d/%d） = %.2f%%'%(len(ssLoss),len(ssRet),len(ssLoss)/len(ssRet)*100))
 
     ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
     ssDf2.insert(ssDf2.shape[1],'isMatched',1)
     afRet = afDf.merge(ssDf2,how='left',on='orderId')
     afLoss = afRet.loc[pd.isna(afRet.isMatched)]
-    print('af能在ss中找到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
+    print('af在ss中找不到对应订单的比例：（%d/%d） = %.2f%%'%(len(afLoss),len(afRet),len(afLoss)/len(afRet)*100))
 
     merge = ssDf.merge(afDf,how='inner',on='orderId')
     ssTotalUsd = merge['usd'].sum()
@@ -384,43 +385,43 @@ def main(sinceTime,unitlTime):
     print('在能匹配的订单中金额差异 ssTotalUsd:%f,afTotalUsd:%f,(ssTotalUsd/afTotalUsd)=%.2f%%'%(ssTotalUsd,afTotalUsd,(ssTotalUsd/afTotalUsd)*100))
 
     # 将匹配到af订单的支付数据重新打点给BI
-    uri = 'https://tatracker.rivergame.net/'
-    appid = 'cf7a0712b2e44e4882973fa137969fff'
-    batchConsumer = BatchConsumer(server_uri=uri, appid=appid,compress=False)
-    ta = TGAnalytics(batchConsumer)
-    event_name = 'afPurchase'
-    successCount = 0
-    for i in range(len(merge)):
-        account_id = str(merge['uid_x'].get(i))
-        time = datetime.datetime.strptime(merge['eventTime'].get(i),'%Y-%m-%d %H:%M')
-        orderId = str(merge['orderId'].get(i))
-        usd = float(merge['usd'].get(i))
-        afUsd = float(merge['event_revenue_usd'].get(i))
-        afId = str(merge['appsflyer_id'].get(i))
-        afInstallDate = merge['af_install_date'].get(i)
+    # uri = 'https://tatracker.rivergame.net/'
+    # appid = 'cf7a0712b2e44e4882973fa137969fff'
+    # batchConsumer = BatchConsumer(server_uri=uri, appid=appid,compress=False)
+    # ta = TGAnalytics(batchConsumer)
+    # event_name = 'afPurchase'
+    # successCount = 0
+    # for i in range(len(merge)):
+    #     account_id = str(merge['uid_x'].get(i))
+    #     time = datetime.datetime.strptime(merge['eventTime'].get(i),'%Y-%m-%d %H:%M')
+    #     orderId = str(merge['orderId'].get(i))
+    #     usd = float(merge['usd'].get(i))
+    #     afUsd = float(merge['event_revenue_usd'].get(i))
+    #     afId = str(merge['appsflyer_id'].get(i))
+    #     afInstallDate = merge['af_install_date'].get(i)
         
-        # print(type(orderId))
-        # print(type(usd))
-        # print(type(afUsd))
-        # print(type(afId))
-        # print(type(afInstallDate))
+    #     # print(type(orderId))
+    #     # print(type(usd))
+    #     # print(type(afUsd))
+    #     # print(type(afId))
+    #     # print(type(afInstallDate))
 
-        properties = {
-            "#time":time,
-            "orderId":orderId,
-            "usd":usd,
-            "afId":afId,
-            "afUsd":afUsd,
-            "afInstallDate":afInstallDate
-        }
-        try:
-            ta.track(account_id = account_id, event_name = event_name, properties = properties)
-            successCount += 1
-        except Exception as e:
-            print(e)  
-    ta.flush()
-    print('发送事件成功:',successCount)
-    ta.close()
+    #     properties = {
+    #         "#time":time,
+    #         "orderId":orderId,
+    #         "usd":usd,
+    #         "afId":afId,
+    #         "afUsd":afUsd,
+    #         "afInstallDate":afInstallDate
+    #     }
+    #     try:
+    #         ta.track(account_id = account_id, event_name = event_name, properties = properties)
+    #         successCount += 1
+    #     except Exception as e:
+    #         print(e)  
+    # ta.flush()
+    # print('发送事件成功:',successCount)
+    # ta.close()
 
 def test():
     afDf = pd.read_csv(getFilename('getAfOrderData'))
@@ -431,22 +432,22 @@ def test():
     ssDf[['orderId']] = ssDf[['orderId']].astype(str)
     afDf[['orderId']] = afDf[['orderId']].astype(str)
     
-    # ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
-    # ssDf2.insert(ssDf2.shape[1],'isMatched',1)
-    # afRet = afDf.merge(ssDf2,how='left',on='orderId')
-    # afLoss = afRet.loc[pd.isna(afRet.isMatched)]
-    # print('af能在ss中找到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
-    # print(afLoss)
+    ssDf2 = pd.DataFrame({'orderId':ssDf.loc[:,'orderId']})
+    ssDf2.insert(ssDf2.shape[1],'isMatched',1)
+    afRet = afDf.merge(ssDf2,how='left',on='orderId')
+    afLoss = afRet.loc[pd.isna(afRet.isMatched)]
+    print('af在ss中找不到对应订单的比例：%.2f%%'%(len(afLoss)/len(afRet)*100))
+    print(afLoss)
 
     ssRet = ssDf.merge(afDf,how='left',on='orderId')
     ssLoss = ssRet.loc[pd.isna(ssRet.af_install_date)]
-    print('ss能在af中找到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
+    print('ss在af中找不到对应订单的比例：%.2f%%'%(len(ssLoss)/len(ssRet)*100))
     print(ssLoss)
 
 if __name__ == '__main__':
-    sinceTime = datetime.date(2022,6,1)
-    unitlTime = datetime.date(2022,6,30)
+    sinceTime = datetime.date(2022,7,1)
+    unitlTime = datetime.date(2022,7,31)
 
-    # main(sinceTime,unitlTime)
+    main(sinceTime,unitlTime)
 
-    test()
+    # test()
