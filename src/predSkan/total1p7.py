@@ -7,6 +7,10 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+import zipfile
+
+##@resource_reference{"mod221103.zip"}
+
 
 # dayStr = '20220902'
 # modName = '/src/src/predSkan/mod/mod02582-23.44.h5'
@@ -15,9 +19,8 @@ from tensorflow.keras import layers
 # from src.maxCompute import execSql
 # from src.tools import getFilename
 
-
 dayStr = args['dayStr']
-modName = 'mod02582-23.44.h5'
+# modName = 'mod02582-23.44.h5'
 def execSql(sql):
     with o.execute_sql(sql).open_reader() as reader:
         pd_df = reader.to_pandas()
@@ -200,18 +203,21 @@ def dataStep3(dataDf2):
 
 
 def predict(dayStr):
-    mod = tf.keras.models.load_model(modName)
+    # mod = tf.keras.models.load_model(modName)
+    with zipfile.ZipFile('mod221103.zip') as myzip:
+        with open('mod02582.h5','wb') as f:
+            with myzip.open('mod02582.h5') as zipF:
+                f.write(zipF.read())
+          
+    mod = tf.keras.models.load_model('mod02582.h5')
+    mod.summary()
 
     df = getTotalData(dayStr)
-    df.to_csv(getFilename('predict'))
-
-    df = pd.read_csv(getFilename('predict'))
     df2 = dataStep2(df)
     df3 = dataStep3(df2)
 
     testX = df3['count'].to_numpy().reshape((-1,64))
     yp = mod.predict(testX)
-
     return yp
 
 from odps.models import Schema, Column, Partition
@@ -231,15 +237,18 @@ def writeTable(df,dayStr):
     t = o.get_table('topwar_iosglobal_total1p7')
     t.delete_partition('install_date=%s'%(dayStr), if_exists=True)
     with t.open_writer(partition='install_date=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-        # batch = pa.RecordBatch.from_pandas(df)
-        # writer.write(batch)
-        print(df)
         writer.write(df)
 
 
 createTable()
-py = predict(dayStr)[0][0]
-writeTable(pd.DataFrame(data={
-    'install_date':dayStr,
-    'p7usd':py
-}),dayStr)
+yp = predict(dayStr)
+usd = yp[0][0]
+print ('pred %s usd:%.2f'%(dayStr,usd))
+df = pd.DataFrame(
+    data={
+        'install_date':[dayStr],
+        'p7usd':[usd]
+    }
+)
+print (df)
+writeTable(df,dayStr)
