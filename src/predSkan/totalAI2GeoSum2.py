@@ -1,4 +1,6 @@
 # 尝试进行整体预测
+# 按地区进行汇总
+# 按时间进行汇总，不再预测1天的用户7日付费，而是预测N天，这样来达到一定的稳定性
 import pandas as pd
 
 import sys
@@ -10,15 +12,11 @@ from src.googleSheet import GSheet
 groupList = [[0],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10],[11],[12],[13],[14],[15],[16],[17],[18],[19],[20],[21],[22],[23],[24],[25],[26],[27],[28],[29],[30],[31],[32],[33],[34],[35],[36],[37],[38],[39],[40],[41],[42],[43],[44],[45],[46],[47],[48],[49],[50],[51],[52],[53],[54],[55],[56],[57],[58],[59],[60],[61],[62],[63]]
 geoList = [
     {'name':'US','codeList':['US']},
-    {'name':'CA','codeList':['CA']},
-    {'name':'AU','codeList':['AU']},
-    {'name':'GB','codeList':['GB','UK']},
-    {'name':'NZ','codeList':['NZ']},
-    {'name':'DE','codeList':['DE']},
-    {'name':'FR','codeList':['FR']},
+    {'name':'T1','codeList':['CA','AU','GB','UK','NZ','DE','FR']},
     {'name':'KR','codeList':['KR']},
     {'name':'GCC','codeList':['AE','BH','KW','OM','QA','ZA','SA']}
 ]
+nList = [3,7,10,14,28]
 import datetime
 # 各种命名都用这个后缀，防止重名
 filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H')
@@ -67,6 +65,13 @@ def dataStep4(dataDf3):
     for install_date in install_date_list:
         print(install_date)
         df = dataDf3.loc[(dataDf3.install_date == install_date)]
+        dataNeedAppend = {
+            'install_date':[],
+            'count':[],
+            'sumr7usd':[],
+            'group':[],
+            'geo':[]
+        }
         for i in range(len(groupList)):
             for geo in geoList:
                 name = geo['name']
@@ -74,15 +79,57 @@ def dataStep4(dataDf3):
                 if df.loc[(df.group == i) & (df.geo == name),'sumr7usd'].sum() == 0 \
                     and df.loc[(df.group == i) & (df.geo == name),'count'].sum() == 0:
 
-                    dataDf3 = dataDf3.append(pd.DataFrame(data={
-                        'install_date':[install_date],
-                        'count':[0],
-                        'sumr7usd':[0],
-                        'group':[i],
-                        'geo':name
-                    }),ignore_index=True)
-                # print('补充：',install_date,i)
+                    dataNeedAppend['install_date'].append(install_date)
+                    dataNeedAppend['count'].append(0)
+                    dataNeedAppend['sumr7usd'].append(0)
+                    dataNeedAppend['group'].append(i)
+                    dataNeedAppend['geo'].append(name)
+
+        dataDf3 = dataDf3.append(pd.DataFrame(data=dataNeedAppend))
     return dataDf3
+
+# 进行时间汇总，即按照给定日期，把给定日期的前n日所有记录做汇总
+# 顺序建议在第3步之后，第4步之前
+# 其实挡在第4步之后也可以，可能就是慢一点
+def dataStep3_5(dataDf3,n=3):
+    dataDf3_5 = pd.DataFrame(data={
+        'install_date':[],
+        'geo':[],
+        'group':[],
+        'count':[],
+        'sumr7usd':[],
+    })
+    install_date_list = dataDf3['install_date'].unique()
+    for install_date in install_date_list:
+        print('n天数据汇总：',install_date)
+        day = datetime.datetime.strptime(install_date,'%Y-%m-%d')
+        dayBeforeNStr = (day - datetime.timedelta(days=n)).strftime('%Y-%m-%d')
+
+        df = dataDf3.loc[(dataDf3.install_date >= dayBeforeNStr) & (dataDf3.install_date < install_date)]
+        dataNeedAppend = {
+            'install_date':[],
+            'count':[],
+            'sumr7usd':[],
+            'group':[],
+            'geo':[]
+        }
+        for i in range(len(groupList)):
+            for geo in geoList:
+                name = geo['name']
+                # 这里要为每一个geo做补充
+
+                count = df.loc[(df.group == i) & (df.geo == name),'count'].sum()
+                sumr7usd = df.loc[(df.group == i) & (df.geo == name),'sumr7usd'].sum()
+
+                dataNeedAppend['install_date'].append(install_date)
+                dataNeedAppend['count'].append(count)
+                dataNeedAppend['sumr7usd'].append(sumr7usd)
+                dataNeedAppend['group'].append(i)
+                dataNeedAppend['geo'].append(name)
+        
+        dataDf3_5 = dataDf3_5.append(pd.DataFrame(data=dataNeedAppend))
+    return dataDf3_5
+
 
 import tensorflow as tf
 from tensorflow import keras
@@ -230,18 +277,18 @@ def createModFunc6():
     mod.compile(optimizer='rmsprop',loss='mse',metrics=['mape'])
     return mod
 createModList = [
-    {
-        'name':'mod1',
-        'createModFunc':createModFunc1
-    },
-    {
-        'name':'mod2',
-        'createModFunc':createModFunc2
-    },
     # {
-    #     'name':'mod3',
-    #     'createModFunc':createModFunc3
+    #     'name':'mod1',
+    #     'createModFunc':createModFunc1
     # },
+    # {
+    #     'name':'mod2',
+    #     'createModFunc':createModFunc2
+    # },
+    {
+        'name':'mod3',
+        'createModFunc':createModFunc3
+    },
     # {
     #     'name':'mod4',
     #     'createModFunc':createModFunc4
@@ -264,7 +311,7 @@ createModList = [
     # },
 ]
 
-epochMax = 30000
+epochMax = 3000
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -277,7 +324,7 @@ class LossAndErrorPrintingCallback(keras.callbacks.Callback):
             print(lossAndErrorPrintingCallbackSuffixStr,str)
 
 from sklearn.preprocessing import StandardScaler
-def train(dataDf3,mod,modName,stand = False):
+def train(dataDf3,mod,modName,stand = False,n = 3):
     earlyStoppingLoss = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)
     earlyStoppingValLoss = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
 
@@ -286,7 +333,7 @@ def train(dataDf3,mod,modName,stand = False):
         name = geo['name']
         if name != 'US':
             continue
-        checkpoint_filepath = '/src/src/predSkan/mod/geo/mod%s_%s_%s{epoch:05d}-{val_loss:.2f}.h5'%(name,modName,filenameSuffix)
+        checkpoint_filepath = '/src/src/predSkan/mod/geo/modSum%d_%s_%s_%s{epoch:05d}-{val_loss:.2f}.h5'%(n,name,modName,filenameSuffix)
     
         model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_filepath,
@@ -299,7 +346,7 @@ def train(dataDf3,mod,modName,stand = False):
         lossAndErrorPrintingCallbackSuffixStr = geo['name'] + modName
 
         trainDf = dataDf3.loc[
-            (dataDf3.install_date < '2022-09-01') & (dataDf3.geo == name)
+            (dataDf3.install_date >= '2022-08-01') & (dataDf3.install_date < '2022-09-01') & (dataDf3.geo == name)
         ].sort_values(by=['install_date','group'])
         trainDf = trainDf.groupby(['install_date','group']).agg('sum')
         trainX = trainDf['count'].to_numpy().reshape((-1,64))
@@ -328,7 +375,7 @@ def train(dataDf3,mod,modName,stand = False):
             )
 
         historyDf = pd.DataFrame(data=history.history)
-        historyDf.to_csv(getFilename('historyT2_%s%s'%(modName,filenameSuffix)))
+        historyDf.to_csv(getFilename('historyGeoSum%d_%s%s'%(n,modName,filenameSuffix)))
         # modFileName = '/src/src/predSkan/mod/mTotalT2_%s%s.h5'%(modName,filenameSuffix)
         # mod.save(modFileName)
         # print('save %s,val_loss:%f'%(modFileName,history.history['val_loss'][-1]))
@@ -341,29 +388,21 @@ def train(dataDf3,mod,modName,stand = False):
         #         f.write('%s %f -\n'%(modFileName,history.history['loss'][-1]))
 
 if __name__ == '__main__':
-    # if __debug__:
-    #     print('debug 模式，并未真的sql')
-    # else:
-    #     dataStep0('20220501','20220930')
-    #     df = dataStep1('20220501','20220930')
-    #     df2 = dataStep2(df)
-    #     df3 = dataStep3(df2)
-    #     df4 = dataStep4(df3)
-    #     df4.to_csv(getFilename('totalGeoData4_20220501_20220930'))
-    # df4 = pd.read_csv(getFilename('totalGeoData4_20220501_20220930'))
-
-    if __debug__:
-        print('debug 模式，并未真的sql')
-    else:
-        dataStep0Max('20220501','20220930')
-        df = dataStep1Max('20220501','20220930')
-        df2 = dataStep2(df)
-        df3 = dataStep3(df2)
-        df4 = dataStep4(df3)
-        df4.to_csv(getFilename('totalGeoMaxData4_20220501_20220930'))
-    df4 = pd.read_csv(getFilename('totalGeoMaxData4_20220501_20220930'))
-
-    for m in createModList:
-        mod = createMod(m['createModFunc'])
-        train(df4,mod,m['name'],stand = False)
+    for n in nList:
+        if __debug__:
+            print('debug 模式，并未真的sql')
+        else:
+            # dataStep0('20220501','20220930')
+            # df = dataStep1('20220501','20220930')
+            # df2 = dataStep2(df)
+            # df3 = dataStep3(df2)
+            # df4 = dataStep4(df3)
+            # df4.to_csv(getFilename('totalGeoDataSum_20220501_20220930'))
+            df4 = pd.read_csv(getFilename('totalGeoDataSum_20220501_20220930'))
+            df5 = dataStep3_5(df4,n=n)
+            df5.to_csv(getFilename('totalGeoDataSum%d_20220501_20220930'%(n)))
+        df5 = pd.read_csv(getFilename('totalGeoDataSum%d_20220501_20220930'%(n)))
+        for m in createModList:
+            mod = createMod(m['createModFunc'])
+            train(df5,mod,m['name'],stand = False,n = n)
 
