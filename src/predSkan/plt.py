@@ -175,6 +175,41 @@ def us():
     us1p7NpStd = np.std(us1p7Np)
     print('us 标准差：',us1p7NpStd)
     
+from src.predSkan.totalAI2 import dataStep1
+# 均线
+def MA():
+    df = dataStep1('20220501','20220930')
+    sumByDayDf = df.groupby('install_date').agg(sum=('sumr7usd','sum')).sort_values(by=['install_date']).reset_index()
+
+
+    days = [3,7,14]
+
+    for day in days:
+        plt.title("US/Global revenue in 1d") 
+        plt.xlabel("date") 
+        plt.ylabel("r7usd") 
+        
+        sumByDayDf['sum'].plot(label='true')
+        sumByDayDf['sum'].rolling(window=day).mean().plot(label='MA%d'%day)
+
+        plt.legend(loc='best')
+        plt.savefig('/src/data/ma%d.png'%day)
+        print('save to /src/data/ma%d.png'%day)
+        plt.clf()
+
+    # ema
+    for day in days:
+        plt.title("US/Global revenue in 1d") 
+        plt.xlabel("date") 
+        plt.ylabel("r7usd") 
+        
+        sumByDayDf['sum'].plot(label='true')
+        sumByDayDf['sum'].ewm(span=day).mean().plot(label='EMA%d'%day)
+        plt.legend(loc='best')
+        plt.savefig('/src/data/ema%d.png'%day)
+        print('save to /src/data/ema%d.png'%day)
+        plt.clf()
+    
 
 if __name__ == '__main__':
     # totalCvR7()
@@ -182,4 +217,5 @@ if __name__ == '__main__':
     # totalCvR7Less50()
     # totalCvR7F1()
     # geoAbout()
-    us()
+    # us()
+    MA()

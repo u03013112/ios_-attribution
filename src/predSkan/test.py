@@ -17,94 +17,94 @@ def mapeFunc(y_true, y_pred):
     return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
     
 # 然后对整体做测试
-def test(dataDf2,modList):
-    sinceTimeStr = '20220901'
-    unitlTimeStr = '20220930'
-    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
-    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+# def test(dataDf2,modList):
+#     sinceTimeStr = '20220901'
+#     unitlTimeStr = '20220930'
+#     sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
+#     unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
 
-    # 为了画图用，将每一个group单独统计出来,二维数组，第一维度是0~63，第二维度是每天一个样本
-    count_list = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-    y_true = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-    y_pred = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+#     # 为了画图用，将每一个group单独统计出来,二维数组，第一维度是0~63，第二维度是每天一个样本
+#     count_list = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+#     y_true = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+#     y_pred = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
     
-    for group in range(len(groupList)):
-        mod = modList[group]
+#     for group in range(len(groupList)):
+#         mod = modList[group]
         
-        for d in range((unitlTime - sinceTime).days + 1):
-            day = sinceTime + datetime.timedelta(days=d)
-            dayStr = day.strftime('%Y-%m-%d')
+#         for d in range((unitlTime - sinceTime).days + 1):
+#             day = sinceTime + datetime.timedelta(days=d)
+#             dayStr = day.strftime('%Y-%m-%d')
 
-            df = dataDf2.loc[(dataDf2.install_date == dayStr) & (dataDf2.group == group)]
-            # count 就是预测的input
-            count = df['count'].sum()
-            count_list[group].append(count)
-            if count == 0:
-                # 没有这种，就不预测
-                y_true[group].append(0.01)
-                y_pred[group].append(0.01)
-                continue
+#             df = dataDf2.loc[(dataDf2.install_date == dayStr) & (dataDf2.group == group)]
+#             # count 就是预测的input
+#             count = df['count'].sum()
+#             count_list[group].append(count)
+#             if count == 0:
+#                 # 没有这种，就不预测
+#                 y_true[group].append(0.01)
+#                 y_pred[group].append(0.01)
+#                 continue
             
-            yt = df['sumr7usd'].sum()
-            if yt == 0:
-                # 真实付费金额为0
-                yt = 0.01
-            x = np.array([count])
-            yp = mod.predict(x).reshape(-1).sum()
+#             yt = df['sumr7usd'].sum()
+#             if yt == 0:
+#                 # 真实付费金额为0
+#                 yt = 0.01
+#             x = np.array([count])
+#             yp = mod.predict(x).reshape(-1).sum()
 
-            y_true[group].append(yt)
-            y_pred[group].append(yp)
+#             y_true[group].append(yt)
+#             y_pred[group].append(yp)
 
-    # print(y_true)
-    # print(y_pred)
+#     # print(y_true)
+#     # print(y_pred)
     
 
-    y_true_np = np.array(y_true)
-    y_pred_np = np.array(y_pred)
+#     y_true_np = np.array(y_true)
+#     y_pred_np = np.array(y_pred)
 
-    # 按cv计算
-    # for cv in range(y_true_np.shape[0]):
-    #     yt = y_true_np[cv]
-    #     yp = y_pred_np[cv]
-    #     print('cv = %d,mape=%.2f%%'%(cv,mapeFunc(yt,yp)))
-    # 按天分开计算
-    # for day in range(y_true_np.shape[1]):
-    #     yt = y_true_np[:,day]
-    #     yp = y_pred_np[:,day]
-    #     print('day = %d,mape=%.2f%%'%(day,mapeFunc(yt,yp)))
+#     # 按cv计算
+#     # for cv in range(y_true_np.shape[0]):
+#     #     yt = y_true_np[cv]
+#     #     yp = y_pred_np[cv]
+#     #     print('cv = %d,mape=%.2f%%'%(cv,mapeFunc(yt,yp)))
+#     # 按天分开计算
+#     # for day in range(y_true_np.shape[1]):
+#     #     yt = y_true_np[:,day]
+#     #     yp = y_pred_np[:,day]
+#     #     print('day = %d,mape=%.2f%%'%(day,mapeFunc(yt,yp)))
 
 
-    yt = np.sum(y_true_np,axis=1)
-    yp = np.sum(y_pred_np,axis=1)
-    print('with cv mape=%.2f%%'%(mapeFunc(yt,yp)))
-    # print(yt)
-    # print(yp)
+#     yt = np.sum(y_true_np,axis=1)
+#     yp = np.sum(y_pred_np,axis=1)
+#     print('with cv mape=%.2f%%'%(mapeFunc(yt,yp)))
+#     # print(yt)
+#     # print(yp)
 
-    yd = np.abs(yp-yt)
-    sum = np.sum(yd)
-    ydp = yd/sum
-    for i in range(len(ydp)):
-        print('%d,%.2f'%(i,ydp[i]))
+#     yd = np.abs(yp-yt)
+#     sum = np.sum(yd)
+#     ydp = yd/sum
+#     for i in range(len(ydp)):
+#         print('%d,%.2f'%(i,ydp[i]))
 
-    # yt = np.sum(y_true_np,axis=0)
-    # yp = np.sum(y_pred_np,axis=0)
-    # print('with day mape=%.2f%%'%(mapeFunc(yt,yp)))
+#     # yt = np.sum(y_true_np,axis=0)
+#     # yp = np.sum(y_pred_np,axis=0)
+#     # print('with day mape=%.2f%%'%(mapeFunc(yt,yp)))
 
-    # print(np.sum(y_true_np.reshape(-1)))
-    # print(np.sum(y_pred_np.reshape(-1)))
+#     # print(np.sum(y_true_np.reshape(-1)))
+#     # print(np.sum(y_pred_np.reshape(-1)))
 
-    for i in range(len(groupList)):
-        count = count_list[i]
-        yTrue = y_true[i]
-        yPred = y_pred[i]
-        plt.title("cv = %d"%i) 
-        plt.xlabel("count") 
-        plt.ylabel("true blue,pred red") 
-        plt.plot(count,yTrue,'bo')
-        plt.plot(count,yPred,'ro')
-        plt.savefig('/src/data/testCv%d.png'%(i))
-        print('save pic /src/data/testCv%d.png'%(i))
-        plt.clf()
+#     for i in range(len(groupList)):
+#         count = count_list[i]
+#         yTrue = y_true[i]
+#         yPred = y_pred[i]
+#         plt.title("cv = %d"%i) 
+#         plt.xlabel("count") 
+#         plt.ylabel("true blue,pred red") 
+#         plt.plot(count,yTrue,'bo')
+#         plt.plot(count,yPred,'ro')
+#         plt.savefig('/src/data/testCv%d.png'%(i))
+#         print('save pic /src/data/testCv%d.png'%(i))
+#         plt.clf()
 
 from sklearn import metrics
 def test2():
@@ -148,6 +148,80 @@ def test2():
     plt.plot(x,np.divide(yp.reshape(-1),cost),'r-')
     plt.savefig('/src/data/testT2ROI.png')
     print('save pic /src/data/testT2ROI.png')
+
+from src.predSkan.totalAI2NDay import dayList,dataStep0 as nds0,dataStep1 as nds1
+
+def testNDay():
+    # mods = {
+    #     '1':'mod1_mod3__20221109_0209981-23.35.h5',
+    #     '2':'mod2_mod3__20221109_0201005-23.35.h5',
+    #     '3':'mod3_mod3__20221109_0200938-23.35.h5',
+    #     '4':'mod4_mod3__20221109_0200915-23.35.h5',
+    #     '5':'mod5_mod3__20221109_0200498-23.37.h5',
+    #     '6':'mod6_mod3__20221109_0205724-23.37.h5',
+    # }
+    mods = {
+        '1':'mod1_mod3__20221109_0209981-23.35.h5',
+        '2':'mod1_mod3__20221109_0209981-23.35.h5',
+        '3':'mod1_mod3__20221109_0209981-23.35.h5',
+        '4':'mod1_mod3__20221109_0209981-23.35.h5',
+        '5':'mod1_mod3__20221109_0209981-23.35.h5',
+        '6':'mod1_mod3__20221109_0209981-23.35.h5',
+    }
+
+    for day in dayList:
+        print ('day:',day)
+        if __debug__:
+            print('debug 模式，并未真的sql')
+        else:
+            nds0('20220901','20221020',n=day)
+        df = nds1('20220901','20221020',n=day)
+        df2 = dataStep2(df)
+        df3 = dataStep3(df2)
+
+        modName = '/src/src/predSkan/mod/nday/' + mods[str(day)]
+    
+
+        mod = tf.keras.models.load_model(modName)
+
+        testDf = df3.loc[(df3.install_date >= '2022-09-01')].sort_values(by=['install_date','group'])
+        testX = testDf['count'].to_numpy().reshape((-1,64))
+        testSumByDay = testDf.groupby('install_date').agg(sum=('sumr7usd','sum'))
+        testY = testSumByDay.to_numpy()
+
+        yp = mod.predict(testX)
+        print('mape:%.2f%%'%(mapeFunc(testY,yp)))
+        r2 = metrics.r2_score(testY,yp)
+        print('r2:%.2f%%'%(r2))
+        # print('y_true:',testY.reshape(-1))
+        print('y_pred:',list(yp.reshape(-1)))
+
+        x = np.arange(len(yp))
+        plt.title("total ai %dDay"%(day)) 
+        plt.xlabel("date 2022-09-01~2022-10-20 ") 
+        plt.ylabel("true blue,pred red") 
+        plt.plot(x,testY.reshape(-1),'b-')
+        plt.plot(x,yp.reshape(-1),'r-')
+        plt.savefig('/src/data/testNDay%d.png'%day)
+        print('save pic /src/data/testNDay%d.png'%day)
+        plt.clf()
+
+
+def test():
+    modName = '/src/src/predSkan/mod/nday/mod1_mod3__20221109_0209981-23.35.h5'
+
+    mod = tf.keras.models.load_model(modName)
+
+    testX = np.zeros(64*64).reshape(64,64)
+
+    for i in range(64):
+        testX[i][i] = 10000
+
+    print(testX)
+    yp = mod.predict(testX)
+    print(list(yp.reshape(-1)))
+
+    
 if __name__ == '__main__':
     # modNameList = [
     #     '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
@@ -294,4 +368,6 @@ if __name__ == '__main__':
     # df2 = dataStep2(df)
     # test(df2,modList)
 
-    test2()
+    # test2()
+    # testNDay()
+    test()
