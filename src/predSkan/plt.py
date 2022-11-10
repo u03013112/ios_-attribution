@@ -1,5 +1,7 @@
 # 画一些图
 import matplotlib.pyplot as plt
+# 画图的x坐标好看一点的做法
+# https://stackoverflow.com/questions/31293974/plot-too-many-ticks-on-x-axe
 import datetime
 import pandas as pd
 import sys
@@ -209,7 +211,62 @@ def MA():
         plt.savefig('/src/data/ema%d.png'%day)
         print('save to /src/data/ema%d.png'%day)
         plt.clf()
+
+def ROI():
+    if __debug__:
+        print('debug 模式，并未真的sql')
+    else:
+        costDf = pd.read_csv(getFilename('totalCost20220501_20220930'))
+        revenueDf = dataStep1('20220501','20220930')
+        revenueSumByDayDf = revenueDf.groupby('install_date').agg({'sumr7usd':'sum'})
+        df = costDf.merge(revenueSumByDayDf,how='left',on='install_date').sort_values(by=['install_date'])
+        df.to_csv(getFilename('totalROI20220501_20220930'))
+        print(df)
+    df = pd.read_csv(getFilename('totalROI20220501_20220930'))
+    df.insert(df.shape[1],'roi',0)
+    df['roi'] = df['sumr7usd']/df['cost']
+    # print(df)
+    days = [3,7,14]
+    for day in days:
+        sumr7usdDf = df['sumr7usd'].rolling(window=day).mean()
+        costDf = df['cost'].rolling(window=day).mean()
+        roiDf = pd.DataFrame(data = {'roi':(sumr7usdDf/costDf)})
+
+        plt.title("ROI MA") 
+        plt.xlabel("date") 
+        plt.ylabel("ROI") 
+        df['roi'].plot(label='true')
+        roiDf['roi'].plot(label='ma%d'%day)
+        
+        plt.legend(loc='best')
+        plt.savefig('/src/data/roiMa%d.png'%day)
+        print('save to /src/data/roiMa%d.png'%day)
+        plt.clf()
+
+    # ema
+    for day in days:
+        # sumr7usdDf = df['sumr7usd'].rolling(window=day).mean()
+        # costDf = df['cost'].rolling(window=day).mean()
+        # roiDf = pd.DataFrame(data = {'roi':(sumr7usdDf/costDf)})
+        sumr7usdDf = df['sumr7usd'].ewm(span=day).mean()
+        costDf = df['cost'].ewm(span=day).mean()
+        roiDf = pd.DataFrame(data = {'roi':(sumr7usdDf/costDf)})
+        
+        plt.title("ROI EMA") 
+        plt.xlabel("date") 
+        plt.ylabel("ROI") 
+        df['roi'].plot(label='true')
+        roiDf['roi'].plot(label='ema%d'%day)
+        
+        plt.legend(loc='best')
+        plt.savefig('/src/data/roiEMa%d.png'%day)
+        print('save to /src/data/roiEMa%d.png'%day)
+        plt.clf()
+
+
     
+
+
 
 if __name__ == '__main__':
     # totalCvR7()
@@ -218,4 +275,5 @@ if __name__ == '__main__':
     # totalCvR7F1()
     # geoAbout()
     # us()
-    MA()
+    # MA()
+    ROI()

@@ -587,8 +587,26 @@ def getTotalDataGroupByGeoMax(sinceTimeStr,unitlTimeStr,max=500.0):
     pd_df = execSql(sql)
     return pd_df
 
-
+def getCost(sinceTimeStr,unitlTimeStr):
+    sql='''
+        select
+            sum(cost) as cost,
+            to_char(to_date(install_day,"yyyymmdd"),"yyyy-mm-dd") as install_date
+        from
+            ods_platform_appsflyer_masters
+        where
+            day >= %s
+            and day <= %s
+            and app_id = 'id1479198816'
+        group by
+            install_date
+        ;
+    '''%(sinceTimeStr,unitlTimeStr)
+    pd_df = execSql(sql)
+    return pd_df
 if __name__ == '__main__':
-    df = pd.read_csv(getFilename('totalData%s_%s'%('20220501','20220930')))
-    df0 = df.loc[df.cv==0]
-    df0.to_csv(getFilename('total0'))
+    # df = pd.read_csv(getFilename('totalData%s_%s'%('20220501','20220930')))
+    # df0 = df.loc[df.cv==0]
+    # df0.to_csv(getFilename('total0'))
+    df = getCost('20220501','20220930')
+    df.to_csv(getFilename('totalCost20220501_20220930'))
