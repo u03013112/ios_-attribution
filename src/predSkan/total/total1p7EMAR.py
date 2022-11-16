@@ -165,7 +165,7 @@ def getTotalData(dayStr):
             install_date
         ;
     '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
-    # print(sql)
+    print(sql)
     pd_df = execSql(sql)
     return pd_df
 
@@ -201,12 +201,17 @@ def dataStep4(dataDf3):
     global afCvMapDataFrame
     dataDf3.insert(dataDf3.shape[1],'cv_usd',0)
     for i in range(64):
-        min_event_revenue = afCvMapDataFrame.iloc[i].at['min_event_revenue']
-        max_event_revenue = afCvMapDataFrame.iloc[i].at['max_event_revenue']
-        if pd.isna(max_event_revenue):
-            avg = 0
-        else:
+        try:
+            min_event_revenue = float(afCvMapDataFrame.iloc[i].at['min_event_revenue'])
+            max_event_revenue = float(afCvMapDataFrame.iloc[i].at['max_event_revenue'])
+        
             avg = (min_event_revenue + max_event_revenue)/2
+            if pd.isna(avg):
+                avg = 0
+        except:
+            avg = 0
+        
+        print(i,avg)
 
         count = dataDf3.loc[dataDf3.group==i,'count']
         dataDf3.loc[dataDf3.group == i,'cv_usd'] = count * avg
@@ -244,8 +249,10 @@ def predict(dayStr='20220901'):
     df2 = dataStep2(df)
     df3 = dataStep3(df2)
     dataDf3 = dataStep4(df3)
+
     
     day = datetime.datetime.strptime(dayStr,'%Y%m%d')
+    day_Str = day.strftime('%Y-%m-%d')
     day0 = day - datetime.timedelta(days= n+6-1)
     day1 = day - datetime.timedelta(days= 6)
     day0Str = day0.strftime('%Y-%m-%d')
@@ -256,12 +263,16 @@ def predict(dayStr='20220901'):
         (dataDf3.install_date >= day0Str) & (dataDf3.install_date <= day1Str)
     ].sort_values(by=['install_date','group'])
     trainX = trainDf[['count','cv_usd']].to_numpy().reshape((-1,64*2))
+    print('trainDf:',trainDf)
     trainSumByDay = trainDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','cv_usd':'sum'})
     cv_usd = trainSumByDay['cv_usd'].to_numpy().reshape((-1,1))
     trainX = np.append(trainX,cv_usd,axis=1)
     
     trainSumByDay = dataAddEMA(trainSumByDay,3)
     trainY = trainSumByDay['ema'].to_numpy()
+
+    print('trainX:',trainX)
+    print ('trainY:',trainY)
 
     # 训练3次，找到最好的mod
     bestMod = None
@@ -273,21 +284,22 @@ def predict(dayStr='20220901'):
             ,verbose=0
             )
         loss = history.history['loss'][-1]
+        print('loss:',loss)
         if loss < bestLoss:
             bestLoss = loss
             bestMod = mod
             
         
-        testDf = dataDf3.loc[
-            (dataDf3.install_date == dayStr)
-        ].sort_values(by=['install_date','group'])
-        testX = testDf[['count','cv_usd']].to_numpy().reshape((-1,64*2))
-        testSumByDay = testDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','cv_usd':'sum'})
-        cv_usd = testSumByDay['cv_usd'].to_numpy().reshape((-1,1))
-        testX = np.append(testX,cv_usd,axis=1)
-        
-        yPred = bestMod.predict(testX).reshape(-1)[0]
-        return yPred
+    testDf = dataDf3.loc[
+        (dataDf3.install_date == day_Str)
+    ].sort_values(by=['install_date','group'])
+    testX = testDf[['count','cv_usd']].to_numpy().reshape((-1,64*2))
+    testSumByDay = testDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','cv_usd':'sum'})
+    cv_usd = testSumByDay['cv_usd'].to_numpy().reshape((-1,1))
+    testX = np.append(testX,cv_usd,axis=1)
+    print ('testX:',testX)
+    yPred = bestMod.predict(testX).reshape(-1)[0]
+    return yPred
         
 from odps.models import Schema, Column, Partition
 def createTable():
@@ -310,7 +322,8 @@ def writeTable(df,dayStr):
 
 createTable()
 yp = predict(dayStr=dayStr)
-usd = yp[0][0]
+print(yp)
+usd = yp.reshape(-1)[0]
 print ('pred %s usd:%.2f'%(dayStr,usd))
 df = pd.DataFrame(
     data={

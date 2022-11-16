@@ -209,6 +209,6 @@ if __name__ == '__main__':
         df4.to_csv(getFilename('totalDataSum_20220501_20220930'))
     df4 = pd.read_csv(getFilename('totalDataSum_20220501_20220930'))
 
-    # retDf = train(df4)
-    # retDf.to_csv(getFilename('totalR3_20220701_20220930'))
+    retDf = train(df4)
+    retDf.to_csv(getFilename('totalR3_20220701_20220930'))
 
