@@ -9,9 +9,9 @@ import sys
 sys.path.append('/src')
 from src.tools import getFilename
 
-from src.predSkan.totalAI0 import groupList,dataStep0,dataStep1,dataStep2
+from src.predSkan.total.totalAI0 import groupList,dataStep0,dataStep1,dataStep2
 
-from src.predSkan.totalAI2 import dataStep3
+from src.predSkan.total.totalAI2 import dataStep3
 
 def mapeFunc(y_true, y_pred):
     return np.mean(np.abs((y_pred - y_true) / y_true)) * 100
@@ -221,7 +221,35 @@ def test():
     yp = mod.predict(testX)
     print(list(yp.reshape(-1)))
 
+
+def testR():
+    # totalR3_20220701_20220930
+    retDf = pd.read_csv(getFilename('totalR3_20220701_20220930'))
+    df4 = pd.read_csv(getFilename('totalDataSum_20220501_20220930'))
     
+    yTrueDf = df4.loc[(df4.install_date >= '2022-07-01') & (df4.install_date <= '2022-09-30')].sort_values(by=['install_date','group'])
+    trainSumByDay = yTrueDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
+    # print('trainSumByDay:',trainSumByDay)
+    # print('retDf:',retDf)
+    yTrue = trainSumByDay['sumr7usd'].to_numpy()
+    y1True = trainSumByDay['sumr1usd'].to_numpy()
+    yPred = retDf['pred'].to_numpy()
+    print('mape:%.2f%%'%(mapeFunc(yTrue,yPred)))
+    r2 = metrics.r2_score(yTrue,yPred)
+    print('r2:%.2f%%'%(r2))
+
+    plt.title("total ai R") 
+    plt.xlabel("date 2022-07-01~2022-09-30 ") 
+    plt.ylabel("usd") 
+    plt.plot(yTrue.reshape(-1),label='true 7d')
+    # plt.plot(y1True.reshape(-1),label='true 1d')
+    plt.plot(yPred.reshape(-1),label='pred')
+    
+    plt.legend()
+    plt.savefig('/src/data/testTotalR.png')
+    print('save pic /src/data/testTotalR.png')
+    plt.clf()
+
 if __name__ == '__main__':
     # modNameList = [
     #     '/src/src/predSkan/mod/mTotal0_mod1_20221021_15.h5',
@@ -370,4 +398,5 @@ if __name__ == '__main__':
 
     # test2()
     # testNDay()
-    test()
+    # test()
+    testR()

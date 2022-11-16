@@ -1,0 +1,214 @@
+# 尝试进行整体预测
+# 改为EMA数据来做预测
+# 测试集仍用原始数据
+# 与v2的区别在于添加新的输入，添加cv*金额后的值，添加首日支付总金额
+import pandas as pd
+import numpy as np
+import sys
+sys.path.append('/src')
+from src.predSkan.data import getTotalData
+from src.tools import getFilename
+from src.googleSheet import GSheet
+# 暂定方案是先将数据分组，比如直接分为64组
+groupList = [[0],[1],[2],[3],[4],[5],[6],[7],[8],[9],[10],[11],[12],[13],[14],[15],[16],[17],[18],[19],[20],[21],[22],[23],[24],[25],[26],[27],[28],[29],[30],[31],[32],[33],[34],[35],[36],[37],[38],[39],[40],[41],[42],[43],[44],[45],[46],[47],[48],[49],[50],[51],[52],[53],[54],[55],[56],[57],[58],[59],[60],[61],[62],[63]]
+
+import datetime
+# 各种命名都用这个后缀，防止重名
+filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H')
+
+# 从maxCompute取数据
+def dataStep0(sinceTimeStr,unitlTimeStr):
+    df = getTotalData(sinceTimeStr,unitlTimeStr)
+    df.to_csv(getFilename('totalData%s_%s'%(sinceTimeStr,unitlTimeStr)))
+# 从本地文件取数据，跑过步骤0的可以直接从这里开始，更快速
+def dataStep1(sinceTimeStr,unitlTimeStr):
+    df = pd.read_csv(getFilename('totalData%s_%s'%(sinceTimeStr,unitlTimeStr)))
+    return df
+
+# 对每组数据分别整理
+def dataStep2(dataDf1):
+    dataDf1.insert(dataDf1.shape[1],'group',0)
+    for i in range(len(groupList)):
+        l = groupList[i]
+        for cv in l:
+            dataDf1.loc[dataDf1.cv == cv,'group'] = i
+    return dataDf1
+
+# 对数据做基础处理
+def dataStep3(dataDf2):
+    # print(dataDf2.sort_values(by=['install_date','group']))
+    # 每天补充满64组数据，没有的补0
+    install_date_list = dataDf2['install_date'].unique()
+    for install_date in install_date_list:
+        df = dataDf2.loc[(dataDf2.install_date == install_date)]
+        for i in range(len(groupList)):
+            if df.loc[df.group == i,'sumr7usd'].sum() == 0 and df.loc[df.group == i,'count'].sum() == 0:
+                dataDf2 = dataDf2.append(pd.DataFrame(data={
+                    'install_date':[install_date],
+                    'count':[0],
+                    'sumr7usd':[0],
+                    'group':[i]
+                }),ignore_index=True)
+                # print('补充：',install_date,i)
+    # print(dataDf2.sort_values(by=['install_date','group']))
+    return dataDf2
+
+def dataStep4(dataDf3):
+    afCvMapDataFrame = pd.read_csv('/src/afCvMap.csv')
+    # print(afCvMapDataFrame)
+    dataDf3.insert(dataDf3.shape[1],'cv_usd',0)
+    for i in range(64):
+        min_event_revenue = afCvMapDataFrame.iloc[i].at['min_event_revenue']
+        max_event_revenue = afCvMapDataFrame.iloc[i].at['max_event_revenue']
+        if pd.isna(max_event_revenue):
+            avg = 0
+        else:
+            avg = (min_event_revenue + max_event_revenue)/2
+
+        count = dataDf3.loc[dataDf3.group==i,'count']
+        dataDf3.loc[dataDf3.group == i,'cv_usd'] = count * avg
+    
+    return dataDf3
+    
+
+
+# 尝试对数据进行EMA计算，这个要在
+def dataAddEMA(df,day=3):
+    df.insert(df.shape[1],'ema',0)
+    df['ema'] = df['sumr7usd'].ewm(span=day).mean()
+    return df
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+# 单独训练一定次数后，保存结果
+def createMod(createModFun):    
+    mod = createModFun()
+    return mod
+
+def createModFunc3():
+    mod = keras.Sequential(
+        [
+            layers.Dense(512, activation="relu", input_shape=(129,)),
+            layers.Dropout(0.3),
+            layers.Dense(512, activation="relu"),
+            layers.Dropout(0.3),
+            layers.Dense(1, activation="relu")
+        ]
+    )
+    mod.compile(optimizer='adadelta',loss='mape')
+    return mod
+
+createModList = [
+    {
+        'name':'mod3',
+        'createModFunc':createModFunc3
+    }
+]
+
+epochMax = 1000
+
+class LossAndErrorPrintingCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch > 0 and epoch%100 == 0:
+            keys = list(logs.keys())
+            str = 'epoch %d/%d:'%(epoch,epochMax)
+            for key in keys:
+                str += '[%s]:%.2f '%(key,logs[key])
+            print(str)
+
+
+def train(dataDf3):
+    # n是向前取n天的数据进行预测
+    n = 7
+    data = {
+        'install_date':[],
+        'pred':[]
+    }
+    
+    sinceTimeStr = '2022-07-01'
+    unitlTimeStr = '2022-09-30'
+    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y-%m-%d')
+    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y-%m-%d')
+    # for i in range((unitlTime - sinceTime).days + 1):
+    i = 0
+    lastI = -1
+    lossMax = 20
+    while i < (unitlTime - sinceTime).days + 1:
+        if lastI != i:
+            # 非重试初始化
+            lossMax = 20
+            lastI = i
+        day = sinceTime + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+        day0 = day - datetime.timedelta(days= n+6-1)
+        day1 = day - datetime.timedelta(days= 6)
+        day0Str = day0.strftime('%Y-%m-%d')
+        day1Str = day1.strftime('%Y-%m-%d')
+        print('针对%s的预测，训练数据取自：%s~%s'%(dayStr,day0Str,day1Str))
+        
+        trainDf = dataDf3.loc[
+            (dataDf3.install_date >= day0Str) & (dataDf3.install_date <= day1Str)
+        ].sort_values(by=['install_date','group'])
+        trainX = trainDf[['count','cv_usd']].to_numpy().reshape((-1,64*2))
+        trainSumByDay = trainDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','cv_usd':'sum'})
+        cv_usd = trainSumByDay['cv_usd'].to_numpy().reshape((-1,1))
+        trainX = np.append(trainX,cv_usd,axis=1)
+        
+        trainSumByDay = dataAddEMA(trainSumByDay,3)
+        trainY = trainSumByDay['ema'].to_numpy()
+
+        mod = createModFunc3()
+        history = mod.fit(trainX, trainY, epochs=epochMax
+            ,batch_size=128
+            ,verbose=0
+            )
+        loss = history.history['loss'][-1]
+        if loss > lossMax:
+            print('loss %.2f retry'%loss)
+            # 每次重试都将预制上升5个点
+            lossMax += 5
+            continue
+            
+        
+        testDf = dataDf3.loc[
+            (dataDf3.install_date == dayStr)
+        ].sort_values(by=['install_date','group'])
+        testX = testDf[['count','cv_usd']].to_numpy().reshape((-1,64*2))
+        testSumByDay = testDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','cv_usd':'sum'})
+        cv_usd = testSumByDay['cv_usd'].to_numpy().reshape((-1,1))
+        testX = np.append(testX,cv_usd,axis=1)
+        yTrue = testSumByDay['sumr7usd'].to_numpy().reshape(-1)[0]
+        yPred = mod.predict(testX).reshape(-1)[0]
+        print('%s loss:%.2f 预测结果：%.2f，真实结果：%.2f，mape=%.2f%%'%(dayStr,loss,yPred,yTrue,np.abs((yPred - yTrue) / yTrue)* 100))
+        if yPred < 10:
+            print('retry')
+            continue
+
+        data['install_date'].append(dayStr)
+        data['pred'].append(yPred)
+        
+        tf.keras.backend.clear_session()
+        del mod
+        
+        i += 1
+    return pd.DataFrame(data = data)
+    
+
+if __name__ == '__main__':
+    if __debug__:
+        print('debug 模式，并未真的sql')
+    else:
+        # dataStep0('20220501','20220930')
+
+        df = dataStep1('20220501','20220930')
+        df2 = dataStep2(df)
+        df3 = dataStep3(df2)
+        
+        df4 = dataStep4(df3)
+        df4.to_csv(getFilename('totalDataSum_20220501_20220930'))
+    df4 = pd.read_csv(getFilename('totalDataSum_20220501_20220930'))
+
+    # retDf = train(df4)
+    # retDf.to_csv(getFilename('totalR3_20220701_20220930'))
+

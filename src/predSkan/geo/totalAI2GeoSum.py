@@ -307,7 +307,7 @@ def train(dataDf3,mod,modName,stand = False):
         lossAndErrorPrintingCallbackSuffixStr = geo['name'] + modName
 
         trainDf = dataDf3.loc[
-            (dataDf3.install_date >= '2022-08-01') & (dataDf3.install_date < '2022-09-01') & (dataDf3.geo == name)
+            (dataDf3.install_date >= '2022-08-17') & (dataDf3.install_date < '2022-08-24') & (dataDf3.geo == name)
         ].sort_values(by=['install_date','group'])
         trainDf = trainDf.groupby(['install_date','group']).agg('sum')
         trainX = trainDf['count'].to_numpy().reshape((-1,64))
@@ -315,7 +315,7 @@ def train(dataDf3,mod,modName,stand = False):
         trainY = trainSumByDay.to_numpy()
 
         testDf = dataDf3.loc[
-            (dataDf3.install_date >= '2022-09-01')  & (dataDf3.geo == name)
+            (dataDf3.install_date >= '2022-09-01') & (dataDf3.install_date <= '2022-09-07')  & (dataDf3.geo == name)
         ].sort_values(by=['install_date','group'])
         testDf = testDf.groupby(['install_date','group']).agg('sum')
         testX = testDf['count'].to_numpy().reshape((-1,64))
