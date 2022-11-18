@@ -300,6 +300,11 @@ def train(dataDf3):
             testX = np.append(testX,cv_usd,axis=1)
             testY = testSumByDay['sumr7usd'].to_numpy()
 
+            print('trainX:',trainX)
+            print('trainY:',trainY)
+            print('testX:',testX)
+            print('testY:',testY)
+
             mod = createModFunc3()        
             mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
                 # ,callbacks=[earlyStoppingLoss,earlyStoppingValLoss]
