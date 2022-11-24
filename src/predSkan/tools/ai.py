@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 # 将反复添加Unnamed的csv清理一下
 def purgeRetCsv(retCsvFilename):
@@ -20,9 +20,22 @@ def logUpdate(retCsvFilename,logTxtFilename,titleStr):
             lines += 'mape:%.2f%%,path:%s,message:%s\n'%(df.iloc[i].at['val_loss'],df.iloc[i].at['path'],df.iloc[i].at['message'])
         f.write(lines)
 
-
+# 将DataFrameCsv转化成NumpyNpy，主要目的是帮助mean和std
+# c是列名
+def DataFrameCsvToNumpyNpy(csvFilename,c,npyFilename):
+    df = pd.read_csv(csvFilename)
+    np.save(npyFilename,df[c].to_numpy())
 
 if __name__ == '__main__':
     for geo in ['US','GCC','KR','T1']:
-        purgeRetCsv('/src/data/doc/geo/%s/ret.csv'%geo)
-        logUpdate('/src/data/doc/geo/%s/ret.csv'%geo,'/src/data/doc/geo/%s/log.txt'%geo,'%s'%geo)
+        # purgeRetCsv('/src/data/doc/geo/%s/ret.csv'%geo)
+        # logUpdate('/src/data/doc/geo/%s/ret.csv'%geo,'/src/data/doc/geo/%s/log.txt'%geo,'%s'%geo)
+        meanCsvFilename = '/src/data/%sMean20220501_20220731.csv'%geo
+        c = 'mean'
+        meanNpyFilename = '/src/data/%sMean.npy'%geo
+        DataFrameCsvToNumpyNpy(meanCsvFilename,c,meanNpyFilename)
+
+        stdCsvFilename = '/src/data/%sStd20220501_20220731.csv'%geo
+        c = 'std'
+        stdNpyFilename = '/src/data/%sStd.npy'%geo
+        DataFrameCsvToNumpyNpy(stdCsvFilename,c,stdNpyFilename)
