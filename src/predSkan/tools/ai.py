@@ -27,15 +27,25 @@ def DataFrameCsvToNumpyNpy(csvFilename,c,npyFilename):
     np.save(npyFilename,df[c].to_numpy())
 
 if __name__ == '__main__':
-    for geo in ['US','GCC','KR','T1']:
-        # purgeRetCsv('/src/data/doc/geo/%s/ret.csv'%geo)
-        # logUpdate('/src/data/doc/geo/%s/ret.csv'%geo,'/src/data/doc/geo/%s/log.txt'%geo,'%s'%geo)
-        meanCsvFilename = '/src/data/%sMean20220501_20220731.csv'%geo
-        c = 'mean'
-        meanNpyFilename = '/src/data/%sMean.npy'%geo
-        DataFrameCsvToNumpyNpy(meanCsvFilename,c,meanNpyFilename)
+    # for geo in ['US','GCC','KR','T1']:
+    #     # purgeRetCsv('/src/data/doc/geo/%s/ret.csv'%geo)
+    #     # logUpdate('/src/data/doc/geo/%s/ret.csv'%geo,'/src/data/doc/geo/%s/log.txt'%geo,'%s'%geo)
+    #     meanCsvFilename = '/src/data/%sMean20220501_20220731.csv'%geo
+    #     c = 'mean'
+    #     meanNpyFilename = '/src/data/%sMean.npy'%geo
+    #     DataFrameCsvToNumpyNpy(meanCsvFilename,c,meanNpyFilename)
 
-        stdCsvFilename = '/src/data/%sStd20220501_20220731.csv'%geo
-        c = 'std'
-        stdNpyFilename = '/src/data/%sStd.npy'%geo
-        DataFrameCsvToNumpyNpy(stdCsvFilename,c,stdNpyFilename)
+    #     stdCsvFilename = '/src/data/%sStd20220501_20220731.csv'%geo
+    #     c = 'std'
+    #     stdNpyFilename = '/src/data/%sStd.npy'%geo
+    #     DataFrameCsvToNumpyNpy(stdCsvFilename,c,stdNpyFilename)
+
+    meanCsvFilename = '/src/data/totalMean20220501_20220731.csv'
+    c = 'mean'
+    meanNpyFilename = '/src/data/totalMean.npy'
+    DataFrameCsvToNumpyNpy(meanCsvFilename,c,meanNpyFilename)
+
+    stdCsvFilename = '/src/data/totalStd20220501_20220731.csv'
+    c = 'std'
+    stdNpyFilename = '/src/data/totalStd.npy'
+    DataFrameCsvToNumpyNpy(stdCsvFilename,c,stdNpyFilename)
