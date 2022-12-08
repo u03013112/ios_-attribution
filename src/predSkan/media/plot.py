@@ -35,6 +35,7 @@ mediaList = [
     {'name':'apple','codeList':['Apple Search Ads']},
     {'name':'facebook','codeList':['Social_facebook','restricted']},
     {'name':'snapchat','codeList':['snapchat_int']},
+    {'name':'unknown','codeList':[]}
 ]
 
 import tensorflow as tf
@@ -106,7 +107,99 @@ def emaTest():
     print('save pic /src/data/ema.png')
     plt.clf()
 
+
+def media():
+    df = pd.read_csv(getFilename('mediaIdfa_20220501_20220930'))
+    maxDf = pd.read_csv(getFilename('mediaIdfaMax200_20220501_20220930'))
+    for media in mediaList:
+        name = media['name']
+        mediaDf = df.loc[df.media_group == name].sort_values(by=['install_date','cv'])
+        trainSumByDay = mediaDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
+        mediaMaxDf = maxDf.loc[maxDf.media_group == name].sort_values(by=['install_date','cv'])
+        trainSumByDayMax = mediaMaxDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
+        plt.title("media %s r1 r7"%name)
+        trainSumByDay['sumr7usd'].plot(label='r7')
+        trainSumByDay['sumr1usd'].plot(label='r1')
+        trainSumByDayMax['sumr7usd'].plot(label='max200r7')
+        trainSumByDayMax['sumr1usd'].plot(label='max200r1')
+        plt.xticks(rotation=45)
+        plt.legend(loc='best')
+        plt.savefig('/src/data/mediaMax_%s.png'%name)
+        print('save to /src/data/mediaMax_%s.png'%name)
+        plt.clf()
+
+
+def mediaN():
+    dfList = []
+    for n in range(1,7):
+        df = pd.read_csv(getFilename('mediaIdfaN%d_20220501_20220930'%n))
+        df = df.loc[(df.install_date >= '2022-08-01') & (df.install_date <'2022-09-01')]
+        dfList.append(df)
+    
+    for media in mediaList:
+        name = media['name']
+        for n in range(len(dfList)):
+            df = dfList[n]
+            mediaDf = df.loc[df.media_group == name].sort_values(by=['install_date','cv'])
+            trainSumByDay = mediaDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
+        
+        
+            plt.title("media %s N"%name)
+            trainSumByDay['sumr1usd'].plot(label='r%d'%(n+1))
+
+        trainSumByDay['sumr7usd'].plot(label='r7')
+        plt.xticks(rotation=45)
+        plt.legend(loc='best')
+        plt.savefig('/src/data/mediaN_%s.png'%name)
+        print('save to /src/data/mediaN_%s.png'%name)
+        plt.clf()
+
+
+def mediaCount():
+    # 只统计人数，不画图
+    df = pd.read_csv(getFilename('mediaIdfa_20220501_20220930'))
+    
+    for media in mediaList:
+        name = media['name']
+        mediaDf = df.loc[df.media_group == name].sort_values(by=['install_date','cv'])
+        trainSumByDay = mediaDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','count':'sum'})
+        
+        trainSumByDay['count'].plot(label=name)
+    plt.title("media user count")
+    plt.xticks(rotation=45)
+    plt.legend(loc='best')
+    plt.savefig('/src/data/media_count.png')
+    print('save to /src/data/media_count.png')
+    plt.clf()
+
+    # df = df.groupby(['media_group','install_date']).agg({'sumr1usd':'sum','sumr7usd':'sum','count':'sum'}).sort_values(by=['media_group','install_date'])
+    # df.to_csv('/src/data/media_count.csv')
+
+
+# Android
+def mediaCountA():
+    df = pd.read_csv(getFilename('mediaIdfaA_20220501_20220930'))
+    
+    for media in mediaList:
+        name = media['name']
+        mediaDf = df.loc[df.media_group == name].sort_values(by=['install_date','cv'])
+        trainSumByDay = mediaDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum','count':'sum'})
+        
+        trainSumByDay['count'].plot(label=name)
+    plt.title("media user count")
+    plt.xticks(rotation=45)
+    plt.legend(loc='best')
+    plt.savefig('/src/data/mediaA_count.png')
+    print('save to /src/data/mediaA_count.png')
+    plt.clf()
+
+    df = df.groupby(['media_group','install_date']).agg({'sumr1usd':'sum','sumr7usd':'sum','count':'sum'}).sort_values(by=['media_group','install_date'])
+    df.to_csv('/src/data/mediaA_count.csv')
+
 if __name__ == '__main__':
     # mediaPred()
-    emaTest()
+    # emaTest()
+    # mediaCountA()
+    # mediaCount()
+    media()
 

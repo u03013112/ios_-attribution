@@ -1,0 +1,91 @@
+<mxfile host="65bd71144e">
+    <diagram id="Rc8BxznCzx9MTqs-0c9n" name="第 1 页">
+        <mxGraphModel dx="911" dy="325" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="4" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="针对指定媒体的&lt;br&gt;预测" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="分开成该媒体&lt;br&gt;与&lt;br&gt;其他媒体" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="5" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="5" target="15">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="用已有idfa进行训练&lt;br&gt;出mod和mod2" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="7" target="9">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="验证方式为两个mod一起预测然后进行sum" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="80" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="9" target="11">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="28" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="9" target="27">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="与大盘进行比对" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="11" target="13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="算出整体mape" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="是否说明问题？" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="480" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="15" target="17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" value="目前针对媒体的训练效果不好" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="280" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="17" target="19">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="原因是有些媒体数据太少" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="480" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="19" target="21">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="将数据较少的排除掉？" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="680" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="21" target="23">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="还是算权重" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="680" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="23" target="25">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="如果算权重&lt;br&gt;最终的目标就不是&lt;br&gt;mape" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="880" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="带权重的mape？" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="1080" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="自然量的处理" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="480" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
