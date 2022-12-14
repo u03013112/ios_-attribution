@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import datetime
 import pandas as pd
+import numpy as np
 import sys
 sys.path.append('/src')
 
@@ -196,10 +197,74 @@ def mediaCountA():
     df = df.groupby(['media_group','install_date']).agg({'sumr1usd':'sum','sumr7usd':'sum','count':'sum'}).sort_values(by=['media_group','install_date'])
     df.to_csv('/src/data/mediaA_count.csv')
 
+# 为了快速排查，暂时现针对这几个媒体
+mediaList2 = [
+    {'name':'google','codeList':['googleadwords_int']},
+    {'name':'bytedance','codeList':['bytedanceglobal_int']},
+    {'name':'facebook','codeList':['Social_facebook','restricted']},
+]
+# 归一化对输入的影响
+def mediaStd():
+    # 归一化对train和test的影响
+    # 归一化之后的input分布
+    idfaDf = pd.read_csv(getFilename('mediaIdfa_20220501_20220930'))
+    dayList = []
+    day0 = datetime.datetime.strptime('20220501','%Y%m%d')
+    for i in range(153):
+        day = day0 + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+        dayList.append(dayStr)
+    for media in mediaList2:
+        name = media['name']
+        print(name)
+        # meanDf = pd.read_csv('/src/data/%sMean20220501_20220731.csv'%name)
+        # stdDf = pd.read_csv('/src/data/%sStd20220501_20220731.csv'%name)
+        # mean = meanDf['mean'].to_numpy()
+        # std = stdDf['std'].to_numpy()
+        df = idfaDf.loc[idfaDf.media_group == name].sort_values(by=['install_date','cv'])
+        df = df.groupby(['install_date','cv']).agg({'count':'sum'})
+        xNpArray = df['count'].to_numpy().reshape((-1,64))
+        trainXSum = xNpArray.sum(axis=1).reshape(-1,1)
+        xNpArray = xNpArray/trainXSum
+        min = xNpArray.T.min(axis=1)
+        max = xNpArray.T.max(axis=1)
+
+        data = {
+            'install_date':dayList
+        }
+        for i in range(64):
+            c = 'x%d'%i
+            data[c]=list(xNpArray.T[i])
+            c2 = 'xS%d'%i
+            xS = np.nan_to_num((xNpArray-min)/(max-min))
+            data[c2]=list(xS.T[i])
+        xDf = pd.DataFrame(data=data)
+        xDf.to_csv('/src/data/media%s.csv'%(name))
+
+        trainXDf = xDf.loc[(xDf.install_date >= '2022-05-01') & (xDf.install_date <= '2022-07-30')]
+        testXDf = xDf.loc[(xDf.install_date >= '2022-08-01') & (xDf.install_date <= '2022-09-01')]
+        # 每个media画64张图
+        
+        for i in range(64):
+            c = 'xS%d'%i
+            plt.title("media %s %s"%(name,c))
+            trainX = list(trainXDf[c].to_numpy())
+            trainX.sort()
+            plt.plot(trainX,label='train')
+            testX = list(testXDf[c].to_numpy())
+            testX.sort()
+            plt.plot(testX,label='test')
+            plt.xticks(rotation=45)
+            plt.legend(loc='best')
+            plt.savefig('/src/data/media%s%s.png'%(name,c))
+            print('save to /src/data/media%s%s.png'%(name,c))
+            plt.clf()
+
 if __name__ == '__main__':
     # mediaPred()
     # emaTest()
     # mediaCountA()
     # mediaCount()
-    media()
+    # media()
+    mediaStd()
 

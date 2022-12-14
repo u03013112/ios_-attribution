@@ -10,8 +10,8 @@ def purgeRetCsv(retCsvFilename):
 # titleStr 是写在log.txt的第一行
 def logUpdate(retCsvFilename,logTxtFilename,titleStr):
     retDf = pd.read_csv(retCsvFilename)
+    retDf = retDf.fillna(value=666)
     with open(logTxtFilename, 'w') as f:
-        # 只记录前5条
         df = retDf.loc[retDf.groupby('message').val_loss.idxmin()].reset_index(drop=True)
         df = df.sort_values(by=['val_loss'])
         # print(df)
@@ -72,6 +72,7 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     yt = trainY0.reshape(-1)
     yp = (trainYP.reshape(-1) + 1)*(trainY1.reshape(-1))
     pd.DataFrame(data={
+        'yp':list(trainYP.reshape(-1)),
         'true':list(yt),
         'pred':list(yp),
         'mape':list(np.abs((yp - yt) / yt)*100)
@@ -95,6 +96,7 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     yt = testY0.reshape(-1)
     yp = (testYP.reshape(-1) + 1)*(testY1.reshape(-1))
     pd.DataFrame(data={
+        'yp':list(testYP.reshape(-1)),
         'true':list(yt),
         'pred':list(yp),
         'mape':list(np.abs((yp - yt) / yt)*100)
@@ -135,6 +137,81 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
         f.write(retStr)
 
     return testMape
+
+
+import math
+# 获得X的最大值和最小值
+# trainX 要做成numpy array,shape (-1,64)
+def getXMinAndMaxFromTrainX(trainX):
+    min = trainX.T.min(axis=1)
+    max = trainX.T.max(axis=1)    
+    return min,max
+
+# 从df里获得trainX，请在外面把df排好序
+# df要先做好过滤，比如媒体过滤，然后放进来
+# trainDf = df.sort_values(by=['install_date','cv'])
+# trainDf = df.groupby(['install_date','cv']).agg('sum')
+def getTrainX(trainDf):
+    trainX = trainDf['count'].to_numpy().reshape((-1,64))
+    trainXSum = trainX.sum(axis=1).reshape(-1,1)
+    trainX = trainX/trainXSum
+    return trainX
+
+def getTrainingDataY(trainDf):
+    trainSumByDay = trainDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
+    trainY0 = trainSumByDay['sumr7usd'].to_numpy()
+    trainY1 = trainSumByDay['sumr1usd'].to_numpy()
+    # 这里为了解决部分0数据
+    trainY0[trainY0 <= 0] = 1
+    trainY1[trainY1 <= 0] = 1
+    trainY = trainY0/trainY1 - 1
+    return trainY, trainY0, trainY1
+
+def filterByMediaName(df,mediaName,trainRate=0.6):
+    dataDf = df.loc[(df.media_group == mediaName)].sort_values(by=['install_date','cv'])
+    dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
+    dataX = getTrainX(dataDf)
+    min,max = getXMinAndMaxFromTrainX(dataX)
+    trainXSs = np.nan_to_num((dataX-min)/(max-min))
+    dataY, dataY0, dataY1 = getTrainingDataY(dataDf)
+
+    line = math.floor(len(trainXSs)*trainRate)
+    
+    trainX = dataX[:line]
+    testX = dataX[line:]
+
+    trainY = dataY[:line]
+    testY = dataY[line:]
+    trainY0 = dataY0[:line]
+    testY0 = dataY0[line:]
+    trainY1 = dataY1[:line]
+    testY1 = dataY1[line:]
+
+    return trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min, max
+
+# 用于计算other的
+def filterByMediaName2(df,mediaName,trainRate=0.6):
+    dataDf = df.loc[(df.media_group != mediaName)].sort_values(by=['install_date','cv'])
+    dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
+    dataX = getTrainX(dataDf)
+    min,max = getXMinAndMaxFromTrainX(dataX)
+    trainXSs = np.nan_to_num((dataX-min)/(max-min))
+    dataY, dataY0, dataY1 = getTrainingDataY(dataDf)
+
+    line = math.floor(len(trainXSs)*trainRate)
+    
+    trainX = dataX[:line]
+    testX = dataX[line:]
+
+    trainY = dataY[:line]
+    testY = dataY[line:]
+    trainY0 = dataY0[:line]
+    testY0 = dataY0[line:]
+    trainY1 = dataY1[:line]
+    testY1 = dataY1[line:]
+
+    return trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min, max
+
 
 if __name__ == '__main__':
     # for geo in ['US','GCC','KR','T1']:

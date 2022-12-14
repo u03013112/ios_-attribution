@@ -1,16 +1,14 @@
-# 不仅仅针对idfa进行验证
-# 而是用idfa的训练结果，放到大盘里进行验证
-
-# 存在的难点是自然量的处理，先模糊处理，直接用af数据（带自然量）-skan
+# 同第3版，主要尝试对参数归一化
+# 对大R做切平处理
 import pandas as pd
 import numpy as np
 import os
 import sys
 sys.path.append('/src')
-from src.tools import afCvMapDataFrame,cvToUSD2
+from src.tools import afCvMapDataFrame
 from src.maxCompute import execSql
 from src.tools import getFilename
-from src.predSkan.tools.ai import purgeRetCsv,logUpdate,createDoc,mapeFunc
+from src.predSkan.tools.ai import purgeRetCsv,logUpdate,createDoc
 
 import datetime
 
@@ -155,47 +153,12 @@ def getIdfaData(sinceTimeStr,unitlTimeStr):
     pd_df = execSql(sql)
     return pd_df
 
-def getSkanData(sinceTimeStr,unitlTimeStr):
-    sinceTime = datetime.datetime.strptime(sinceTimeStr,'%Y%m%d')
-    unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
-    sinceTimeStr2 = sinceTime.strftime("%Y-%m-%d")
-    unitlTimeStr2 = unitlTime.strftime("%Y-%m-%d")
-
-    # 为了获得完整的7日回收，需要往后延长7天
-    unitlTimeStr = (unitlTime+datetime.timedelta(days=7)).strftime('%Y%m%d')
-
-    sql = '''
-        select
-            skad_conversion_value as cv,
-            install_date,
-            media_source as media,
-            count(*) as count
-        from
-            ods_platform_appsflyer_skad_details
-        where
-            app_id = "id1479198816"
-            and event_name  in ('af_skad_redownload','af_skad_install')
-            and day >= % s
-            and day <= % s
-            and install_date >= "%s"
-            and install_date <= "%s"
-        group by
-            skad_conversion_value,
-            install_date,
-            media_source
-    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
-
-    print(sql)
-    pd_df = execSql(sql)
-    return pd_df
-
 # 为df添加media cv
 mediaList = [
     {'name':'google','codeList':['googleadwords_int']},
     {'name':'bytedance','codeList':['bytedanceglobal_int']},
     {'name':'facebook','codeList':['Social_facebook','restricted']},
 ]
-
 def addMediaGroup(df):
     # 所有不属于mediaList的都算是unknown，和自然量一起处理
     df.insert(df.shape[1],'media_group','unknown')
@@ -222,12 +185,9 @@ def dataFill(dataDf3):
         for i in range(64):
             for media in mediaList:
                 name = media['name']
-                # 之前为啥要看7日回收
-                # if df.loc[(df.cv == i) & (df.media_group == name),'sumr7usd'].sum() == 0 \
-                #     and df.loc[(df.cv == i) & (df.media_group == name),'count'].sum() == 0:
-                if df.loc[(df.cv == i) & (df.media_group == name),'count'].sum() == 0:
-                    # if name == 'google' and install_date == '2022-05-01':
-                    #     print('fill:',name,i)
+                if df.loc[(df.cv == i) & (df.media_group == name),'sumr7usd'].sum() == 0 \
+                    and df.loc[(df.cv == i) & (df.media_group == name),'count'].sum() == 0:
+
                     dataNeedAppend['install_date'].append(install_date)
                     dataNeedAppend['cv'].append(i)
                     dataNeedAppend['count'].append(0)
@@ -256,6 +216,22 @@ def createModFunc1():
     mod.summary()
     return mod
 
+
+def createModFunc3():
+    mod = keras.Sequential(
+        [
+            layers.Dense(512,kernel_initializer='random_normal',bias_initializer='random_normal', activation="relu", input_shape=(64,)),
+            layers.Dropout(0.3),
+            layers.Dense(512, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
+            layers.Dropout(0.3),
+            layers.Dense(1, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu")
+        ]
+    )
+    # mod.compile(optimizer='adadelta',loss='mape')
+    mod.compile(optimizer='RMSprop',loss='mape')
+    mod.summary()
+    return mod
+
 epochMax = 10000
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
@@ -269,50 +245,6 @@ class LossAndErrorPrintingCallback(keras.callbacks.Callback):
             print(lossAndErrorPrintingCallbackSuffixStr,str)
 
 def getTrainingData(df,mediaName,sinceTimeStr,unitlTimeStr):
-    trainDf = df.loc[
-        (df.install_date >= sinceTimeStr) & (df.install_date < unitlTimeStr) & (df.media_group == mediaName)
-    ].sort_values(by=['install_date','cv'])
-    trainDf = trainDf.groupby(['install_date','cv']).agg('sum')
-    trainX = trainDf['count'].to_numpy().reshape((-1,64))
-    trainSumByDay = trainDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
-    trainY0 = trainSumByDay['sumr7usd'].to_numpy()
-    trainY1 = trainSumByDay['sumr1usd'].to_numpy()
-    # 这里为了解决部分0数据
-    trainY0[trainY0 <= 0] = 1
-    trainY1[trainY1 <= 0] = 1
-    trainY = trainY0/trainY1 - 1
-
-    # 尝试标准化
-    mean = np.mean(trainX,axis=0)
-    std = np.std(trainX,axis=0)
-    std[std == 0 ] = 1
-    # print(mean)
-    # print(std)
-    trainXSs = (trainX - mean)/std
-
-    return trainXSs,mean,std, trainY, trainY0, trainY1
-
-def getTestingData(df,mediaName,sinceTimeStr,unitlTimeStr,mean,std):
-    trainDf = df.loc[
-        (df.install_date >= sinceTimeStr) & (df.install_date < unitlTimeStr) & (df.media_group == mediaName)
-    ].sort_values(by=['install_date','cv'])
-    trainDf = trainDf.groupby(['install_date','cv']).agg('sum')
-    trainX = trainDf['count'].to_numpy().reshape((-1,64))
-    trainSumByDay = trainDf.groupby('install_date').agg({'sumr1usd':'sum','sumr7usd':'sum'})
-    trainY0 = trainSumByDay['sumr7usd'].to_numpy()
-    trainY1 = trainSumByDay['sumr1usd'].to_numpy()
-    # 这里为了解决部分0数据
-    trainY0[trainY0 <= 0] = 1
-    trainY1[trainY1 <= 0] = 1
-    trainY = trainY0/trainY1 - 1
-
-    # 尝试标准化
-    trainXSs = (trainX - mean)/std
-
-    return trainXSs,trainY, trainY0, trainY1
-
-# 获得media不是mediaName的所有数据，用于训练模型2
-def getTrainingData2(df,mediaName,sinceTimeStr,unitlTimeStr):
     trainDf = df.loc[
         (df.install_date >= sinceTimeStr) & (df.install_date < unitlTimeStr) & (df.media_group != mediaName)
     ].sort_values(by=['install_date','cv'])
@@ -336,7 +268,7 @@ def getTrainingData2(df,mediaName,sinceTimeStr,unitlTimeStr):
 
     return trainXSs,mean,std, trainY, trainY0, trainY1
 
-def getTestingData2(df,mediaName,sinceTimeStr,unitlTimeStr,mean,std):
+def getTestingData(df,mediaName,sinceTimeStr,unitlTimeStr,mean,std):
     trainDf = df.loc[
         (df.install_date >= sinceTimeStr) & (df.install_date < unitlTimeStr) & (df.media_group != mediaName)
     ].sort_values(by=['install_date','cv'])
@@ -363,13 +295,15 @@ def train(dataDf3,message):
     for _ in range(5):
         for media in mediaList:
             name = media['name']
+
             # 各种命名都用这个后缀，防止重名
             filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
+            # 每次都重新建立mod
+            mod = createModFunc1()
 
-            # mod1
-            modPath = '/src/src/predSkan/media/mod/%s/1/'%filenameSuffix
-            
+            modPath = '/src/src/predSkan/media/mod/%s/'%filenameSuffix
             checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.2f}-{val_loss:.2f}.h5')
+        
             model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
                 filepath=checkpoint_filepath,
                 save_weights_only=False,
@@ -380,22 +314,18 @@ def train(dataDf3,message):
 
             lossAndErrorPrintingCallbackSuffixStr = name
 
-            # 每次都重新建立mod
-            mod = createModFunc1()
-                    
             trainX,mean,std,trainY,trainY0,trainY1 = getTrainingData(dataDf3,name,'2022-05-01','2022-07-30')
             testX, testY, testY0, testY1 = getTestingData(dataDf3,name,'2022-08-01','2022-09-01',mean,std)
-            mean1 = mean
-            std1 = std
+
             meanDf = pd.DataFrame(data = {
                 'mean':list(mean)
             })
-            meanDf.to_csv('/src/data/%s1Mean20220501_20220731.csv'%name)
+            meanDf.to_csv('/src/data/%sMean20220501_20220731.csv'%name)
 
             stdDf = pd.DataFrame(data = {
                 'std':list(std)
             })
-            stdDf.to_csv('/src/data/%s1Std20220501_20220731.csv'%name)
+            stdDf.to_csv('/src/data/%sStd20220501_20220731.csv'%name)
 
             history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
                 ,callbacks=[
@@ -409,11 +339,12 @@ def train(dataDf3,message):
             # 训练完成可以把mod清理掉了
             tf.keras.backend.clear_session()
             del mod
+
             # 每个国家一个log目录
             logDir = '/src/data/doc/media/%s'%(name)
             os.makedirs(logDir,exist_ok=True)
             # 将每次的明细结果放进去，
-            docDirname = '/src/data/doc/media/%s/%s/1'%(name,name+filenameSuffix)
+            docDirname = '/src/data/doc/media/%s/%s'%(name,name+filenameSuffix)
             val_loss = createDoc(modPath,trainX, trainY0,trainY1,testX,testY0, testY1,history,docDirname,message)
             # 将结果写入到国家日志里
             # retCsvFilename 记录所有结果
@@ -438,173 +369,6 @@ def train(dataDf3,message):
             purgeRetCsv(retCsvFilename)
             logFilename = os.path.join(logDir,'log.txt')
             logUpdate(retCsvFilename,logFilename,name)
-
-
-            # mod2
-            modPath = '/src/src/predSkan/media/mod/%s/2/'%filenameSuffix
-            
-            checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.2f}-{val_loss:.2f}.h5')
-            model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-                filepath=checkpoint_filepath,
-                save_weights_only=False,
-                monitor='val_loss',
-                mode='min',
-                save_best_only=True
-            )
-
-            lossAndErrorPrintingCallbackSuffixStr = name + 'other'
-
-            # 每次都重新建立mod
-            mod = createModFunc1()
-                    
-            trainX,mean,std,trainY,trainY0,trainY1 = getTrainingData2(dataDf3,name,'2022-05-01','2022-07-30')
-            testX, testY, testY0, testY1 = getTestingData2(dataDf3,name,'2022-08-01','2022-09-01',mean,std)
-            mean2 = mean
-            std2 = std
-            meanDf = pd.DataFrame(data = {
-                'mean':list(mean)
-            })
-            meanDf.to_csv('/src/data/%s2Mean20220501_20220731.csv'%name)
-
-            stdDf = pd.DataFrame(data = {
-                'std':list(std)
-            })
-            stdDf.to_csv('/src/data/%s2Std20220501_20220731.csv'%name)
-
-            history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
-                ,callbacks=[
-                    earlyStoppingValLoss,
-                    model_checkpoint_callback,
-                    LossAndErrorPrintingCallback()
-                ]
-                ,batch_size=128
-                ,verbose=0
-                )
-            # 训练完成可以把mod清理掉了
-            tf.keras.backend.clear_session()
-            del mod
-
-            # 将每次的明细结果放进去，
-            docDirname = '/src/data/doc/media/%s/%s/2'%(name,name+filenameSuffix)
-            val_loss = createDoc(modPath,trainX, trainY0,trainY1,testX,testY0, testY1,history,docDirname,message)
-            # 将结果写入到国家日志里
-            # retCsvFilename 记录所有结果
-            retCsvFilename = os.path.join(logDir,'ret.csv')
-            if os.path.exists(retCsvFilename):
-                retDf = pd.read_csv(retCsvFilename)
-            else:
-                retDf = pd.DataFrame(data = {
-                    'path':[],
-                    'val_loss':[],
-                    'message':[]
-                })
-            logData = {
-                'path':[docDirname],
-                'val_loss':[val_loss],
-                'message':[message+' other']
-            }
-            retDf = retDf.append(pd.DataFrame(data=logData))
-            # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
-            
-            retDf.to_csv(retCsvFilename)
-            purgeRetCsv(retCsvFilename)
-            logFilename = os.path.join(logDir,'log.txt')
-            logUpdate(retCsvFilename,logFilename,name)
-
-
-            docDirname = '/src/data/doc/media/%s/%s'%(name,name+filenameSuffix)
-            mape = createDocTotal(docDirname,name,mean1,std1,mean2,std2)
-            logData = {
-                'path':[docDirname],
-                'val_loss':[mape],
-                'message':[message+' total']
-            }
-            retDf = retDf.append(pd.DataFrame(data=logData))
-            # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
-            
-            retDf.to_csv(retCsvFilename)
-            purgeRetCsv(retCsvFilename)
-            logFilename = os.path.join(logDir,'log.txt')
-            logUpdate(retCsvFilename,logFilename,name)
-
-
-mediaSkanDf = pd.read_csv(getFilename('mediaSkan2_20220501_20220930'))
-totalDf = pd.read_csv(getFilename('totalData_20220501_20220930'))
-
-import matplotlib.pyplot as plt
-# 尝试用idfa的数据去预测一下skan整体数据 
-def createDocTotal(docDirname,mediaName,mean1,std1,mean2,std2):
-    # 首先获得skan中的media数据
-    global mediaSkanDf
-    mod1Filename = os.path.join(docDirname, '1/bestMod.h5')
-    mod1 = tf.keras.models.load_model(mod1Filename)
-
-    df = mediaSkanDf.loc[(mediaSkanDf.media_group == mediaName)&(pd.isna(mediaSkanDf.cv)==False)].sort_values(by=['install_date','cv'])
-    x = df['count'].to_numpy().reshape((-1,64))
-    x1 = (x - mean1)/std1
-    # print(x)
-    yP1 = mod1.predict(x1)
-    # print(yP1)
-    dfUsd = cvToUSD2(df)
-    dfUsdSum = dfUsd.groupby('install_date').agg({'usd':'sum'})
-    
-    y1 = (yP1.reshape(-1) + 1)*dfUsdSum['usd'].to_numpy().reshape(-1)
-    # 然后获得其他所有数据
-    mod2Filename = os.path.join(docDirname, '2/bestMod.h5')
-    mod2 = tf.keras.models.load_model(mod2Filename)
-
-    # 这里做简便处理
-    dfTotal = totalDf.sort_values(by=['install_date','cv'])
-    dfTotal['count'] = dfTotal['count'] - df['count'].to_numpy()
-    
-    # 直接用大盘的cv减去这个媒体skan中的cv，可能不太准确，但是先看看大致
-    x = dfTotal['count'].to_numpy().reshape((-1,64))
-    x[x<0]=0
-    x2 = (x - mean2)/std2
-    # print(x)
-    yP2 = mod2.predict(x2)
-    # print(yP2)
-    dfUsd = cvToUSD2(dfTotal)
-    dfUsdSum = dfUsd.groupby('install_date').agg({'usd':'sum'})
-    
-    y2 = (yP2.reshape(-1) + 1)*dfUsdSum['usd'].to_numpy().reshape(-1)
-
-    # print(y1.shape,y2.shape)
-    # print(y1[0:10],y2[0:10])
-    # print((y1+y2)[0:10])
-    y_pred = y1+y2
-    dfTotalByDay = dfTotal.groupby('install_date').agg({'sumr7usd':'sum'})
-    y_true = dfTotalByDay['sumr7usd'].to_numpy()
-    
-    mape = mapeFunc(y_true,y_pred)
-
-    logDf1 = pd.DataFrame(data = {
-        'yp1':list(yP1.reshape(-1)),
-        'yp2':list(yP2.reshape(-1)),
-        'y1':list(y1),
-        'y2':list(y2),
-        'y_pred':list(y_pred),
-        'y_true':list(y_true),
-        'mape':mape
-    })
-    logFilename = os.path.join(docDirname, 'log.csv')
-    logDf1.to_csv(logFilename)
-
-    plt.title("total")
-    plt.plot(y_true,'-',label='true')
-    plt.plot(y_pred,'-',label='pred')
-    plt.plot(y1,'-',label='pred1')
-    plt.legend()
-    filename = os.path.join(docDirname, 'total.png')
-    plt.savefig(filename)
-    print('save pic',filename)
-    plt.clf()
-
-    return mape
-    
-    
-
-    
             
 if __name__ == '__main__':
     # df = pd.read_csv(getFilename('media_20220501_20220930'))
@@ -612,21 +376,4 @@ if __name__ == '__main__':
     # df2 = dataFill(df1)
     # df2.to_csv(getFilename('mediaIdfa_20220501_20220930'))
     df2 = pd.read_csv(getFilename('mediaIdfa_20220501_20220930'))
-    train(df2,'mse media 2 test')
-
-    # df = getSkanData('20220501','20220930')
-    # df.to_csv(getFilename('mediaSkan_20220501_20220930'))
-    # df = pd.read_csv(getFilename('mediaSkan_20220501_20220930'))
-    # df1 = addMediaGroup(df)
-    # # df = df1.loc[df1.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # # print(df)
-    # df2 = dataFill(df1)
-    # # df = df2.loc[df2.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # # print(df)
-    # df2.to_csv(getFilename('mediaSkan2_20220501_20220930'))
-    # createDocTotal('/src/data/doc/media/google/google_20221208_092546','google')
-
-    # mediaSkanDf = pd.read_csv(getFilename('mediaSkan2_20220501_20220930'))
-    # df = mediaSkanDf.loc[mediaSkanDf.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # print(df)
-
+    train(df2,'mse media other 9')
