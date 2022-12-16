@@ -172,7 +172,11 @@ def filterByMediaName(df,mediaName,trainRate=0.6):
     dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
     dataX = getTrainX(dataDf)
     min,max = getXMinAndMaxFromTrainX(dataX)
-    trainXSs = np.nan_to_num((dataX-min)/(max-min))
+    x = (dataX-min)/(max-min)
+    x[x == np.inf] = 0
+    x[x == -np.inf] = 0
+    trainXSs = np.nan_to_num(x)
+    
     dataY, dataY0, dataY1 = getTrainingDataY(dataDf)
 
     line = math.floor(len(trainXSs)*trainRate)
@@ -211,6 +215,69 @@ def filterByMediaName2(df,mediaName,trainRate=0.6):
     testY1 = dataY1[line:]
 
     return trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min, max
+
+# 换了标准化方法 trainXSs = (trainX - mean)/std
+def filterByMediaNameS(df,mediaName,trainRate=0.6):
+    dataDf = df.loc[(df.media_group == mediaName)].sort_values(by=['install_date','cv'])
+    dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
+    dataX = getTrainX(dataDf)
+    # min,max = getXMinAndMaxFromTrainX(dataX)
+    # x = (dataX-min)/(max-min)
+    
+    mean = np.mean(dataX,axis=0)
+    std = np.std(dataX,axis=0)
+    x = (dataX - mean)/std
+
+    x[x == np.inf] = 0
+    x[x == -np.inf] = 0
+    trainXSs = np.nan_to_num(x)
+    
+    dataY, dataY0, dataY1 = getTrainingDataY(dataDf)
+
+    line = math.floor(len(trainXSs)*trainRate)
+    
+    trainX = dataX[:line]
+    testX = dataX[line:]
+
+    trainY = dataY[:line]
+    testY = dataY[line:]
+    trainY0 = dataY0[:line]
+    testY0 = dataY0[line:]
+    trainY1 = dataY1[:line]
+    testY1 = dataY1[line:]
+
+    return trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, mean, std
+
+def filterByMediaNameS2(df,mediaName,trainRate=0.6):
+    dataDf = df.loc[(df.media_group != mediaName)].sort_values(by=['install_date','cv'])
+    dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
+    dataX = getTrainX(dataDf)
+    # min,max = getXMinAndMaxFromTrainX(dataX)
+    # x = (dataX-min)/(max-min)
+    
+    mean = np.mean(dataX,axis=0)
+    std = np.std(dataX,axis=0)
+    x = (dataX - mean)/std
+
+    x[x == np.inf] = 0
+    x[x == -np.inf] = 0
+    trainXSs = np.nan_to_num(x)
+    
+    dataY, dataY0, dataY1 = getTrainingDataY(dataDf)
+
+    line = math.floor(len(trainXSs)*trainRate)
+    
+    trainX = dataX[:line]
+    testX = dataX[line:]
+
+    trainY = dataY[:line]
+    testY = dataY[line:]
+    trainY0 = dataY0[:line]
+    testY0 = dataY0[line:]
+    trainY1 = dataY1[:line]
+    testY1 = dataY1[line:]
+
+    return trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, mean, std
 
 
 if __name__ == '__main__':

@@ -1,7 +1,4 @@
-# 不仅仅针对idfa进行验证
-# 而是用idfa的训练结果，放到大盘里进行验证
-
-# 存在的难点是自然量的处理，先模糊处理，直接用af数据（带自然量）-skan
+# 与2P的区别是标准化的方式不同，2P是max与min，3P是trainXSs = (trainX - mean)/std
 import pandas as pd
 import numpy as np
 import os
@@ -10,7 +7,7 @@ sys.path.append('/src')
 from src.tools import afCvMapDataFrame,cvToUSD2
 from src.maxCompute import execSql
 from src.tools import getFilename
-from src.predSkan.tools.ai import purgeRetCsv,logUpdate,createDoc,mapeFunc,filterByMediaName,filterByMediaName2
+from src.predSkan.tools.ai import purgeRetCsv,logUpdate,createDoc,mapeFunc,filterByMediaNameS,filterByMediaNameS2
 
 import datetime
 
@@ -245,18 +242,15 @@ from tensorflow.keras import layers
 def createModFunc1():
     mod = keras.Sequential(
         [
-            layers.Dense(64,kernel_initializer='random_normal',bias_initializer='random_normal', activation="relu", input_shape=(64,)),
-            # layers.Dropout(0.3),
+            layers.Dense(128,kernel_initializer='random_normal',bias_initializer='random_normal', activation="relu", input_shape=(64,)),
+            layers.Dropout(0.3),
             layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
-            layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
-            layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
-            layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
-            # layers.Dropout(0.3),
+            layers.Dropout(0.3),
             layers.Dense(1, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu")
         ]
     )
-    # mod.compile(optimizer='RMSprop',loss='mse')
-    mod.compile(optimizer='adadelta',loss='mse')
+    mod.compile(optimizer='RMSprop',loss='mse')
+    # mod.compile(optimizer='adadelta',loss='mse')
     # mod.summary()
     return mod
 
@@ -301,7 +295,7 @@ def train(dataDf3,message):
             # 每次都重新建立mod
             mod = createModFunc1()
 
-            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min1, max1 = filterByMediaName(dataDf3,name)
+            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, mean1, std1 = filterByMediaNameS(dataDf3,name)
 
             history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
                 ,callbacks=[
@@ -321,10 +315,10 @@ def train(dataDf3,message):
 
             val_loss = createDoc(modPath,trainX, trainY0,trainY1,testX,testY0, testY1,history,docDirname,message)
 
-            min1Filename = os.path.join(docDirname,'min.npy')
-            np.save(min1Filename, min1)
-            max1Filename = os.path.join(docDirname,'max.npy')
-            np.save(max1Filename, max1)
+            min1Filename = os.path.join(docDirname,'mean.npy')
+            np.save(min1Filename, mean1)
+            max1Filename = os.path.join(docDirname,'std.npy')
+            np.save(max1Filename, std1)
 
             # 将结果写入到国家日志里
             # retCsvFilename 记录所有结果
@@ -341,7 +335,7 @@ def train(dataDf3,message):
                 'path':[docDirname],
                 'val_loss':[val_loss],
                 'message':[message],
-                'f':['minAndMax']
+                'f':['meanAndStd']
             }
             retDf = retDf.append(pd.DataFrame(data=logData))
             # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
@@ -370,7 +364,7 @@ def train(dataDf3,message):
             # 每次都重新建立mod
             mod = createModFunc1()
                     
-            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min2, max2 = filterByMediaName2(dataDf3,name)
+            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, mean2, std2 = filterByMediaNameS2(dataDf3,name)
 
             history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
                 ,callbacks=[
@@ -389,10 +383,10 @@ def train(dataDf3,message):
             docDirname = '%s/2/%s'%(logDir,name+filenameSuffix)
             val_loss = createDoc(modPath,trainX, trainY0,trainY1,testX,testY0, testY1,history,docDirname,message)
 
-            min2Filename = os.path.join(docDirname,'min.npy')
-            np.save(min2Filename, min2)
-            max2Filename = os.path.join(docDirname,'max.npy')
-            np.save(max2Filename, max2)
+            min2Filename = os.path.join(docDirname,'mean.npy')
+            np.save(min2Filename, mean2)
+            max2Filename = os.path.join(docDirname,'std.npy')
+            np.save(max2Filename, std2)
 
             # 将结果写入到国家日志里
             # retCsvFilename 记录所有结果
@@ -409,7 +403,7 @@ def train(dataDf3,message):
                 'path':[docDirname],
                 'val_loss':[val_loss],
                 'message':[message],
-                'f':['minAndMax']
+                'f':['meanAndStd']
             }
             retDf = retDf.append(pd.DataFrame(data=logData))
             # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
@@ -459,24 +453,36 @@ def createDocTotal(docDirname,mediaName):
     mod1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'bestMod.h5')
     mod1 = tf.keras.models.load_model(mod1Filename)
 
-    # 暂时只有这种标准化，先这么写，之后再有别的，通过判断是否存在文件来做区分
-    min1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'min.npy')
-    min1 = np.load(min1Filename)
-    max1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'max.npy')
-    max1 = np.load(max1Filename)
-
-    df = mediaSkanDf.loc[(mediaSkanDf.media_group == mediaName)&(pd.isna(mediaSkanDf.cv)==False)].sort_values(by=['install_date','cv'])
+    df = mediaSkanDf.loc[
+        (mediaSkanDf.media_group == mediaName) & 
+        (pd.isna(mediaSkanDf.cv)==False) &
+        (mediaSkanDf.install_date >= '2022-08-01')
+        ].sort_values(by=['install_date','cv'])
     x = df['count'].to_numpy().reshape((-1,64))
     xSum = x.sum(axis=1).reshape(-1,1)
     x = np.nan_to_num(x/xSum)
-    # print(x)
-    # print(min1,max1)
-    # x1 = np.nan_to_num((x-min1)/(max1-min1+1e-9))
-    # x1 = np.nan_to_num((x-min1)/(max1-min1))
-    x = (x-min1)/(max1-min1)
-    x[x == np.inf] = 0
-    x[x == -np.inf] = 0
-    x1 = np.nan_to_num(x)
+
+    f = ret1Df.iloc[0].at['f']
+    if f == 'minAndMax':
+        min1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'min.npy')
+        min1 = np.load(min1Filename)
+        max1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'max.npy')
+        max1 = np.load(max1Filename)
+
+        x = (x-min1)/(max1-min1)
+        x[x == np.inf] = 0
+        x[x == -np.inf] = 0
+        x1 = np.nan_to_num(x)
+    else:
+        mean1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'mean.npy')
+        mean1 = np.load(mean1Filename)
+        std1Filename = os.path.join(ret1Df.iloc[0].at['path'], 'std.npy')
+        std1 = np.load(std1Filename)
+
+        x = (x - mean1)/std1
+        x[x == np.inf] = 0
+        x[x == -np.inf] = 0
+        x1 = np.nan_to_num(x)
 
     yP1 = mod1.predict(x1)
     # print(yP1)
@@ -492,14 +498,9 @@ def createDocTotal(docDirname,mediaName):
     mod2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'bestMod.h5')
     mod2 = tf.keras.models.load_model(mod2Filename)
 
-    # 暂时只有这种标准化，先这么写，之后再有别的，通过判断是否存在文件来做区分
-    min2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'min.npy')
-    min2 = np.load(min2Filename)
-    max2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'max.npy')
-    max2 = np.load(max2Filename)
-
     # 这里做简便处理
-    dfTotal = totalDf.sort_values(by=['install_date','cv'])
+    global totalDf
+    dfTotal = totalDf.loc[(totalDf.install_date >= '2022-08-01')].sort_values(by=['install_date','cv'])
     dfTotal['count'] = dfTotal['count'] - df['count'].to_numpy()
     
     # 直接用大盘的cv减去这个媒体skan中的cv，可能不太准确，但是先看看大致
@@ -507,12 +508,28 @@ def createDocTotal(docDirname,mediaName):
     x[x<0]=0
     xSum = x.sum(axis=1).reshape(-1,1)
     x = x/xSum
-    # x2 = np.nan_to_num((x-min2)/(max2-min2+1e-9))
-    x = (x-min2)/(max2-min2)
-    x[x == np.inf] = 0
-    x[x == -np.inf] = 0
-    x2 = np.nan_to_num(x)
-    
+
+    f = ret2Df.iloc[0].at['f']
+    if f == 'minAndMax':
+        min2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'min.npy')
+        min2 = np.load(min2Filename)
+        max2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'max.npy')
+        max2 = np.load(max2Filename)
+
+        x = (x-min2)/(max2-min2)
+        x[x == np.inf] = 0
+        x[x == -np.inf] = 0
+        x2 = np.nan_to_num(x)
+    else:
+        mean2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'mean.npy')
+        mean2 = np.load(mean2Filename)
+        std2Filename = os.path.join(ret2Df.iloc[0].at['path'], 'std.npy')
+        std2 = np.load(std2Filename)
+
+        x = (x - mean2)/std2
+        x[x == np.inf] = 0
+        x[x == -np.inf] = 0
+        x2 = np.nan_to_num(x)
     yP2 = mod2.predict(x2)
 
     # print(yP2)
@@ -521,9 +538,6 @@ def createDocTotal(docDirname,mediaName):
     
     y2 = (yP2.reshape(-1) + 1)*dfUsdSum['usd'].to_numpy().reshape(-1)
 
-    # print(y1.shape,y2.shape)
-    # print(y1[0:10],y2[0:10])
-    # print((y1+y2)[0:10])
     y_pred = y1+y2
     dfTotalByDay = dfTotal.groupby('install_date').agg({'sumr7usd':'sum'})
     y_true = dfTotalByDay['sumr7usd'].to_numpy()
@@ -566,21 +580,4 @@ if __name__ == '__main__':
     # df2 = dataFill(df1)
     # df2.to_csv(getFilename('mediaIdfa_20220501_20220930'))
     df2 = pd.read_csv(getFilename('mediaIdfa_20220501_20220930'))
-    train(df2,'5 layers')
-
-    # df = getSkanData('20220501','20220930')
-    # df.to_csv(getFilename('mediaSkan_20220501_20220930'))
-    # df = pd.read_csv(getFilename('mediaSkan_20220501_20220930'))
-    # df1 = addMediaGroup(df)
-    # # df = df1.loc[df1.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # # print(df)
-    # df2 = dataFill(df1)
-    # # df = df2.loc[df2.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # # print(df)
-    # df2.to_csv(getFilename('mediaSkan2_20220501_20220930'))
-    # createDocTotal('/src/data/doc/media/google/google_20221208_092546','google')
-
-    # mediaSkanDf = pd.read_csv(getFilename('mediaSkan2_20220501_20220930'))
-    # df = mediaSkanDf.loc[mediaSkanDf.media_group == 'google'].sort_values(by=['install_date','cv'])
-    # print(df)
-
+    train(df2,'3p test')
