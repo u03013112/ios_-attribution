@@ -200,8 +200,97 @@ def cv64():
     plt.clf()
 
 
+def cv0Total():
+    totalDf = pd.read_csv(getFilename('totalData20220501_20221215'))
+    totalDf2 = pd.read_csv(getFilename('totalData220220501_20221215'))
+
+    dayList = []
+    day0 = datetime.datetime.strptime('20220501','%Y%m%d')
+    day1 = datetime.datetime.strptime('20221215','%Y%m%d')
+    for i in range((day1-day0).days+1):
+        day = day0 + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+        dayList.append(dayStr)
+
+    data = {
+        'install_date':dayList
+    }
+    
+    totalDfSort = totalDf.sort_values(by=['install_date','cv'])
+    # totalDfSortSum = totalDfSort.groupby(['install_date']).agg('sum')
+    payCountDf = totalDfSort.loc[totalDfSort.cv > 0].groupby(['install_date']).agg('sum')
+    print(totalDfSort.loc[totalDfSort.cv > 0])
+    print(payCountDf)
+    payCountNp = payCountDf['count'].to_numpy().reshape(-1)
+    data['payCountNp'] = payCountNp
+
+    totalDfSort2 = totalDf2.sort_values(by=['install_date','cv'])
+    # totalDfSortSum2 = totalDfSort2.groupby(['install_date']).agg('sum')
+    payCountDf2 = totalDfSort2.loc[totalDfSort2.cv > 0].groupby(['install_date']).agg('sum')
+    print(payCountDf2)
+    payCountNp2 = payCountDf2['count'].to_numpy().reshape(-1)
+    data['payCountNp2'] = payCountNp2
+    
+    df = pd.DataFrame(data=data)
+
+    plt.title('pay users in first day')
+
+    # df['totalPR'].rolling(7).mean().plot(label='total rolling7')
+    df['payCountNp'].rolling(7).mean().plot(label='AF')
+    df['payCountNp2'].rolling(7).mean().plot(label='BI')
+    plt.xlabel("install date")
+    plt.xticks(rotation=45)
+    plt.legend(loc='best')
+    plt.savefig('/src/data/totalPR.png')
+    print('save to /src/data/totalPR.png')
+    plt.clf()
+
+def r7Total():
+    totalDf = pd.read_csv(getFilename('totalData20220501_20221215'))
+    totalDf2 = pd.read_csv(getFilename('totalData220220501_20221215'))
+
+    dayList = []
+    day0 = datetime.datetime.strptime('20220501','%Y%m%d')
+    day1 = datetime.datetime.strptime('20221215','%Y%m%d')
+    for i in range((day1-day0).days+1):
+        day = day0 + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y-%m-%d')
+        dayList.append(dayStr)
+
+    data = {
+        'install_date':dayList
+    }
+    
+    totalDfSort = totalDf.sort_values(by=['install_date','cv'])
+
+    totalDfSortSum = totalDfSort.groupby(['install_date']).agg('sum')
+    totalR7 = totalDfSortSum['sumr7usd'].to_numpy().reshape((-1))
+    data['totalR7'] = list(totalR7)
+    # 
+    totalDfSort2 = totalDf2.sort_values(by=['install_date','cv'])
+    totalDfSortSum2 = totalDfSort2.groupby(['install_date']).agg('sum')
+    totalR72 = totalDfSortSum2['sumr7usd'].to_numpy().reshape((-1))
+    data['totalR72'] = list(totalR72)
+    
+    df = pd.DataFrame(data=data)
+
+    plt.title('revenue 7 days')
+
+    df['totalR7'].rolling(7).mean().plot(label='AF')
+    df['totalR72'].rolling(7).mean().plot(label='BI')
+    plt.xlabel("install date")
+    plt.xticks(rotation=45)
+    plt.legend(loc='best')
+    plt.savefig('/src/data/totalR7.png')
+    print('save to /src/data/totalR7.png')
+    plt.clf()
+
+
+
 if __name__ == '__main__':
-    y()
-    cv0()
-    cv32()
-    cv64()
+    # y()
+    # cv0()
+    # cv32()
+    # cv64()
+    cv0Total()
+    # r7Total()

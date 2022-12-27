@@ -105,6 +105,12 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     testMape = mapeFunc(yt,yp)
     retStr += 'test mape:%.2f%%\n'%(testMape)
 
+    pd.DataFrame(data = {
+        'r1':list(testY1.reshape(-1)),
+        'r7':list(yt),
+        'pred':list(yp),
+    }).corr().to_csv(os.path.join(docDirname, 'corr.csv'))
+
     plt.title("test")
     plt.plot(yt,'b-',label='true')
     plt.plot(yp,'r-',label='pred')

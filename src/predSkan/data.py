@@ -148,6 +148,87 @@ def getTotalData(sinceTimeStr,unitlTimeStr):
     pd_df = execSql(sql)
     return pd_df
 
+# 从dwd_base_event_purchase_afattribution获得
+# 这个表里没有不付费用户的安装事件，所以要和上面的一起用
+def getTotalData2(sinceTimeStr,unitlTimeStr):    
+    # 为了获得完整的7日回收，需要往后延长7天
+    # unitlTime = datetime.datetime.strptime(unitlTimeStr,'%Y%m%d')
+    # unitlTimeStr = (unitlTime+datetime.timedelta(days=7)).strftime('%Y%m%d')
+
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when r1usd>%d and r1usd<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    sql='''
+        select
+            cv,
+            count(*) as count,
+            sum(r1usd) as sumR1usd,
+            sum(r7usd) as sumR7usd,
+            install_date
+        from
+        (
+                select
+                    uid,
+                    case
+                        when r1usd = 0
+                        or r1usd is null then 0 % s
+                        else 63
+                    end as cv,
+                    r1usd,
+                    r7usd,
+                    install_date
+                from
+                    (
+                        select
+                            install_date,
+                            uid,
+                            sum(if(life_cycle <= 0, revenue_value_usd, 0)) as r1usd,
+                            sum(if(life_cycle <= 6, revenue_value_usd, 0)) as r7usd
+                        from
+                            (
+                                select
+                                    game_uid as uid,
+                                    to_char(
+                                        to_date(install_day, "yyyymmdd"),
+                                        "yyyy-mm-dd"
+                                    ) as install_date,
+                                    revenue_value_usd,
+                                    DATEDIFF(
+                                        to_date(day, 'yyyymmdd'),
+                                        to_date(install_day, 'yyyymmdd'),
+                                        'dd'
+                                    ) as life_cycle
+                                from
+                                    dwd_base_event_purchase_afattribution
+                                where
+                                    app_package = "id1479198816"
+                                    and app = 102
+                                    and zone = 0
+                                    and window_cycle = 9999
+                                    and install_day >= %s
+                                    and install_day <= %s
+                            )
+                        group by
+                            install_date,
+                            uid
+
+        )
+        )group by
+            cv,
+            install_date
+        ;
+    '''%(whenStr,sinceTimeStr,unitlTimeStr)
+    print(sql)
+    # return
+    pd_df = execSql(sql)
+    return pd_df
+
+
 
 def getTotalDataMax(sinceTimeStr,unitlTimeStr,max = 200.0):
     sinceTimeStr2 = list(sinceTimeStr)
