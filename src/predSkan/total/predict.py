@@ -30,5 +30,5 @@ if __name__ == '__main__':
     a = np.zeros(64)
     a[:] = 100
     a = a.reshape(-1,64)
-    print(a)
-    print(predict('/src/data/doc/total/total_20221228_105554',a))
+    # print(a)
+    print(predict('/src/data/doc/total/total_20221228_100638',a))
