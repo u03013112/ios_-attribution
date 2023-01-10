@@ -1,0 +1,91 @@
+<mxfile host="65bd71144e">
+    <diagram id="2F2yG8pCz8PKLnsrA92g" name="第 1 页">
+        <mxGraphModel dx="1003" dy="349" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="4" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="传统预测" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="首日付费预测7日付费" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="付费增长率" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="7" target="8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="补充预测" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="8" target="10">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="其他特征预测偏差值" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="补充金额&lt;br&gt;这里不能再是比例了吧" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="12" target="13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="补充预测v2" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="13" target="15">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="尝试直接用固定的付费增长率来做基数" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="15" target="17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="15" target="21">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" value="预测补充金额&lt;br&gt;或者补充比例" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="17" target="19">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="可以尝试&lt;br&gt;做补充金额与各属性的关联度测试" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="660" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="19" target="23">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="如果是预测比例，&lt;br&gt;那么关联度应该是类似的？或者不是" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="660" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="21" target="25">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="分开做测试&lt;br&gt;关联度&amp;amp;实际预测" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="经过简单测试&lt;br&gt;发现倍率并没有什么帮助" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="660" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="28" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="25" target="27">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="如果做金额&lt;br&gt;那么就不应该用&lt;br&gt;百分比" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="460" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="用cv人数？" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="260" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

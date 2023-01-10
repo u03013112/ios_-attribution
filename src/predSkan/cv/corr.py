@@ -342,17 +342,19 @@ def further():
     sns.pairplot(df).savefig('pair.png')
 
 if __name__ == '__main__':
-    df = getAllDataFromSS()
-    df.to_csv(getFilename('allDataFromSS'))
+    # df = getAllDataFromSS()
+    # df.to_csv(getFilename('allDataFromSS'))
 
     df = pd.read_csv(getFilename('allDataFromSS'))
-    print(df.corr())
-    further()
-    import numpy as np
-    sns.set()
-    np.random.seed(0)
-    x = np.random.randn(100)
-    sns.distplot(x).get_figure().savefig('a.png')
-    sns.histplot(x).get_figure().savefig('b.png')
+    # print(df.corr())
+    df = df.corr()
+    df.loc[:,~df.columns.str.match('Unnamed')].to_csv('/src/data/corr.csv')
+    # further()
+    # import numpy as np
+    # sns.set()
+    # np.random.seed(0)
+    # x = np.random.randn(100)
+    # sns.distplot(x).get_figure().savefig('a.png')
+    # sns.histplot(x).get_figure().savefig('b.png')
     
 

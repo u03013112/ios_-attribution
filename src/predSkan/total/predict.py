@@ -24,11 +24,20 @@ def predict(docPath,inputNpArray):
 
     yp = mod.predict(input)
 
-    return yp,input
+    # return yp,input
+    return yp
 
 if __name__ == '__main__':
-    a = np.zeros(64)
-    a[:] = 100
+    a = np.ones(64)*100
+    a[0] = 10000
     a = a.reshape(-1,64)
     # print(a)
     print(predict('/src/data/doc/total/total_20221228_100638',a))
+    print(predict('/src/data/doc/total/total_20221228_105554',a))
+    print(predict('/src/data/doc/total/total_20221228_110747',a))
+
+    a = np.ones(128)*100
+    a[0] = 10000
+    a[64] = 10000
+    a = a.reshape(-1,128)
+    print(predict('/src/data/doc/total/total_20221229_040113',a))

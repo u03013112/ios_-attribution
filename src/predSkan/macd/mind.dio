@@ -1,0 +1,88 @@
+<mxfile host="65bd71144e">
+    <diagram id="mVtYD81uB_J-NVwdU5oF" name="第 1 页">
+        <mxGraphModel dx="1003" dy="594" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="4" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="2" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="趋势分析" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="15">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="趋势指标" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="5" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="5" target="9">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="趋势阈值" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="240" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="7" target="13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="连续3日&lt;br&gt;or&lt;br&gt;连续7日" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="440" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="9" target="11">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="趋势判断" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="440" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="总体是要符合趋势的&lt;br&gt;逆趋势的数量要少" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="640" y="180" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="趋势分类&lt;br&gt;上升&lt;br&gt;下降&lt;br&gt;不确定" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="640" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="15" target="17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="15" target="19">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" value="直接指标" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="17" target="21">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="进阶指标" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="花费&lt;br&gt;回收&lt;br&gt;展示&lt;br&gt;点击&lt;br&gt;安装&lt;br&gt;回收（次数 or 人数）" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="240" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="ROI（d1 d7 p7）&lt;br&gt;CPM&lt;br&gt;点击率 转化率&lt;br&gt;付费率 CPA" style="whiteSpace=wrap;html=1;rounded=1;" vertex="1" parent="1">
+                    <mxGeometry x="240" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="23" target="24">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="希望得到结论" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="640" y="320" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="" style="edgeStyle=none;html=1;" edge="1" parent="1" source="24" target="26">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="在保持ROI的前提下&lt;br&gt;降低 or 升高&lt;br&gt;预算" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="640" y="460" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="640" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

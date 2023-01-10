@@ -117,4 +117,12 @@ if __name__ == '__main__':
 
     # test2('log20220601_20220930_7_sample_predict')
     # test2('log20220601_20220930_14_sample_predict')
-    test2('log20220601_20220930_28_sample_predict')
+    # test2('log20220601_20220930_28_sample_predict')
+    df = pd.DataFrame(data={
+        'a':[0,2,3,4]
+    })
+
+    print(df)
+    df['b']=2
+    df['c']=3
+    print(df)
