@@ -73,6 +73,7 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     yp = (trainYP.reshape(-1) + 1)*(trainY1.reshape(-1))
     pd.DataFrame(data={
         'yp':list(trainYP.reshape(-1)),
+        'r1':list(trainY1.reshape(-1)),
         'true':list(yt),
         'pred':list(yp),
         'mape':list(np.abs((yp - yt) / yt)*100)
@@ -97,6 +98,7 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     yp = (testYP.reshape(-1) + 1)*(testY1.reshape(-1))
     pd.DataFrame(data={
         'yp':list(testYP.reshape(-1)),
+        'r1':list(testY1.reshape(-1)),
         'true':list(yt),
         'pred':list(yp),
         'mape':list(np.abs((yp - yt) / yt)*100)

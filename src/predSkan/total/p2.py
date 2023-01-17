@@ -82,9 +82,9 @@ def createModFunc1():
     mod = keras.Sequential(
         [
             layers.Dense(128,kernel_initializer='random_normal',bias_initializer='random_normal', activation="relu", input_shape=(64,)),
-            # layers.Dropout(0.3),
+            layers.Dropout(0.3),
             layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
-            # layers.Dropout(0.3),
+            layers.Dropout(0.3),
             layers.Dense(1, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu")
         ]
     )
@@ -106,7 +106,8 @@ def createModFunc2():
     mod.summary()
     return mod
 
-epochMax = 15000
+epochMax = 1000
+# epochMax = 15000
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -175,8 +176,8 @@ def train(dataDf3,message):
         # 各种命名都用这个后缀，防止重名
         filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
         # 每次都重新建立mod
-        # mod = createModFunc1()
-        mod = createModFunc2()
+        mod = createModFunc1()
+        # mod = createModFunc2()
 
         modPath = '/src/src/predSkan/total/mod/%s/'%filenameSuffix
         checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.2f}-{val_loss:.2f}.h5')
@@ -251,4 +252,4 @@ if __name__ == '__main__':
         df4.to_csv(getFilename('totalData420220501_20221215'))
 
     df4 = pd.read_csv(getFilename('totalData420220501_20221215'))
-    train(df4,'mse p3 0.6 min&max epochMax15000')
+    train(df4,'p2 func1 new doc')
