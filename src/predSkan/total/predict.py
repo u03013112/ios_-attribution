@@ -27,17 +27,32 @@ def predict(docPath,inputNpArray):
     # return yp,input
     return yp
 
-if __name__ == '__main__':
-    a = np.ones(64)*100
-    a[0] = 10000
-    a = a.reshape(-1,64)
-    # print(a)
-    print(predict('/src/data/doc/total/total_20221228_100638',a))
-    print(predict('/src/data/doc/total/total_20221228_105554',a))
-    print(predict('/src/data/doc/total/total_20221228_110747',a))
+import sys
+sys.path.append('/src')
+from src.predSkan.android.androidTotal import mergeData1AndData2,dataStep3,getTrainX
+# 获得安卓大盘数据，返回数据用于predict的inputNpArray
+def getAndroidTotalData(sinceTimeStr,unitlTimeStr):
+    df = mergeData1AndData2(sinceTimeStr,unitlTimeStr)
+    df = dataStep3(df)
+    dataDf = df.sort_values(by=['install_date','cv'])
+    dataDf = dataDf.groupby(['install_date','cv']).agg('sum')
+    dataX = getTrainX(dataDf)
+    return dataX
 
-    a = np.ones(128)*100
-    a[0] = 10000
-    a[64] = 10000
-    a = a.reshape(-1,128)
-    print(predict('/src/data/doc/total/total_20221229_040113',a))
+
+if __name__ == '__main__':
+    # a = np.ones(64)*100
+    # a[0] = 10000
+    # a = a.reshape(-1,64)
+    # # print(a)
+    # print(predict('/src/data/doc/total/total_20221228_100638',a))
+    # print(predict('/src/data/doc/total/total_20221228_105554',a))
+    # print(predict('/src/data/doc/total/total_20221228_110747',a))
+
+    # a = np.ones(128)*100
+    # a[0] = 10000
+    # a[64] = 10000
+    # a = a.reshape(-1,128)
+    # print(predict('/src/data/doc/total/total_20221229_040113',a))
+
+    androidTotalMod = '/src/data/doc/androidTotal/total_20230113_083842'

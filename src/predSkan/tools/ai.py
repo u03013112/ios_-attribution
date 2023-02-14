@@ -67,7 +67,11 @@ def createDoc(modPath,trainX,trainY0, trainY1,testX,testY0, testY1,history,docDi
     retStr = '%s\n'%message
     retStr += '%s\n'%bestMod['path']
     # mod针对训练集表现
+    
     trainYP = mod.predict(trainX)
+
+    np.save(os.path.join(docDirname, 'trainX.npy'),trainX)
+    np.save(os.path.join(docDirname, 'trainYP.npy'),trainYP)
 
     yt = trainY0.reshape(-1)
     yp = (trainYP.reshape(-1) + 1)*(trainY1.reshape(-1))

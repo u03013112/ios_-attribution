@@ -1,5 +1,5 @@
-# android 大盘
-# 3 测 7
+# android 分媒体
+# Rt 版本
 import pandas as pd
 import numpy as np
 import os
@@ -22,131 +22,28 @@ def getAndroidData(sinceTimeStr,unitlTimeStr):
     # 为了获得完整的7日回收，需要往后延长7天
     unitlTimeStr = (unitlTime+datetime.timedelta(days=7)).strftime('%Y%m%d')
 
-    whenStr = ''
-    for i in range(len(afCvMapDataFrame)):
-        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
-        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
-        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
-            continue
-        whenStr += 'when r1usd>%d and r1usd<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
-
     sql = '''
         select
-            cv,
-            count(*) as count,
-            sum(r1usd) as sumR1usd,
-            sum(r7usd) as sumR7usd,
-            install_date,
-            media
+            count(distinct customer_user_id) as count,
+            substr(install_time,1,10) as install_date,
+            media_source as media
         from
-            (
-                select
-                    customer_user_id,
-                    case
-                        when r1usd = 0
-                        or r1usd is null then 0 % s
-                        else 63
-                    end as cv,
-                    r1usd,
-                    r7usd,
-                    install_date,
-                    media
-                from
-                    (
-                        SELECT
-                            t0.customer_user_id,
-                            t0.install_date,
-                            t1.r1usd,
-                            t1.r7usd,
-                            t0.media
-                        FROM
-                            (
-                                select
-                                    customer_user_id,
-                                    install_date,
-                                    media
-                                from
-                                    (
-                                        select
-                                            customer_user_id,
-                                            to_char(
-                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
-                                                "yyyy-mm-dd"
-                                            ) as install_date,
-                                            media_source as media
-                                        from
-                                            ods_platform_appsflyer_events
-                                        where
-                                            app_id = 'com.topwar.gp'
-                                            and event_name = 'install'
-                                            and zone = 0
-                                            and day >= % s
-                                            and day <= % s
-                                            and install_time >= "%s"
-                                            and install_time <= "%s"
-                                        union
-                                        all
-                                        select
-                                            customer_user_id,
-                                            to_char(
-                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
-                                                "yyyy-mm-dd"
-                                            ) as install_date,
-                                            media_source as media
-                                        from
-                                            tmp_ods_platform_appsflyer_origin_install_data
-                                        where
-                                            app_id = 'com.topwar.gp'
-                                            and zone = '0'
-                                            and install_time >= "%s"
-                                            and install_time <= "%s"
-                                    )
-                                group by
-                                    customer_user_id,
-                                    install_date,
-                                    media
-                            ) as t0
-                            LEFT JOIN (
-                                select
-                                    customer_user_id,
-                                    to_char(
-                                        to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
-                                        "yyyy-mm-dd"
-                                    ) as install_date,
-                                    sum(
-                                        case
-                                            when event_timestamp - install_timestamp <= 3 * 24 * 3600 then cast (event_revenue_usd as double)
-                                            else 0
-                                        end
-                                    ) as r1usd,
-                                    sum(
-                                        case
-                                            when event_timestamp - install_timestamp <= 7 * 24 * 3600 then cast (event_revenue_usd as double)
-                                            else 0
-                                        end
-                                    ) as r7usd
-                                from
-                                    ods_platform_appsflyer_events
-                                where
-                                    app_id = 'com.topwar.gp'
-                                    and event_name = 'af_purchase'
-                                    and zone = 0
-                                    and day >= % s
-                                    and day <= % s
-                                    and install_time >= "%s"
-                                    and install_time <= "%s"
-                                group by
-                                    install_date,
-                                    customer_user_id
-                            ) as t1 ON t0.customer_user_id = t1.customer_user_id
-                    )
-            )
+            ods_platform_appsflyer_push_event_realtime_v2
+        where
+            app_id = 'com.topwar.gp'
+            and event_name = 'install'
+            and ds >= "%s"
+            and ds <= "%s"
+            and install_time >= "%s"
+            and install_time <= "%s"
+            and event_time_selected_timezone like '%%+0000'
+            and to_char(to_date(substr(install_time,1,10),'yyyy-mm-dd'),'yyyymmdd') = ds
+            and customer_user_id REGEXP '^[0-9]*$' 
         group by
-            cv,
             install_date,
-            media
-    ;
-    '''%(whenStr,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2,sinceTimeStr2,unitlTimeStr2,sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
+            media_source
+        ;
+    '''%(sinceTimeStr,unitlTimeStr,sinceTimeStr2,unitlTimeStr2)
 
     print(sql)
     pd_df = execSql(sql)
@@ -169,7 +66,7 @@ def getAndroidData2(sinceTimeStr,unitlTimeStr):
             sum(r1usd) as sumR1usd,
             sum(r7usd) as sumR7usd,
             install_date,
-            mediasource as media
+            media
         from
             (
                 select
@@ -182,15 +79,15 @@ def getAndroidData2(sinceTimeStr,unitlTimeStr):
                     r1usd,
                     r7usd,
                     install_date,
-                    mediasource
+                    media
                 from
                     (
                         select
                             install_date,
                             uid,
-                            sum(if(life_cycle <= 2, revenue_value_usd, 0)) as r1usd,
+                            sum(if(life_cycle <= 0, revenue_value_usd, 0)) as r1usd,
                             sum(if(life_cycle <= 6, revenue_value_usd, 0)) as r7usd,
-                            mediasource
+                            media
                         from
                             (
                                 select
@@ -205,9 +102,9 @@ def getAndroidData2(sinceTimeStr,unitlTimeStr):
                                         to_date(install_day, 'yyyymmdd'),
                                         'dd'
                                     ) as life_cycle,
-                                    mediasource
+                                    mediasource as media
                                 from
-                                    dwd_base_event_purchase_afattribution
+                                    dwd_base_event_purchase_afattribution_realtime
                                 where
                                     app_package = "com.topwar.gp"
                                     and app = 102
@@ -219,14 +116,13 @@ def getAndroidData2(sinceTimeStr,unitlTimeStr):
                         group by
                             install_date,
                             uid,
-                            mediasource
+                            media
                     )
             )
         group by
             cv,
             install_date,
-            mediasource
-        ;
+            media;
     '''%(whenStr,sinceTimeStr,unitlTimeStr)
 
     print(sql)
@@ -261,13 +157,9 @@ def mergeData1AndData2(sinceTimeStr,unitlTimeStr):
 
 mediaList = [
     {'name':'google','codeList':['googleadwords_int']},
-    # {'name':'applovin','codeList':['applovin_int']},
-    {'name':'bytedance','codeList':['bytedanceglobal_int']},
-    # {'name':'unity','codeList':['unityads_int']},
-    # {'name':'apple','codeList':['Apple Search Ads']},
-    {'name':'facebook','codeList':['Social_facebook','restricted']},
-    # {'name':'snapchat','codeList':['snapchat_int']},
-    {'name':'unknown','codeList':[]}
+    # {'name':'bytedance','codeList':['bytedanceglobal_int']},
+    # {'name':'facebook','codeList':['Facebook Ads','Social_facebook','restricted']},
+    # {'name':'unknown','codeList':[]}
 ]
 
 def addMediaGroup(df):
@@ -312,6 +204,20 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+def createModFunc1():
+    mod = keras.Sequential(
+        [
+            layers.Dense(128,kernel_initializer='random_normal',bias_initializer='random_normal', activation="relu", input_shape=(64,)),
+            layers.Dropout(0.3),
+            layers.Dense(128, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu"),
+            layers.Dropout(0.3),
+            layers.Dense(1, kernel_initializer='random_normal',bias_initializer='random_normal',activation="relu")
+        ]
+    )
+    mod.compile(optimizer='RMSprop',loss='mse')
+    mod.summary()
+    return mod
+
 def createModFunc2():
     mod = keras.Sequential(
         [
@@ -326,7 +232,8 @@ def createModFunc2():
     mod.summary()
     return mod
 
-epochMax = 15000
+epochMax = 50000
+# epochMax = 1000
 
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
@@ -336,7 +243,7 @@ class LossAndErrorPrintingCallback(keras.callbacks.Callback):
             keys = list(logs.keys())
             str = 'epoch %d/%d:'%(epoch,epochMax)
             for key in keys:
-                str += '[%s]:%.2f '%(key,logs[key])
+                str += '[%s]:%.3f '%(key,logs[key])
             print(lossAndErrorPrintingCallbackSuffixStr,str)
 
 def getTrainX(trainDf):
@@ -374,8 +281,8 @@ def getTrainingData(df,trainRate=0.6):
 
     line = math.floor(len(trainXSs)*trainRate)
     
-    trainX = dataX[:line]
-    testX = dataX[line:]
+    trainX = trainXSs[:line]
+    testX = trainXSs[line:]
 
     trainY = dataY[:line]
     testY = dataY[line:]
@@ -390,7 +297,7 @@ def train(dataDf3,message):
     global lossAndErrorPrintingCallbackSuffixStr
     
     # earlyStoppingValLoss = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta = .1,patience=300)
-    for _ in range(3):
+    for _ in range(10):
         for media in mediaList:
             name = media['name']
         
@@ -401,7 +308,7 @@ def train(dataDf3,message):
             mod = createModFunc2()
 
             modPath = '/src/src/predSkan/androidMedia/mod/%s/'%filenameSuffix
-            checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.2f}-{val_loss:.2f}.h5')
+            checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.3f}-{val_loss:.3f}.h5')
         
             model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
                 filepath=checkpoint_filepath,
@@ -413,7 +320,8 @@ def train(dataDf3,message):
 
             lossAndErrorPrintingCallbackSuffixStr = name
 
-            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min, max = getTrainingData(dataDf3,0.6)
+            dataMediaDf = dataDf3.loc[dataDf3.media_group == name]
+            trainX, trainY, testX, testY, trainY0, testY0, trainY1, testY1, min, max = getTrainingData(dataMediaDf,0.6)
 
             history = mod.fit(trainX, trainY, epochs=epochMax, validation_data=(testX,testY)
                 ,callbacks=[
@@ -467,11 +375,11 @@ if __name__ == '__main__':
     if __debug__:
         print('debug 模式，并未真的sql')
     else:
-        df = mergeData1AndData2('20220501','20221215')
+        df = mergeData1AndData2('20220701','20230201')
 
         df = addMediaGroup(df)
         df4 = dataFill(df)
-        df4.to_csv(getFilename('AndroidMediaData3_20220501_20221215'))
+        df4.to_csv(getFilename('AndroidMediaDataRt20220701_20230201'))
 
-    df4 = pd.read_csv(getFilename('AndroidMediaData3_20220501_20221215'))
-    train(df4,'android media 3')
+    df4 = pd.read_csv(getFilename('AndroidMediaDataRt20220701_20230201'))
+    train(df4,'android media 1p7 func2 rt 1140')
