@@ -1,20 +1,13 @@
-import numpy as np
+import pandas as pd
 
-from tensorflow import keras
-from keras.models import Input, Model
-from keras.layers import Lambda
+df = pd.DataFrame(data = {
+    'a':[1,2,3,4,5]
+})
 
-def minus(inputs):
-    x, y = inputs
-    return (x+y)
+a = df.sample()
 
-a = Input(shape=(1,))
-b = Input(shape=(1,))
-minus_layer = Lambda(minus, name='minus')([a, b])
-model = Model(inputs=[a, b], outputs=[minus_layer])
+a = a.append(df.sample())
+a = a.append(df.sample())
+a = a.append(df.sample())
 
-v0 = np.array([5, 2, 3])
-v1 = np.array([8, 4, 1])
-
-print(model.predict([v0.reshape(1, -1), v1.reshape(1, -1)]))
-
+print(a,df)
