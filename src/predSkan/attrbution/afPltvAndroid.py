@@ -133,6 +133,14 @@ def createOneLine(getSimilarUserRetDf,exampleDf,message):
 
     p71 = r7usd/r1usd
 
+    # 做一些限定，用于减少误差
+    if p71 < 1:
+        p71 = 1
+    
+    # 10倍是随意想出来的，先暂定10倍吧
+    if p71 >10:
+        p71 = 10
+
     py = exampleDf['r1usd'].sum() * p71
     y = exampleDf['r7usd'].sum()
     mape = (py - y)/y
@@ -145,7 +153,7 @@ def createOneLine(getSimilarUserRetDf,exampleDf,message):
 # 输入df是添加完cv的DataFrame
 def main(df):
     
-    logFile = '/src/data/doc/cv/afPltv.csv'
+    logFile = '/src/data/doc/cv/afPltv1.csv'
 
     with open(logFile, 'w') as f:
         f.write('install_date,sample_n,t,idfa,media,mape,py,y\n')
@@ -159,7 +167,7 @@ def main(df):
         'bytedanceglobal_int'
     ]
 
-    for _ in range(100):
+    for _ in range(10):
         # 整体多来几次，看看是否取均值会更加稳定
         for idfa in (.2,.25,.3,.35):
             idfaDf = emuSKAN(df,idfa)
