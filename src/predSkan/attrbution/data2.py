@@ -99,11 +99,12 @@ def getDataFromSkan0New():
             and day >= 20221001 and day < 20230205
             and install_date >= '2022-10-01'
             and install_date < '2023-02-01'
-            and event_name in ('af_skad_install')
+            and event_name in ('af_skad_install','af_skad_redownload')
         group by
             install_date
         ;
     '''
+    # and event_name in ('af_skad_install')
     # and event_name in ('af_skad_install','af_skad_redownload')
     df = execSql(sql)
     return df
@@ -122,7 +123,7 @@ def getDataFromSkan1New():
             and install_date >= '2022-10-01'
             and install_date < '2023-02-01'
             and skad_conversion_value > 0
-            and event_name in ('af_skad_install')
+            and event_name in ('af_skad_install','af_skad_redownload')
         group by
             install_date
     ;
@@ -169,6 +170,6 @@ if __name__ == '__main__':
 
     mergeDf = pd.merge(afSumDf,skanDf,on = ['install_date'],suffixes = ('_af','_skan'))
 
-    mergeDf.to_csv(getFilename('afVsSkan'))
+    mergeDf.to_csv(getFilename('afVsSkan_reinstall'))
         
 

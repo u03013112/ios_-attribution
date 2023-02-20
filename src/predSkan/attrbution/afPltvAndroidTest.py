@@ -42,5 +42,5 @@ if __name__ == '__main__':
     else:
         print('正常 模式')
 
-    df = pd.read_csv('/src/data/doc/cv/afPltv.csv')
+    df = pd.read_csv('/src/data/doc/cv/afPltv1.csv')
     test(df)
