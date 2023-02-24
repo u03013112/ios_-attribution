@@ -157,11 +157,6 @@ def zkRetDataSwitch(zkRetDf):
     # 列转行
     return pd.melt(zkRetSumDf,id_vars='install_date',var_name='media',value_name='r7usd')
 
-
-# 出报告，其中主要是首日MAPE、R2 和 7日MAPE、R2
-def report(message):
-    return
-
 # zkRetDf 只撞库的结论，df是全部的原始数据，里面包括了idfa == 1的值
 # message 是扩展记录的信息，比如idfa比例+随机次数，暂时想到只有这
 def check(zkRetDf,df):
