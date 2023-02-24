@@ -72,7 +72,7 @@ def getDataFromAF():
                 from
                     ods_platform_appsflyer_events
                 where
-                    app_id = 'id1479198816'
+                    app_id = 'com.topwar.gp'
                     and zone = 0
                     and day >= 20221001
                     and day <= 20230205
@@ -496,5 +496,5 @@ if __name__ == '__main__':
 
     afDf = pd.read_csv(getFilename('afDataR7C_20221001_20230201'))
 
-    train(afDf,'test4 new log + pic')
+    train(afDf,'test6 android')
     
