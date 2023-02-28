@@ -45,3 +45,35 @@ skad_version 2.0 2.1 2.2 3.0 和 null，3.0和null最多，其他都很少
 1、iOS中有一些用户是SKAN中没有的，但是却可以在overview中被归因，这部分用户有多少？
 2、cv分布的相似程度，可能控制在千分之一的四舍五入？这个可以尝试设置几个档位，百分之一，千分之一，万分之一。精度越高，对范围要求越高。
 3、重复步骤4的次数，这个可以先来个100次，将每次的mape和累计算术平均的mape都做出来。
+
+
+# AF与SKAN对数
+AF文档 https://support.appsflyer.com/hc/zh-cn/articles/360011307357#display-by-1 中提到：
+激活日期是基于回传接收日期推算的，具体方法如下：回传接收日期 - 36小时 - [末次互动范围平均小时数]。默认[末次互动范围平均小时数]为12小时，但如果转化值为0，则末次互动范围平均小时数也为0。
+
+苹果文档 https://developer.apple.com/documentation/storekit/skadnetwork/receiving_ad_attributions_and_postbacks 中提到：
+For ads signed with version 3 or earlier, the device sends install-validation postbacks 0–24 hours after a 24-hour timer expires following the final call to update the conversion value. The total delay from the final conversion update to receiving the postback is 24–48 hours.
+
+没有明确的说明付费用户会比较提前。
+
+苹果文档 https://developer.apple.com/documentation/storekit/skadnetwork/3919928-updatepostbackconversionvalue 中提到：
+The 24-hour timer restarts each time the app calls this method with a valid conversionValue that’s greater than the previous value.
+所以付费用户的安装时间需要额外再往前追溯一天。
+
+所以可以用SKAN报告中的timestamp计算出他可能的真实安装时间范围。
+
+然后用真是安装时间范围，映射到2个自然日内，并按照具体时间将这个用户进行概率分割，比如他应该50% 2月1日，50% 2月2日，这样是否比直接将他定位到某日更加的准确？
+
+如果这样的话，就可以将之前统计的CV count变成小数，这样在人数较多的时候回更加的准确？
+
+另外，从AF处获得想法：利用SSOT将IDFA用户从SKAN中排除出去。
+排除掉的可能不只是IDFA。但是这种方案确实使得撞库的范围更准了。
+
+既然iOS不能有效的校验安装日期，那么就尝试用安卓数据来做测试。
+将安卓的媒体数据按照安装时间 + 24~48小时随机时间来计算误差。
+
+误差可以用安卓来准确率或者变差率计算，主要指标应该是每日的首日付费金额，7日付费金额 MAPE 与 线性相关性。
+
+这个方案的问题可能还是不能校验。可能还是需要用之前的校验方式来做测试。
+
+或者尝试多对几天进行汇总，降低误差。

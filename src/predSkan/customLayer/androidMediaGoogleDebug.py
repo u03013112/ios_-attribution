@@ -1,10 +1,4 @@
-# 自定义层的分媒体预测
-# 用安卓开始测试
-# 先尝试只分割一个媒体，即Google
-# 将剩余的部分全部算作other
-# 收日预测7日，用大盘数据来做目标
-# 在大盘数据达到一定的准确程度（MAPE）的情况下
-# 将最好的结果拿出来，查看Google的单独准确程度
+# 为了发现为什么媒体的神经网络不能很有效的学到内容
 import datetime
 
 import numpy as np
@@ -26,7 +20,7 @@ def getDataFromAF():
         if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
             continue
         whenStr += 'when r1usd>%d and r1usd<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
-
+    # 安卓没有idfv，只能用af id
     sql = '''
         select
             cv,
@@ -165,12 +159,20 @@ def std(dataX,min,max):
 # 以供后续处理
 def dataStep1(df):
     mediaDf = df.loc[df.media_group == 'google']
+    mediaDf.to_csv(getFilename('cccDebug01'))
     media64Df = mediaDf.groupby(['install_date','cv']).agg('sum').sort_values(by=['install_date','cv'])
+    print('media64Df',media64Df)
+    
     media64 = getTrainX(media64Df)
+    print('media64',media64)
     media1Df = mediaDf.groupby(['install_date']).agg('sum').sort_values(by=['install_date'])
     media1 = media1Df['sumr1usd'].to_numpy()
     mediaMin,mediaMax = getXMinAndMaxFromTrainX(media64)
+    print('mediaMin',mediaMin)
+    print('mediaMax',mediaMax)
+
     media64 = std(media64,mediaMin,mediaMax)
+    print('media64',media64)
     # TODO:save mediaMin,mediaMax here
 
     otherDf = df.loc[df.media_group == 'unknown']
@@ -197,6 +199,7 @@ def dataStep2(media64,media1,other64,other1,y,yMedia,yOther):
     other1 = other1.reshape(-1,1)
 
     x = np.concatenate((media64,media1,other64,other1),axis=1)
+    # x = np.concatenate((other64,other1,media64,media1),axis=1)
     # 简单切割一下，为了分出训练集与测试集
     trainingX = x[0:98]
     testingX = x[98:123]
@@ -213,7 +216,7 @@ def dataStep2(media64,media1,other64,other1,y,yMedia,yOther):
     return trainingX,testingX,trainingY,testingY,trainingMY,testingMY,trainingOY,testingOY
 
 from tensorflow import keras
-epochMax = 300
+epochMax = 100
 # epochMax = 15000
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
@@ -256,14 +259,20 @@ def train(dataDf,message):
         weight = np.load('/src/data/s20230224.npy')
         weight = weight[0:98]
 
+        pd.DataFrame(trainingX).to_csv('/src/data/ccctrainingX.csv')
+        pd.DataFrame(trainingY).to_csv('/src/data/ccctrainingY.csv')
+
+        pd.DataFrame(testingX).to_csv('/src/data/ccctestingX.csv')
+        pd.DataFrame(testingY).to_csv('/src/data/ccctestingY.csv')
+
         history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
             ,callbacks=[
                 # earlyStoppingValLoss,
                 model_checkpoint_callback,
                 LossAndErrorPrintingCallback()
             ]
-            # ,sample_weight = weight
-            ,batch_size=32
+            ,sample_weight = weight
+            ,batch_size=128
             ,verbose=0
             )
         # 训练完成可以把mod清理掉了
@@ -500,5 +509,5 @@ if __name__ == '__main__':
 
     afDf = pd.read_csv(getFilename('afDataR7C_20221001_20230201'))
 
-    train(afDf,'test10 android new data')
+    train(afDf,'test9 android debug switch m&o')
     
