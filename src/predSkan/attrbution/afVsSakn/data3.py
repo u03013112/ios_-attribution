@@ -1,4 +1,6 @@
-# 代码整理，为了方便出报告
+# 进行多天的汇总，
+# 既然一天不能对齐，尝试多天，看看是否可以对齐
+
 import os
 import numpy as np
 import pandas as pd
@@ -282,58 +284,72 @@ def androidCheck(dfRandomSum,df0Sum,i):
     # df2.to_csv(getFilename('androidUserDataHours2'))
     
     retDf = androidCheckFinal(df0Sum,df2,'Self',i)
-    retDf.to_csv(getFilename('androidUserDataHours3'))
+    # retDf.to_csv(getFilename('androidUserDataHours3'))
             
     
 # 和准确数据做对比
 # 输入应该是原始数据和算法生成数据，两个都应该是汇总完成的数据
 def androidCheckFinal(df0,df4,message,i=0):
+    dateDf = pd.DataFrame({'install_date':df0['install_date'].unique()})
+    dateDf = dateDf.sort_values(by = ['install_date'],ignore_index=True)
+    dateDf.loc[:,'i0'] = np.arange(len(dateDf))
     
-    df0 = df0.groupby(by=['media_group','install_date'],as_index=False).agg({
-        'count':'sum',
-        'r1usd':'sum',
-        'r7usd':'sum',
-    })
 
-    df4 = df4.groupby(by=['media_group','install_date'],as_index=False).agg({
-        'count':'sum',
-        'r1usd':'sum',
-        'r7usd':'sum',
-    })
+    for d in (1,3,7,14,30):
+        dateDfCopy = dateDf.copy(deep = True)
+        dateDfCopy.loc[:,'i1'] = dateDfCopy['i0']%(d)
+        dateDfCopy.loc[:,'install_date_group'] = pd.to_datetime(
+            (pd.to_datetime(dateDfCopy['install_date'],format='%Y-%m-%d').astype(int)/ 10**9 - dateDfCopy['i1']*24*3600),
+            unit='s'
+        ).dt.strftime('%Y-%m-%d')
 
-    mergeDf = df0.merge(df4,how = 'left',on = ['media_group','install_date'],suffixes=('_0','_4'))
-    mergeDf = mergeDf.sort_values(by = ['install_date','media_group'],ignore_index= True)
-
-    mergeDf.loc[:,'mape1'] = (mergeDf['r1usd_0'] - mergeDf['r1usd_4'])/mergeDf['r1usd_0']
-    mergeDf.loc[mergeDf.mape1 < 0,'mape1'] *= -1
-
-    mergeDf.loc[:,'mape7'] = (mergeDf['r7usd_0'] - mergeDf['r7usd_4'])/mergeDf['r7usd_0']
-    mergeDf.loc[mergeDf.mape7 < 0,'mape7'] *= -1
-
-    mergeDf.replace([np.inf, -np.inf], 0, inplace=True)
-
-    for media in mediaList:
-        name = media['name']
-        df = mergeDf.loc[mergeDf.media_group == name]
+        df0Group = df0.merge(dateDfCopy,how='left',on=['install_date'],suffixes = ('',''))
+        df0Group2 = df0Group.groupby(by=['media_group','install_date_group'],as_index=False).agg({
+            'count':'sum',
+            'r1usd':'sum',
+            'r7usd':'sum',
+        })
         
-        print(name,'mape1',df['mape1'].mean())
-        print(name,'mape7',df['mape7'].mean())
+        df4Group = df4.merge(dateDfCopy,how='left',on=['install_date'],suffixes = ('',''))
+        df4Group2 = df4Group.groupby(by=['media_group','install_date_group'],as_index=False).agg({
+            'count':'sum',
+            'r1usd':'sum',
+            'r7usd':'sum',
+        })
+        
+        mergeDf = df0Group2.merge(df4Group2,how = 'left',on = ['media_group','install_date_group'],suffixes=('_0','_4'))
+        mergeDf = mergeDf.sort_values(by = ['media_group','install_date_group'],ignore_index= True)
 
-    print('total mape1',mergeDf['mape1'].mean())
-    print('total mape7',mergeDf['mape7'].mean())
-    # mergeDf.to_csv(getFilename('androidUserDataHours5_20221001_20230201'))
+        mergeDf.loc[:,'mape1'] = (mergeDf['r1usd_0'] - mergeDf['r1usd_4'])/mergeDf['r1usd_0']
+        mergeDf.loc[mergeDf.mape1 < 0,'mape1'] *= -1
 
-    # 记录日志
-    report(mergeDf,message,i)
+        mergeDf.loc[:,'mape7'] = (mergeDf['r7usd_0'] - mergeDf['r7usd_4'])/mergeDf['r7usd_0']
+        mergeDf.loc[mergeDf.mape7 < 0,'mape7'] *= -1
+
+        mergeDf.replace([np.inf, -np.inf], 0, inplace=True)
+
+        for media in mediaList:
+            name = media['name']
+            df = mergeDf.loc[mergeDf.media_group == name]
+            
+            print(name,'mape1',df['mape1'].mean())
+            print(name,'mape7',df['mape7'].mean())
+
+        print('total mape1',mergeDf['mape1'].mean())
+        print('total mape7',mergeDf['mape7'].mean())
+        # mergeDf.to_csv(getFilename('androidUserDataHours5_20221001_20230201'))
+
+        # 记录日志
+        report(mergeDf,message,i,d)
     return mergeDf
 
 import matplotlib.pyplot as plt
-def report(mergeDf,message,i = 0):
-    logFile = '/src/data/doc/ds/afVsSkan.csv'
+def report(mergeDf,message,i = 0,d = 1):
+    logFile = '/src/data/doc/ds/afVsSkanDays.csv'
 
     if os.path.exists(logFile) == False:
         with open(logFile, 'w') as f:
-            f.write('media,mape1,mape7,message,i\n')
+            f.write('media,mape1,mape7,message,days,i\n')
     
     
     with open(logFile, 'a') as f:
@@ -341,10 +357,10 @@ def report(mergeDf,message,i = 0):
             name = media['name']
             df = mergeDf.loc[mergeDf.media_group == name]
             
-            line = '%s,%.3f,%.3f,%s,%d\n'%(name,df['mape1'].mean(),df['mape7'].mean(),message,i)
+            line = '%s,%.3f,%.3f,%s,%d,%d\n'%(name,df['mape1'].mean(),df['mape7'].mean(),message,d,i)
             f.write(line)    
 
-        line = '%s,%.3f,%.3f,%s,%d\n'%('total',mergeDf['mape1'].mean(),mergeDf['mape7'].mean(),message,i)
+        line = '%s,%.3f,%.3f,%s,%d,%d\n'%('total',mergeDf['mape1'].mean(),mergeDf['mape7'].mean(),message,d,i)
         f.write(line)
 
     
@@ -352,34 +368,34 @@ def report(mergeDf,message,i = 0):
     # mergeDf = pd.read_csv('/src/data/tmp.csv')
     # print(mergeDf)
 
-    mergeDf.set_index(["install_date"], inplace=True)
+    # mergeDf.set_index(["install_date"], inplace=True)
 
-    for media in mediaList:
-        name = media['name']
+    # for media in mediaList:
+    #     name = media['name']
 
-        df = mergeDf.loc[mergeDf.media_group == name]
+    #     df = mergeDf.loc[mergeDf.media_group == name]
 
-        plt.title("r1usd %s"%message)
-        df['r1usd_0'].plot(label = 'real')
-        df['r1usd_4'].plot(label = 'pred')
-        plt.xticks(rotation=45)
-        plt.legend()
-        plt.tight_layout()
-        filename = os.path.join('/src/data/doc/ds/', '%s_%s%d_r1usd.png'%(name,message,i))
-        plt.savefig(filename)
-        print('save pic',filename)
-        plt.clf()
+    #     plt.title("r1usd %s"%message)
+    #     df['r1usd_0'].plot(label = 'real')
+    #     df['r1usd_4'].plot(label = 'pred')
+    #     plt.xticks(rotation=45)
+    #     plt.legend()
+    #     plt.tight_layout()
+    #     filename = os.path.join('/src/data/doc/ds/', '%s_%s_%d_%d_r1usd.png'%(name,message,d,i))
+    #     plt.savefig(filename)
+    #     print('save pic',filename)
+    #     plt.clf()
 
-        plt.title("r7usd %s"%message)
-        df['r7usd_0'].plot(label = 'real')
-        df['r7usd_4'].plot(label = 'pred')
-        plt.xticks(rotation=45)
-        plt.legend()
-        plt.tight_layout()
-        filename = os.path.join('/src/data/doc/ds/', '%s_%s%d_r7usd.png'%(name,message,i))
-        plt.savefig(filename)
-        print('save pic',filename)
-        plt.clf()
+    #     plt.title("r7usd %s"%message)
+    #     df['r7usd_0'].plot(label = 'real')
+    #     df['r7usd_4'].plot(label = 'pred')
+    #     plt.xticks(rotation=45)
+    #     plt.legend()
+    #     plt.tight_layout()
+    #     filename = os.path.join('/src/data/doc/ds/', '%s_%s_%d_%d_r7usd.png'%(name,message,d,i))
+    #     plt.savefig(filename)
+    #     print('save pic',filename)
+    #     plt.clf()
 
 # 对比实验：用AF的方案进行安装日期的计算，然后重复上述验算，
 # 计算r1usd和r7usd的差异
@@ -400,7 +416,7 @@ def androidCheck2(dfRandomSum,df0Sum,i):
     })
 
     retDf = androidCheckFinal(df0Sum,df2,'AF',i)
-    retDf.to_csv(getFilename('androidUserDataHours3AF'))
+    # retDf.to_csv(getFilename('androidUserDataHours3AF'))
 
 
 
@@ -413,8 +429,19 @@ def androidCheck2(dfRandomSum,df0Sum,i):
 
 # 对比实验：用AF的方案进行对比
 
-if __name__ == '__main__':
+def test():
+    df0Sum = pd.read_csv(getFilename('androidUserDataHours0'))
+    df = pd.DataFrame({'install_date':df0Sum['install_date'].unique()})
+    df.loc[:,'i0'] = np.arange(len(df))
 
+    df.loc[:,'i1'] = df['i0']%3
+    df.loc[:,'install_date_group'] = pd.to_datetime(
+        (pd.to_datetime(df['install_date'],format='%Y-%m-%d').astype(int)/ 10**9 - df['i1']*24*3600),
+        unit='s'
+    ).dt.strftime('%Y-%m-%d')
+    print(df)
+
+if __name__ == '__main__':
     df0 = pd.read_csv(getFilename('androidUserData_20221001_20230201'))
     df0Sum = pd.read_csv(getFilename('androidUserDataHours0'))
 
