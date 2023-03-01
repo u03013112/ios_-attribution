@@ -1,9 +1,5 @@
-# AF 数据与 SKAN 数据对比
-# 与之前的区别，
-# 重新推算安装时间区间，并将安装时间按日然日计算几率（精确到小时）
-# 然后按照安装日几率将 count，r1usd，r7usd拆开
-# 先把上述值算出来，然后再进行准确度校验
-
+# 代码整理，为了方便出报告
+import os
 import numpy as np
 import pandas as pd
 
@@ -155,9 +151,9 @@ def addSkanHour(df):
     df.loc[:,'skan_hour'] = pd.to_datetime(df['timestamp'],unit='s').dt.strftime('%Y-%m-%d %H')
     return df
 
-# 添加安装日期，按照可能区间分概率
-# 输入是getAndroidDataFromAF的返回值，最原始数据
-def addInstallDateByJVStep1(df0):
+# 添加一个模拟的skan报告时间，并记录在timestamp字段
+# 里面有随机的情况
+def addTimestamp(df0):
     df = df0.copy(deep=True)
     df = addCV(df)
     df = addMediaGroup(df)
@@ -171,6 +167,11 @@ def addInstallDateByJVStep1(df0):
         'r7usd':'sum',
     })
     df.loc[:,'timestamp'] = pd.to_datetime(df['skan_hour'],format='%Y-%m-%d %H').astype(int)/ 10**9
+    return df
+
+# 添加安装日期，按照可能区间分概率
+# 输入是getAndroidDataFromAF的返回值，最原始数据
+def addInstallDateByJVStep1(df):
     # 按照苹果文档，安装日期区间推算
     # 未付费用户 介于 -48~-24小时
     df.loc[df.cv == 0,'install_timestamp_min'] = df['timestamp'] - 48*3600
@@ -196,6 +197,7 @@ import datetime
 # 拆分安装日期可能性
 # 逐行处理，这个步骤会很慢
 # 将count，r1usd 和 r7usd 按照概率拆分
+# 这里面是一个重新拆表
 def addInstallDateByJVStep2(df):
     spliteRetDf = pd.DataFrame()
 
@@ -271,48 +273,29 @@ def addMediaGroup(df):
 # 将安卓用户按照SKAN的方式进行模拟，计算（随机）出SKAN上报时间
 # 再按照上述方法用上报时间将 count，r1usd，r7usd拆开
 # 计算r1usd和r7usd的差异
-def androidCheck():
-    if __debug__:
-        print('debug 模式，并未真的sql')
-    else:
-        df0 = pd.read_csv(getFilename('androidUserData_20221001_20230201'))
-        df1 = addInstallDateByJVStep1(df0)
-        df1.to_csv(getFilename('androidUserDataHours1'))
-        # df = pd.read_csv(getFilename('androidUserDataHours1'))
-        df2 = addInstallDateByJVStep2(df1)
-        df2.to_csv(getFilename('androidUserDataHours2'))
-        
-
-        # 给原始数据汇总
-        df0 = addCV(df0)
-        df0 = addMediaGroup(df0)
-        df0.loc[:,'count'] = 1
-        df0 = df0.groupby(by=['media_group','install_date','cv'],as_index=False).agg({
-            'count':'sum',
-            'r1usd':'sum',
-            'r7usd':'sum',
-        })
-        df0.to_csv(getFilename('androidUserDataHours0'))
-
-    df0 = pd.read_csv(getFilename('androidUserDataHours0'))
-    df2 = pd.read_csv(getFilename('androidUserDataHours2'))
-    retDf = androidCheckFinal(df0,df2)
+def androidCheck(dfRandomSum,df0Sum,i):
+    df = dfRandomSum.copy(deep = True)
+    df1 = addInstallDateByJVStep1(df)
+    # df1.to_csv(getFilename('androidUserDataHours1'))
+    
+    df2 = addInstallDateByJVStep2(df1)
+    # df2.to_csv(getFilename('androidUserDataHours2'))
+    
+    retDf = androidCheckFinal(df0Sum,df2,'Self',i)
     retDf.to_csv(getFilename('androidUserDataHours3'))
             
     
 # 和准确数据做对比
 # 输入应该是原始数据和算法生成数据，两个都应该是汇总完成的数据
-def androidCheckFinal(df0,df4):
+def androidCheckFinal(df0,df4,message,i=0):
     
     df0 = df0.groupby(by=['media_group','install_date'],as_index=False).agg({
-    # df0 = df0.groupby(by=['install_date'],as_index=False).agg({
         'count':'sum',
         'r1usd':'sum',
         'r7usd':'sum',
     })
 
     df4 = df4.groupby(by=['media_group','install_date'],as_index=False).agg({
-    # df4 = df4.groupby(by=['install_date'],as_index=False).agg({
         'count':'sum',
         'r1usd':'sum',
         'r7usd':'sum',
@@ -339,27 +322,70 @@ def androidCheckFinal(df0,df4):
     print('total mape1',mergeDf['mape1'].mean())
     print('total mape7',mergeDf['mape7'].mean())
     # mergeDf.to_csv(getFilename('androidUserDataHours5_20221001_20230201'))
+
+    # 记录日志
+    report(mergeDf,message,i)
     return mergeDf
 
+import matplotlib.pyplot as plt
+def report(mergeDf,message,i = 0):
+    logFile = '/src/data/doc/ds/afVsSkan.csv'
+
+    if os.path.exists(logFile) == False:
+        with open(logFile, 'w') as f:
+            f.write('media,mape1,mape7,message,i\n')
+    
+    
+    with open(logFile, 'a') as f:
+        for media in mediaList:
+            name = media['name']
+            df = mergeDf.loc[mergeDf.media_group == name]
+            
+            line = '%s,%.2f,%.2f,%s,%d\n'%(name,df['mape1'].mean(),df['mape7'].mean(),message,i)
+            f.write(line)    
+
+        line = '%s,%.2f,%.2f,%s,%d\n'%('total',mergeDf['mape1'].mean(),mergeDf['mape7'].mean(),message,i)
+        f.write(line)
+
+    
+    # mergeDf.to_csv('/src/data/tmp.csv')
+    # mergeDf = pd.read_csv('/src/data/tmp.csv')
+    # print(mergeDf)
+
+    mergeDf.set_index(["install_date"], inplace=True)
+
+    for media in mediaList:
+        name = media['name']
+
+        df = mergeDf.loc[mergeDf.media_group == name]
+
+        plt.title("r1usd %s"%message)
+        df['r1usd_0'].plot(label = 'real')
+        df['r1usd_4'].plot(label = 'pred')
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.tight_layout()
+        filename = os.path.join('/src/data/doc/ds/', '%s_%s%d_r1usd.png'%(name,message,i))
+        plt.savefig(filename)
+        print('save pic',filename)
+        plt.clf()
+
+        plt.title("r7usd %s"%message)
+        df['r7usd_0'].plot(label = 'real')
+        df['r7usd_4'].plot(label = 'pred')
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.tight_layout()
+        filename = os.path.join('/src/data/doc/ds/', '%s_%s%d_r7usd.png'%(name,message,i))
+        plt.savefig(filename)
+        print('save pic',filename)
+        plt.clf()
 
 # 对比实验：用AF的方案进行安装日期的计算，然后重复上述验算，
 # 计算r1usd和r7usd的差异
 
-def androidCheck2():
-    df0 = pd.read_csv(getFilename('androidUserData_20221001_20230201'))
-    df = df0.copy(deep=True)
-    df = addCV(df)
-    df = addMediaGroup(df)
-    df = addSkanHour(df)
-
-    df.loc[:,'count'] = 1
-    # 按小时进行汇总
-    df = df.groupby(by=['media_group','skan_hour','cv'],as_index=False).agg({
-        'count':'sum',
-        'r1usd':'sum',
-        'r7usd':'sum',
-    })
-    df.loc[:,'timestamp'] = pd.to_datetime(df['skan_hour'],format='%Y-%m-%d %H').astype(int)/ 10**9
+def androidCheck2(dfRandomSum,df0Sum,i):
+    df = dfRandomSum.copy(deep = True)
     # 按照AF规则
     # 激活日期是基于回传接收日期推算的，具体方法如下：回传接收日期 - 36小时 - [末次互动范围平均小时数]。默认[末次互动范围平均小时数]为12小时，但如果转化值为0，则末次互动范围平均小时数也为0。
     df.loc[df.cv == 0,'install_timestamp'] = df['timestamp'] - 36*3600
@@ -373,21 +399,7 @@ def androidCheck2():
         'r7usd':'sum',
     })
 
-    # df2.to_csv(getFilename('androidUserDataHours2AF'))
-    # # 给原始数据汇总
-    # df0 = addCV(df0)
-    # df0 = addMediaGroup(df0)
-    # df0.loc[:,'count'] = 1
-    # df0 = df0.groupby(by=['media_group','install_date','cv'],as_index=False).agg({
-    #     'count':'sum',
-    #     'r1usd':'sum',
-    #     'r7usd':'sum',
-    # })
-    # df0.to_csv(getFilename('androidUserDataHours0'))
-
-    df0 = pd.read_csv(getFilename('androidUserDataHours0'))
-    # df2 = pd.read_csv(getFilename('androidUserDataHours2'))
-    retDf = androidCheckFinal(df0,df2)
+    retDf = androidCheckFinal(df0Sum,df2,'AF',i)
     retDf.to_csv(getFilename('androidUserDataHours3AF'))
 
 
@@ -402,12 +414,17 @@ def androidCheck2():
 # 对比实验：用AF的方案进行对比
 
 if __name__ == '__main__':
-    if __debug__:
-        print('debug 模式，并未真的sql')
-    # else:
-        # df = getAndroidDataFromAF()
-        # df.to_csv(getFilename('androidUserData_20221001_20230201'))
 
-    androidCheck()
-    androidCheck2()
+    df0 = pd.read_csv(getFilename('androidUserData_20221001_20230201'))
+    df0Sum = pd.read_csv(getFilename('androidUserDataHours0'))
+
+    # df0 = df0.loc[df0.install_date < '2022-10-10']
+    # df0Sum = df0Sum.loc[df0Sum.install_date < '2022-10-10']
+
+
+    for i in range(10):
+        dfRandomSum = addTimestamp(df0)
+        
+        androidCheck(dfRandomSum,df0Sum,i)
+        androidCheck2(dfRandomSum,df0Sum,i)
     
