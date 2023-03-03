@@ -1,6 +1,7 @@
 import pandas as pd
 # cvMap here
 afCvMapDataFrame = pd.read_csv('/src/afCvMap.csv')
+ssotCvMapDataFrame = pd.read_csv('/src/ssotCvMap.csv')
 
 def getFilename(filename):
     return '/src/data/%s.csv'%(filename)
