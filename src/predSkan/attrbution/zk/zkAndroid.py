@@ -426,16 +426,16 @@ def installDateGroupTest():
     mergeDf.to_csv(getFilename('installDateGroupTest'))
 
 def main():
-    # step1()
-    # step2()
-    # step3()
+    step1()
+    step2()
+    step3()
     step4()
     step5()
     step6()
     step7()
     step8()
     report()
-    # installDateGroupTest()
+    installDateGroupTest()
 
 
 if __name__ == '__main__':
