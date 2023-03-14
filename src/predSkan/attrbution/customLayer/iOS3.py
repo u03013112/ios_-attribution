@@ -3,6 +3,11 @@
 # 2、媒体中添加applovin
 # 3、预测部分额外添加30日预测
 
+# 在这里可能还是存在过多的过拟合现象出现
+# 即将一些媒体的倍率预测成0，另外的媒体预测的比较大
+# 为了避免这种情况，首先要获得这种情况的判定标准，或者偏差判定
+# 在createDoc的时候进行判断，如果有任何媒体的倍率被计算出0，就要将mape+100，防止这种结果扰乱结果
+# 然后再尝试用l2正则化进行防止过拟合，或者其他模型尝试
 
 import datetime
 import pandas as pd
@@ -13,7 +18,7 @@ import numpy as np
 sys.path.append('/src')
 from src.maxCompute import execSql
 from src.tools import afCvMapDataFrame
-from src.predSkan.attrbution.customLayer.createMod import createModEasy04,createModEasy04_adam,createModEasy04_a,createModEasy04_b
+from src.predSkan.attrbution.customLayer.createMod import createModEasy05_b,createModEasy05_l2
 from src.predSkan.tools.ai import purgeRetCsv,logUpdate
 
 # 
@@ -27,6 +32,7 @@ def getFilename(filename):
 
 # 暂时只看着3个媒体
 mediaList = [
+    {'name':'applovin','codeList':['applovin_int'],'sname':'Al'},
     {'name':'bytedance','codeList':['bytedanceglobal_int'],'sname':'Bd'},
     {'name':'facebook','codeList':['Social_facebook','restricted','Facebook Ads','facebook','FacebookAds'],'sname':'Fb'},
     {'name':'google','codeList':['googleadwords_int'],'sname':'Gg'},
@@ -118,8 +124,6 @@ def step0():
     if __debug__:
         skanDf4.to_csv(getFilename('step0_skanDf4'))
         afDf4.to_csv(getFilename('step0_afDf4'))
-    
-
 
 # 返回自然量
 def step1():
@@ -153,6 +157,7 @@ def step1():
 # 按照顺序 ： bd，fb，gg
 # 暂时只看着3个媒体
 mediaNameList = [
+    'applovin',
     'bytedance',
     'facebook',
     'google'
@@ -298,19 +303,21 @@ def step6(np64List):
     mediaNp1 = mediaSumDf['usd'].to_numpy().reshape((-1,1))
     np1List.append(mediaNp1)
 
-    print(np64List[0].shape,np1List[0].shape,
-        np64List[1].shape,np1List[1].shape,
-        np64List[2].shape,np1List[2].shape,
-        np64List[3].shape,np1List[3].shape)
+    # print(np64List[0].shape,np1List[0].shape,
+    #     np64List[1].shape,np1List[1].shape,
+    #     np64List[2].shape,np1List[2].shape,
+    #     np64List[3].shape,np1List[3].shape)
 
     x = np.concatenate(
         (np64List[0],np1List[0],
         np64List[1],np1List[1],
         np64List[2],np1List[2],
-        np64List[3],np1List[3])
+        np64List[3],np1List[3],
+        np64List[4],np1List[4],
+        )
     ,axis=1)
     
-    # print(x.shape)
+    print(x.shape)
 
     return x
 
@@ -334,69 +341,73 @@ def train(x,y,message):
     name = 'iOSCustom'
     global lossAndErrorPrintingCallbackSuffixStr
     lossAndErrorPrintingCallbackSuffixStr = name
-    for _ in range(10):
-        filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
-        # mod = createModEasy04()
-        # mod = createModEasy04_adam()
-        mod = createModEasy04_b()
-
-        modPath = '/src/src/predSkan/androidTotal/mod/%s%s/'%(name,filenameSuffix)
-        checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.3f}-{val_loss:.3f}.h5')
     
-        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_filepath,
-            save_weights_only=False,
-            monitor='val_loss',
-            mode='min',
-            save_best_only=True
-        )
+    m = message
+    for w in (1000.0,10000.0,100000.0):
+        message = '%s%.0f'%(m,w)
+        for _ in range(100):
+            filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
+            
+            # mod = createModEasy05_b()
+            mod = createModEasy05_l2(w)
 
-        trainingX = x[0:180]
-        trainingY = y[0:180]
-        testingX = x[180:]
-        testingY = y[180:]
-
-        history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
-            ,callbacks=[
-                # earlyStoppingValLoss,
-                model_checkpoint_callback,
-                LossAndErrorPrintingCallback()
-            ]
-            ,batch_size=32
-            ,verbose=0
+            modPath = '/src/src/predSkan/androidTotal/mod/%s%s/'%(name,filenameSuffix)
+            checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.3f}-{val_loss:.3f}.h5')
+        
+            model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+                filepath=checkpoint_filepath,
+                save_weights_only=False,
+                monitor='val_loss',
+                mode='min',
+                save_best_only=True
             )
-        # 训练完成可以把mod清理掉了
-        tf.keras.backend.clear_session()
-        del mod
 
-        logDir = '/src/data/doc/customLayer/'
+            trainingX = x[0:180]
+            trainingY = y[0:180]
+            testingX = x[180:]
+            testingY = y[180:]
 
-        os.makedirs(logDir,exist_ok=True)
-        # 将每次的明细结果放进去，
-        docDirname = '%s/%s'%(logDir,name+filenameSuffix)
-        val_loss = createDoc(modPath,trainingX,trainingY,testingX,testingY,history,docDirname,message)
-        
-        retCsvFilename = os.path.join(logDir,'ret.csv')
-        if os.path.exists(retCsvFilename):
-            retDf = pd.read_csv(retCsvFilename)
-        else:
-            retDf = pd.DataFrame(data = {
-                'path':[],
-                'val_loss':[],
-                'message':[]
-            })
-        logData = {
-            'path':[docDirname],
-            'val_loss':[val_loss],
-            'message':[message]
-        }
-        retDf = retDf.append(pd.DataFrame(data=logData))
-        # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
-        
-        retDf.to_csv(retCsvFilename)
-        purgeRetCsv(retCsvFilename)
-        logFilename = os.path.join(logDir,'log.txt')
-        logUpdate(retCsvFilename,logFilename,name)
+            history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
+                ,callbacks=[
+                    # earlyStoppingValLoss,
+                    model_checkpoint_callback,
+                    LossAndErrorPrintingCallback()
+                ]
+                ,batch_size=32
+                ,verbose=0
+                )
+            # 训练完成可以把mod清理掉了
+            tf.keras.backend.clear_session()
+            del mod
+
+            logDir = '/src/data/doc/customLayer/'
+
+            os.makedirs(logDir,exist_ok=True)
+            # 将每次的明细结果放进去，
+            docDirname = '%s/%s'%(logDir,name+filenameSuffix)
+            val_loss = createDoc(modPath,trainingX,trainingY,testingX,testingY,history,docDirname,message)
+            
+            retCsvFilename = os.path.join(logDir,'ret.csv')
+            if os.path.exists(retCsvFilename):
+                retDf = pd.read_csv(retCsvFilename)
+            else:
+                retDf = pd.DataFrame(data = {
+                    'path':[],
+                    'val_loss':[],
+                    'message':[]
+                })
+            logData = {
+                'path':[docDirname],
+                'val_loss':[val_loss],
+                'message':[message]
+            }
+            retDf = retDf.append(pd.DataFrame(data=logData))
+            # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
+            
+            retDf.to_csv(retCsvFilename)
+            purgeRetCsv(retCsvFilename)
+            logFilename = os.path.join(logDir,'log.txt')
+            logUpdate(retCsvFilename,logFilename,name)
 
 from shutil import copyfile
 import matplotlib.pyplot as plt
@@ -425,15 +436,17 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
 
     mod = tf.keras.models.load_model(modFilename)
     
-    bdMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-0').output)
-    fbMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-1').output)
-    ggMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-2').output)
-    ogMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-3').output)
+    alMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-0').output)
+    bdMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-1').output)
+    fbMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-2').output)
+    ggMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-3').output)
+    ogMod1 = keras.models.Model(mod.input,mod.get_layer('AddOne-4').output)
     
-    bdMod2 = keras.models.Model(mod.input,mod.get_layer('muti-0').output)
-    fbMod2 = keras.models.Model(mod.input,mod.get_layer('muti-1').output)
-    ggMod2 = keras.models.Model(mod.input,mod.get_layer('muti-2').output)
-    ogMod2 = keras.models.Model(mod.input,mod.get_layer('muti-3').output)
+    alMod2 = keras.models.Model(mod.input,mod.get_layer('muti-0').output)
+    bdMod2 = keras.models.Model(mod.input,mod.get_layer('muti-1').output)
+    fbMod2 = keras.models.Model(mod.input,mod.get_layer('muti-2').output)
+    ggMod2 = keras.models.Model(mod.input,mod.get_layer('muti-3').output)
+    ogMod2 = keras.models.Model(mod.input,mod.get_layer('muti-4').output)
 
     retStr = '%s\n'%message
     retStr += '%s\n'%bestMod['path']
@@ -442,11 +455,13 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     trainY = trainY.reshape(-1)
     trainYP = mod.predict(trainX).reshape(-1)
 
+    trainYPAl1 = alMod1.predict(trainX).reshape(-1)
     trainYPBd1 = bdMod1.predict(trainX).reshape(-1)
     trainYPFb1 = fbMod1.predict(trainX).reshape(-1)
     trainYPGg1 = ggMod1.predict(trainX).reshape(-1)
     trainYPOg1 = ogMod1.predict(trainX).reshape(-1)
 
+    trainYPAl2 = alMod2.predict(trainX).reshape(-1)
     trainYPBd2 = bdMod2.predict(trainX).reshape(-1)
     trainYPFb2 = fbMod2.predict(trainX).reshape(-1)
     trainYPGg2 = ggMod2.predict(trainX).reshape(-1)
@@ -456,10 +471,12 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     pd.DataFrame(data={
         'true':list(trainY),
         'pred':list(trainYP),
+        'predAl1':list(trainYPAl1),
         'predBd1':list(trainYPBd1),
         'predFb1':list(trainYPFb1),
         'predGg1':list(trainYPGg1),
         'predOg1':list(trainYPOg1),
+        'predAl2':list(trainYPAl2),
         'predBd2':list(trainYPBd2),
         'predFb2':list(trainYPFb2),
         'predGg2':list(trainYPGg2),
@@ -481,6 +498,7 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     plt.clf()
 
     plt.title("r7/r1 train")
+    plt.plot(trainYPAl1,label='al')
     plt.plot(trainYPBd1,label='bd')
     plt.plot(trainYPFb1,label='fb')
     plt.plot(trainYPGg1,label='gg')
@@ -497,24 +515,27 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     testY = testY.reshape(-1)
     testYP = mod.predict(testX).reshape(-1)
 
+    testYPAl1 = alMod1.predict(testX).reshape(-1)
     testYPBd1 = bdMod1.predict(testX).reshape(-1)
     testYPFb1 = fbMod1.predict(testX).reshape(-1)
     testYPGg1 = ggMod1.predict(testX).reshape(-1)
     testYPOg1 = ogMod1.predict(testX).reshape(-1)
 
+    testYPAl2 = alMod2.predict(testX).reshape(-1)
     testYPBd2 = bdMod2.predict(testX).reshape(-1)
     testYPFb2 = fbMod2.predict(testX).reshape(-1)
     testYPGg2 = ggMod2.predict(testX).reshape(-1)
     testYPOg2 = ogMod2.predict(testX).reshape(-1)
-    
 
     pd.DataFrame(data={
         'true':list(testY),
         'pred':list(testYP),
+        'predAl1':list(testYPAl1),
         'predBd1':list(testYPBd1),
         'predFb1':list(testYPFb1),
         'predGg1':list(testYPGg1),
         'predOg1':list(testYPOg1),
+        'predAl2':list(testYPAl2),
         'predBd2':list(testYPBd2),
         'predFb2':list(testYPFb2),
         'predGg2':list(testYPGg2),
@@ -523,6 +544,13 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     }).to_csv(os.path.join(docDirname, 'test.csv'))
 
     testMape = mapeFunc(testY,testYP)
+    # 判断，如果预测结果中有媒体的倍率是0，就MAPE + 100
+    if np.all(testYPAl1 == 1.0) or \
+        np.all(testYPBd1 == 1.0) or \
+        np.all(testYPFb1 == 1.0) or \
+        np.all(testYPGg1 == 1.0) or \
+        np.all(testYPOg1 == 1.0):
+        testMape += 100
 
     retStr += 'test mape:%.2f%%\n'%(testMape)
 
@@ -536,6 +564,7 @@ def createDoc(modPath,trainX,trainY,testX,testY,history,docDirname,message):
     plt.clf()
 
     plt.title("r7/r1 test")
+    plt.plot(testYPAl1,label='al')
     plt.plot(testYPBd1,label='bd')
     plt.plot(testYPFb1,label='fb')
     plt.plot(testYPGg1,label='gg')
@@ -574,6 +603,26 @@ def cleanDf(df):
     df = df.loc[:,~df.columns.str.match('Unnamed')]
     return df
 
+def getAdCost():
+    sql = '''
+        select 
+            sum(cost) as cost,
+            media_source as media,
+            to_char(to_date(day,"yyyymmdd"),"yyyy-mm-dd") as install_date
+        from ods_platform_appsflyer_masters
+        where 
+            app_id = 'id1479198816'
+            and day >= '20220501'
+            and day < '20230227'
+        group by
+            media_source,
+            day
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    return df
+
 def report(docDirname):
     trainDf = pd.read_csv(os.path.join(docDirname, 'train.csv'))
     trainDf = trainDf.loc[:,~trainDf.columns.str.match('Unnamed')]
@@ -589,7 +638,10 @@ def report(docDirname):
     # print(totalDf)
     # totalDf.to_csv(getFilename('reportTotalDf'))
     # 添加广告花费
-    adCostDf = pd.read_csv(getFilename('adCost'))
+    # adCostDf = getAdCost()
+    # adCostDf.to_csv(getFilename('adCost2'))
+
+    adCostDf = pd.read_csv(getFilename('adCost2'))
     adCostDf = adCostDf.loc[:,~adCostDf.columns.str.match('Unnamed')]
     adCostDf2 = addMediaGroup(adCostDf)
     adCostDf3 = adCostDf2.groupby(by=['install_date','media_group'],as_index=False).agg({
@@ -603,7 +655,7 @@ def report(docDirname):
     })
 
     adCostDf4 = adCostDf4.loc[(adCostDf4.install_date_group > '2022-05-06') & (adCostDf4.install_date_group < '2023-02-27')].reset_index(drop=True)
-    adCostDf4.to_csv(getFilename('reportAdCost'))
+    adCostDf4.to_csv(os.path.join(docDirname,'reportAdCost.csv'))
 
     # 做一些简单修正
     # 1、计算各媒体ROI、总ROI
@@ -650,7 +702,7 @@ def report(docDirname):
     totalDfOrder.append('mape')
     
     totalDf = totalDf[totalDfOrder]
-    totalDf.to_csv(getFilename('reportTotalDf'))
+    totalDf.to_csv(os.path.join(docDirname,'reportTotalDf.csv'))
 
     # 计算ROI
     plt.title("7d ROI")
@@ -663,31 +715,12 @@ def report(docDirname):
             continue
 
         totalDf['%s roi7(pred)'%(media['name'])].plot(label = name)
-
-        # mediaAdCost = adCostDf4.loc[adCostDf4.media_group == name].reset_index(drop=True)
-        # sname = 'pred%s2'%(media['sname'])
-        # print(sname)
-        # print(mediaAdCost)
-        # r7usd = totalDf[sname].reset_index(drop=True)
-        # print(r7usd)
-        # mediaAdCost.loc[:,'r7usd'] = r7usd
-        # print(mediaAdCost)
-        
-        # mediaAdCost.set_index(["install_date_group"], inplace=True)
-        # mediaAdCost.loc[:,'roi'] = mediaAdCost['r7usd']/mediaAdCost['cost']
-        # mediaAdCost['roi'].plot(label = name)
-        # mediaAdCost = cleanDf(mediaAdCost)
-        # mediaAdCost.to_csv(getFilename('roi_%s'%(name)))
     
     plt.xticks(rotation=45)
     plt.legend(loc='best')
     plt.tight_layout()
-    plt.savefig('/src/data/customLayer/roi.png')
+    plt.savefig(os.path.join(docDirname,'roi.png'))
     plt.clf()
-
-
-
-
 
 
 def main():
@@ -700,16 +733,22 @@ def main():
     # x = step6(np64List)
     # y = pd.read_csv(getFilename('step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
     # y = y[:-1]
-    # np.save('/src/data/customLayer/xR7.npy',x)
-    # np.save('/src/data/customLayer/yR7.npy',y)
+    # np.save('/src/data/customLayer/x3R7.npy',x)
+    # np.save('/src/data/customLayer/y3R7.npy',y)
 
-    x = np.load('/src/data/customLayer/xR7.npy')
-    y = np.load('/src/data/customLayer/yR7.npy')
+    x = np.load('/src/data/customLayer/x3R7.npy')
+    y = np.load('/src/data/customLayer/y3R7.npy')
 
-    train(x,y,'ios test rolling data 180')
+    train(x,y,'ios l2 test')
 
 
 if __name__ == '__main__':
-    # main()
-    report('/src/data/doc/customLayer//iOSCustom_20230309_104015')
+    main()
+    # report('/src/data/doc/customLayer//iOSCustom_20230313_090838')
     
+    # l2 0.01 7%
+    # l2 0.10 7%
+    # l2 1.00 12%
+    # l2 10.00 13%
+    # l2 100.00 12%
+    # l2 
