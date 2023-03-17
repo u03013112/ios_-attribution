@@ -1,12 +1,7 @@
-# 在iOS2的基础上改进
-# 1、添加更多的报告
-# 2、媒体中添加applovin
-
-# 在这里可能还是存在过多的过拟合现象出现
-# 即将一些媒体的倍率预测成0，另外的媒体预测的比较大
-# 为了避免这种情况，首先要获得这种情况的判定标准，或者偏差判定
-# 在createDoc的时候进行判断，如果有任何媒体的倍率被计算出0，就要将mape+100，防止这种结果扰乱结果
-# 然后再尝试用l2正则化进行防止过拟合，或者其他模型尝试
+# 在iOS3的基础上进行改进
+# 1、修改fillCvbug
+# 2、修改测试集与训练集
+# 3、出分媒体的首日收入金额方差报告
 
 import datetime
 import pandas as pd
@@ -64,7 +59,10 @@ def step0():
             for i in range(64):
                 for media in mediaList:
                     name = media['name']
-                    if df.loc[(df.cv == i)]['count'].sum() == 0:
+                    if df.loc[
+                        (df.media_group == name) &
+                        (df.cv == i)
+                    ]['count'].sum() == 0:
                         dataNeedAppend['install_date'].append(install_date)
                         dataNeedAppend['cv'].append(i)
                         dataNeedAppend['media_group'].append(name)
@@ -152,21 +150,13 @@ def step1():
 
     return organicDf
 
-# 返回3个媒体的cv分布
-# 按照顺序 ： bd，fb，gg
-# 暂时只看着3个媒体
-mediaNameList = [
-    'applovin',
-    'bytedance',
-    'facebook',
-    'google'
-]
 def step2():
     skanDf = pd.read_csv(getFilename('step0_skanDf4'))
     skanDf = skanDf.loc[:,~skanDf.columns.str.match('Unnamed')]
 
     mediaDfList = []
-    for mediaName in mediaNameList:
+    for media in mediaList:
+        mediaName = media['name']
         mediaDf = skanDf.loc[skanDf.media_group == mediaName]
         mediaDfList.append(mediaDf)
         if __debug__:
@@ -196,7 +186,8 @@ def step3():
     if __debug__:
         organicSumDf.to_csv(getFilename('step3_organicSumDf'))
 
-    for mediaName in mediaNameList:
+    for media in mediaList:
+        mediaName = media['name']
         mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s'%mediaName))
         mediaDf = addUSD(mediaDf)
         mediaSumDf = mediaDf.groupby(by = ['install_date_group'],as_index=False).agg({
@@ -269,18 +260,21 @@ def step5():
 
     np64List = []
 
-    for mediaName in mediaNameList:
+    for media in mediaList:
+        mediaName = media['name']
         mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s'%mediaName))
         mediaDf = mediaDf.loc[mediaDf.install_date_group < '2023-02-27']
-    
-        mediaDf = fillCv(mediaDf)
+        mediaDf = mediaDf.sort_values(by=['install_date_group','cv']).reset_index(drop=True)
+
+        # mediaDf = fillCv(mediaDf)
         mediaNp64 = getTrainX(mediaDf)
         # 按顺序加入
         np64List.append(mediaNp64)
 
     organicDf = pd.read_csv(getFilename('step1_organicDf'))
     organicDf = organicDf.loc[organicDf.install_date_group < '2023-02-27']
-    organicDf = fillCv(organicDf)
+    organicDf = organicDf.sort_values(by=['install_date_group','cv']).reset_index(drop=True)
+    # organicDf = fillCv(organicDf)
     organicNp64 = getTrainX(organicDf)
     # 最后是自然量
     np64List.append(organicNp64)
@@ -291,7 +285,8 @@ def step5():
 # 部分数据读取自之前步骤的数据文件
 def step6(np64List):
     np1List = []
-    for mediaName in mediaNameList:
+    for media in mediaList:
+        mediaName = media['name']
         mediaSumDf = pd.read_csv(getFilename('step3_mediaSumDf_%s'%mediaName))
         mediaSumDf = mediaSumDf.loc[mediaSumDf.install_date_group < '2023-02-27']
         mediaNp1 = mediaSumDf['usd'].to_numpy().reshape((-1,1))
@@ -342,71 +337,75 @@ def train(x,y,message):
     lossAndErrorPrintingCallbackSuffixStr = name
     
     m = message
-    for w in (1000000.0,10000000.0,100000000.0):
-        message = '%s%.0f'%(m,w)
-        for _ in range(100):
-            filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
-            
-            # mod = createModEasy05_b()
-            mod = createModEasy05_l2(w)
-
-            modPath = '/src/src/predSkan/androidTotal/mod/%s%s/'%(name,filenameSuffix)
-            checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.3f}-{val_loss:.3f}.h5')
+    w = 10000.0
+    message = '%s%.0f'%(m,w)
+    for _ in range(100):
+        filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
         
-            model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-                filepath=checkpoint_filepath,
-                save_weights_only=False,
-                monitor='val_loss',
-                mode='min',
-                save_best_only=True
+        # mod = createModEasy05_b()
+        mod = createModEasy05_l2(w)
+
+        modPath = '/src/src/predSkan/androidTotal/mod/%s%s/'%(name,filenameSuffix)
+        checkpoint_filepath = os.path.join(modPath,'mod_{epoch:05d}-{loss:.3f}-{val_loss:.3f}.h5')
+    
+        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+            filepath=checkpoint_filepath,
+            save_weights_only=False,
+            monitor='val_loss',
+            mode='min',
+            save_best_only=True
+        )
+
+        # trainingX = x[0:180]
+        # trainingY = y[0:180]
+        # testingX = x[180:]
+        # testingY = y[180:]
+        trainingX = x[::2]
+        trainingY = y[::2]
+        testingX = x[1::2]
+        testingY = y[1::2]
+
+        history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
+            ,callbacks=[
+                # earlyStoppingValLoss,
+                model_checkpoint_callback,
+                LossAndErrorPrintingCallback()
+            ]
+            ,batch_size=32
+            ,verbose=0
             )
+        # 训练完成可以把mod清理掉了
+        tf.keras.backend.clear_session()
+        del mod
 
-            trainingX = x[0:180]
-            trainingY = y[0:180]
-            testingX = x[180:]
-            testingY = y[180:]
+        logDir = '/src/data/doc/customLayer/'
 
-            history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
-                ,callbacks=[
-                    # earlyStoppingValLoss,
-                    model_checkpoint_callback,
-                    LossAndErrorPrintingCallback()
-                ]
-                ,batch_size=32
-                ,verbose=0
-                )
-            # 训练完成可以把mod清理掉了
-            tf.keras.backend.clear_session()
-            del mod
-
-            logDir = '/src/data/doc/customLayer/'
-
-            os.makedirs(logDir,exist_ok=True)
-            # 将每次的明细结果放进去，
-            docDirname = '%s/%s'%(logDir,name+filenameSuffix)
-            val_loss = createDoc(modPath,trainingX,trainingY,testingX,testingY,history,docDirname,message)
-            
-            retCsvFilename = os.path.join(logDir,'ret.csv')
-            if os.path.exists(retCsvFilename):
-                retDf = pd.read_csv(retCsvFilename)
-            else:
-                retDf = pd.DataFrame(data = {
-                    'path':[],
-                    'val_loss':[],
-                    'message':[]
-                })
-            logData = {
-                'path':[docDirname],
-                'val_loss':[val_loss],
-                'message':[message]
-            }
-            retDf = retDf.append(pd.DataFrame(data=logData))
-            # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
-            
-            retDf.to_csv(retCsvFilename)
-            purgeRetCsv(retCsvFilename)
-            logFilename = os.path.join(logDir,'log.txt')
-            logUpdate(retCsvFilename,logFilename,name)
+        os.makedirs(logDir,exist_ok=True)
+        # 将每次的明细结果放进去，
+        docDirname = '%s/%s'%(logDir,name+filenameSuffix)
+        val_loss = createDoc(modPath,trainingX,trainingY,testingX,testingY,history,docDirname,message)
+        
+        retCsvFilename = os.path.join(logDir,'ret.csv')
+        if os.path.exists(retCsvFilename):
+            retDf = pd.read_csv(retCsvFilename)
+        else:
+            retDf = pd.DataFrame(data = {
+                'path':[],
+                'val_loss':[],
+                'message':[]
+            })
+        logData = {
+            'path':[docDirname],
+            'val_loss':[val_loss],
+            'message':[message]
+        }
+        retDf = retDf.append(pd.DataFrame(data=logData))
+        # 将本次的结果添加，然后重新写文件，这个方式有点丑，暂时这样。
+        
+        retDf.to_csv(retCsvFilename)
+        purgeRetCsv(retCsvFilename)
+        logFilename = os.path.join(logDir,'log.txt')
+        logUpdate(retCsvFilename,logFilename,name)
 
 from shutil import copyfile
 import matplotlib.pyplot as plt
@@ -682,16 +681,16 @@ def report(docDirname):
         totalDfOrder.append('%s cost'%(media['name']))
         totalDfOrder.append('%s roi7(pred)'%(media['name']))
 
-    totalDfOrder.append('other r7/r1(pred)')
-    totalDfOrder.append('other revenue7(pred)')
+    totalDfOrder.append('unknown r7/r1(pred)')
+    totalDfOrder.append('unknown revenue7(pred)')
 
     totalDf = totalDf.rename(columns={
         'true':'revenue7',
         'pred':'revenue7(pred)',
         'true_roi':'roi7',
         'pred_roi':'roi7(pred)',
-        'predOg1':'other r7/r1(pred)',
-        'predOg2':'other revenue7(pred)',
+        'predOg1':'unknown r7/r1(pred)',
+        'predOg2':'unknown revenue7(pred)',
     })
     totalDfOrder.append('revenue7')
     totalDfOrder.append('revenue7(pred)')
@@ -738,12 +737,14 @@ def main():
     x = np.load('/src/data/customLayer/x3R7.npy')
     y = np.load('/src/data/customLayer/y3R7.npy')
 
-    train(x,y,'ios l2 test')
+    # print(x,y)
+
+    train(x,y,'ios ::2 w')
 
 
 if __name__ == '__main__':
     # main()
-    report('/src/data/doc/customLayer//iOSCustom_20230314_033544')
+    report('/src/data/doc/customLayer//iOSCustom_20230316_103636')
     
     # l2 0.01 7%
     # l2 0.10 7%

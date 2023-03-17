@@ -223,8 +223,34 @@ if __name__ == '__main__':
     #     114.7633,132.0923,153.4342,184.3833,211.8377,242.5758,271.612,303.1287,335.7322,382.8155,440.3342,526.2914,783.6587,973.4348,1152.2711
     # ]
 
+    # levels = [
+    #     1,2,3,4,5,6,7,8,9,10,11,12,13,15,17,19,24,29,34,44,55,65,75,85,95,115,135,155,175,195,215
+    # ]
+
+
+    # 31
     levels = [
-        1,2,3,4,5,6,7,8,9,10,11,12,13,15,17,19,24,29,34,44,55,65,75,85,95,115,135,155,175,195,215
+        1.6448,3.2418,5.3475,7.7988,10.7114,14.465,18.992,24.2942,31.0778,40.2628,51.5247,61.2463,70.1597,82.5565,97.3848,111.5657,125.2677,142.6695,161.6619,184.4217,204.8459,239.7421,264.9677,306.9067,355.154,405.6538,458.3643,512.6867,817.0817,1819.0253,2544.7372
+    ]
+
+    # 20
+    # levels = [
+    #     1.5243,4.8268,7.3777,11.0212,17.0397,25.765,32.9272,43.8799,53.0345,66.4053,82.305,102.7762,128.0474,155.7262,196.9415,294.3326,414.014,686.8542,1455.6964,2544.7372
+    # ]
+
+    # 15
+    levels = [
+        2.6208,2.8701,11.8094,22.0189,33.9542,48.5706,64.8133,86.3302,119.2499,141.4811,187.3731,232.9296,277.9331,348.4363,420.0994
+    ]
+
+    # 7
+    levels = [
+        2.4707,5.2468,18.9076,47.7314,94.9377,193.1167,234.78
+    ]
+
+    # 4
+    levels = [
+        2.2711,11.4428,35.9047,134.9
     ]
 
     # 根据levels制作map
@@ -239,14 +265,13 @@ if __name__ == '__main__':
         mapData['min_event_revenue'].append(mapData['max_event_revenue'][len(mapData['max_event_revenue'])-1])
         mapData['max_event_revenue'].append(levels[i])
 
-    # 最后将最后一个固定档位插入
-    mapData['cv'].append(len(mapData['cv']))
-    mapData['min_event_revenue'].append(mapData['max_event_revenue'][len(mapData['max_event_revenue'])-1])
-    # mapData['max_event_revenue'].append(1243.25)
-    mapData['max_event_revenue'].append(235)
+    # # 最后将最后一个固定档位插入
+    # mapData['cv'].append(len(mapData['cv']))
+    # mapData['min_event_revenue'].append(mapData['max_event_revenue'][len(mapData['max_event_revenue'])-1])
+    # mapData['max_event_revenue'].append(235)
 
     mapDf = pd.DataFrame(data=mapData)
-    mapDf.to_csv(getFilename('iosCv_map'))
+    # mapDf.to_csv(getFilename('iosCv_map'))
 
     mapeDf = mapeFunc(df, mapDf)
 

@@ -1,12 +1,5 @@
-# 在iOS2的基础上改进
-# 1、添加更多的报告
-# 2、媒体中添加applovin
-
-# 在这里可能还是存在过多的过拟合现象出现
-# 即将一些媒体的倍率预测成0，另外的媒体预测的比较大
-# 为了避免这种情况，首先要获得这种情况的判定标准，或者偏差判定
-# 在createDoc的时候进行判断，如果有任何媒体的倍率被计算出0，就要将mape+100，防止这种结果扰乱结果
-# 然后再尝试用l2正则化进行防止过拟合，或者其他模型尝试
+# 在iOS3的基础上改进
+# 预测部分额外添加30日预测
 
 import datetime
 import pandas as pd
@@ -23,6 +16,148 @@ from src.predSkan.tools.ai import purgeRetCsv,logUpdate
 # 
 def getFilename(filename):
     return '/src/data/customLayer/%s.csv'%(filename)
+
+# 30天版本
+def getDataFromAF():
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when r1usd>%d and r1usd<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    sql = '''
+        select
+            cv,
+            count(*) as count,
+            media_source as media,
+            sum(r1usd) as sumR1usd,
+            sum(r7usd) as sumR7usd,
+            install_date,
+            had_idfa
+        from
+            (
+                select
+                    idfv,
+                    had_idfa,
+                    media_source,
+                    case
+                        when r1usd = 0
+                        or r1usd is null then 0
+                        %s
+                        else 63
+                    end as cv,
+                    r1usd,
+                    r7usd,
+                    install_date
+                from
+                    (
+                        SELECT
+                            t0.idfv,
+                            t0.install_date,
+                            t0.had_idfa,
+                            t0.media_source,
+                            t1.r1usd,
+                            t1.r7usd
+                        FROM
+                            (
+                                select
+                                    idfv,
+                                    case
+                                        when idfa is null then 0
+                                        else 1
+                                    end as had_idfa,
+                                    media_source,
+                                    install_date
+                                from
+                                    (
+                                        select
+                                            idfv,
+                                            idfa,
+                                            media_source,
+                                            to_char(
+                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                                "yyyy-mm-dd"
+                                            ) as install_date
+                                        from
+                                            ods_platform_appsflyer_events
+                                        where
+                                            app_id = 'id1479198816'
+                                            and event_name = 'install'
+                                            and zone = 0
+                                            and day >= 20220501
+                                            and day <= 20230301
+                                            and install_time >= "2022-05-01"
+                                            and install_time < "2023-02-01"
+                                        union
+                                        all
+                                        select
+                                            idfv,
+                                            idfa,
+                                            media_source,
+                                            to_char(
+                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                                "yyyy-mm-dd"
+                                            ) as install_date
+                                        from
+                                            tmp_ods_platform_appsflyer_origin_install_data
+                                        where
+                                            app_id = 'id1479198816'
+                                            and zone = '0'
+                                            and install_time >= "2022-05-01"
+                                            and install_time < "2023-02-01"
+                                    )
+                                group by
+                                    idfv,
+                                    had_idfa,
+                                    media_source,
+                                    install_date
+                            ) as t0
+                            LEFT JOIN (
+                                select
+                                    idfv,
+                                    to_char(
+                                        to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                        "yyyy-mm-dd"
+                                    ) as install_date,
+                                    sum(
+                                        case
+                                            when event_timestamp - install_timestamp <= 1 * 24 * 3600 then cast (event_revenue_usd as double)
+                                            else 0
+                                        end
+                                    ) as r1usd,
+                                    sum(
+                                        case
+                                            when event_timestamp - install_timestamp <= 30 * 24 * 3600 then cast (event_revenue_usd as double)
+                                            else 0
+                                        end
+                                    ) as r7usd
+                                from
+                                    ods_platform_appsflyer_events
+                                where
+                                    app_id = 'id1479198816'
+                                    and event_name in ('af_purchase','af_purchase_oldusers')
+                                    and zone = 0
+                                    and day >= 20220501
+                                    and day <= 20230301
+                                    and install_time >= "2022-05-01"
+                                    and install_time < "2023-02-01"
+                                group by
+                                    install_date,
+                                    idfv
+                            ) as t1 ON t0.idfv = t1.idfv
+                    )
+            )
+        group by
+            cv,
+            had_idfa,
+            media_source,
+            install_date;
+    '''%(whenStr)
+    print(sql)
+    df = execSql(sql)
+    return df
 
 # 需要数据收集
 # skan 3个媒体的 cv分布，和af所有数据的cv分布，计算出 自然量cv分布
@@ -74,8 +209,10 @@ def step0():
         dataDf3 = dataDf3.fillna(0)
         return dataDf3
 
+    afDf = getDataFromAF()
+    afDf.to_csv(getFilename('iOSAF30_20220501_20230201'))
 
-    afDf = pd.read_csv('/src/data/zk/iOSAF20220501_20230227.csv')
+    afDf = pd.read_csv(getFilename('iOSAF30_20220501_20230201'))
     afDf = afDf.loc[:,~afDf.columns.str.match('Unnamed')]
     skanDf = pd.read_csv('/src/data/zk/iOSSKAN20220501_20230227.csv')
     skanDf = skanDf.loc[:,~skanDf.columns.str.match('Unnamed')]
@@ -106,7 +243,8 @@ def step0():
         'sumr1usd7':'sumr1usd',
         'sumr7usd7':'sumr7usd'
     })
-    afDf4 = afDf4.loc[afDf4.install_date_group > '2022-05-06']
+    afDf4 = afDf4.loc[(afDf4.install_date_group > '2022-05-06') & (afDf4.install_date_group < '2023-01-27')]
+    
 
     skanDf4 = skanDf3.groupby(by=['install_date','media_group','cv'],as_index=False).agg({
         'count':'sum'
@@ -118,18 +256,18 @@ def step0():
         'install_date':'install_date_group',
         'count7':'count'
     })
-    skanDf4 = skanDf4.loc[skanDf4.install_date_group > '2022-05-06']
+    skanDf4 = skanDf4.loc[(skanDf4.install_date_group > '2022-05-06') & (skanDf4.install_date_group < '2023-01-27')]
 
     if __debug__:
-        skanDf4.to_csv(getFilename('step0_skanDf4'))
-        afDf4.to_csv(getFilename('step0_afDf4'))
+        skanDf4.to_csv(getFilename('step0_skanDf4_30'))
+        afDf4.to_csv(getFilename('step0_afDf4_30'))
 
 # 返回自然量
 def step1():
-    afDf = pd.read_csv(getFilename('step0_afDf4'))
+    afDf = pd.read_csv(getFilename('step0_afDf4_30'))
     afDf = afDf.loc[:,~afDf.columns.str.match('Unnamed')]
 
-    skanDf = pd.read_csv(getFilename('step0_skanDf4'))
+    skanDf = pd.read_csv(getFilename('step0_skanDf4_30'))
     skanDf = skanDf.loc[:,~skanDf.columns.str.match('Unnamed')]
 
     # 为了计算自然量，将af和skan都按照安装日期+cv汇总，并相减
@@ -147,30 +285,26 @@ def step1():
     organicDf.loc[organicDf['count']<0,'count'] = 0
 
     if __debug__:
-        mergeDf.to_csv(getFilename('step1_mergeDf'))
-        organicDf.to_csv(getFilename('step1_organicDf'))
+        mergeDf.to_csv(getFilename('step1_mergeDf_30'))
+        organicDf.to_csv(getFilename('step1_organicDf_30'))
 
     return organicDf
 
 # 返回3个媒体的cv分布
 # 按照顺序 ： bd，fb，gg
 # 暂时只看着3个媒体
-mediaNameList = [
-    'applovin',
-    'bytedance',
-    'facebook',
-    'google'
-]
+
 def step2():
-    skanDf = pd.read_csv(getFilename('step0_skanDf4'))
+    skanDf = pd.read_csv(getFilename('step0_skanDf4_30'))
     skanDf = skanDf.loc[:,~skanDf.columns.str.match('Unnamed')]
 
     mediaDfList = []
-    for mediaName in mediaNameList:
-        mediaDf = skanDf.loc[skanDf.media_group == mediaName]
+    for media in mediaList:
+        mediaName = media['name']
+        mediaDf = skanDf.loc[skanDf.media_group == mediaName].reset_index(drop=True)
         mediaDfList.append(mediaDf)
         if __debug__:
-            mediaDf.to_csv(getFilename('step2_mediaDf_%s'%mediaName))
+            mediaDf.to_csv(getFilename('step2_mediaDf_%s_30'%mediaName))
 
     return mediaDfList
 
@@ -188,26 +322,27 @@ def step3():
             df.loc[df.cv == i,'usd'] = df['count']*avg
         return df
     
-    organicDf = pd.read_csv(getFilename('step1_organicDf'))
+    organicDf = pd.read_csv(getFilename('step1_organicDf_30'))
     organicDf = addUSD(organicDf)
     organicSumDf = organicDf.groupby(by = ['install_date_group'],as_index=False).agg({
         'usd':'sum'
     })
     if __debug__:
-        organicSumDf.to_csv(getFilename('step3_organicSumDf'))
+        organicSumDf.to_csv(getFilename('step3_organicSumDf_30'))
 
-    for mediaName in mediaNameList:
-        mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s'%mediaName))
+    for media in mediaList:
+        mediaName = media['name']
+        mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s_30'%mediaName))
         mediaDf = addUSD(mediaDf)
         mediaSumDf = mediaDf.groupby(by = ['install_date_group'],as_index=False).agg({
             'usd':'sum'
         })
         if __debug__:
-            mediaSumDf.to_csv(getFilename('step3_mediaSumDf_%s'%mediaName))
+            mediaSumDf.to_csv(getFilename('step3_mediaSumDf_%s_30'%mediaName))
 
 # 获得总收入，作为y
 def step4():
-    afDf = pd.read_csv(getFilename('step0_afDf4'))
+    afDf = pd.read_csv(getFilename('step0_afDf4_30'))
     afDf = afDf.loc[:,~afDf.columns.str.match('Unnamed')]
 
     afSumDf = afDf.groupby(by = ['install_date_group'],as_index=False).agg({
@@ -215,7 +350,7 @@ def step4():
     })
 
     if __debug__:
-        afSumDf.to_csv(getFilename('step4_SumDf'))
+        afSumDf.to_csv(getFilename('step4_SumDf_30'))
     return afSumDf
 
 # 将不同媒体的64标准化
@@ -255,31 +390,32 @@ def step5():
         trainX = trainDf['count'].to_numpy().reshape((-1,64))
         trainXSum = trainX.sum(axis=1).reshape(-1,1)
         trainX = trainX/trainXSum
-        if __debug__:
-            print('getTrainX1',trainX)
+        # if __debug__:
+        #     print('getTrainX1',trainX)
         min = trainX.T.min(axis=1)
         max = trainX.T.max(axis=1)    
-        if __debug__:
-            print('min',min)
-            print('max',max)
+        # if __debug__:
+        #     print('min',min)
+        #     print('max',max)
         trainX = std(trainX,min,max)
-        if __debug__:
-            print('getTrainX2',trainX)
+        # if __debug__:
+        #     print('getTrainX2',trainX)
         return trainX
 
     np64List = []
 
-    for mediaName in mediaNameList:
-        mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s'%mediaName))
-        mediaDf = mediaDf.loc[mediaDf.install_date_group < '2023-02-27']
+    for media in mediaList:
+        mediaName = media['name']
+        mediaDf = pd.read_csv(getFilename('step2_mediaDf_%s_30'%mediaName))
+        mediaDf = mediaDf.loc[mediaDf.install_date_group < '2023-01-27']
     
         mediaDf = fillCv(mediaDf)
         mediaNp64 = getTrainX(mediaDf)
         # 按顺序加入
         np64List.append(mediaNp64)
 
-    organicDf = pd.read_csv(getFilename('step1_organicDf'))
-    organicDf = organicDf.loc[organicDf.install_date_group < '2023-02-27']
+    organicDf = pd.read_csv(getFilename('step1_organicDf_30'))
+    organicDf = organicDf.loc[organicDf.install_date_group < '2023-01-27']
     organicDf = fillCv(organicDf)
     organicNp64 = getTrainX(organicDf)
     # 最后是自然量
@@ -291,21 +427,17 @@ def step5():
 # 部分数据读取自之前步骤的数据文件
 def step6(np64List):
     np1List = []
-    for mediaName in mediaNameList:
-        mediaSumDf = pd.read_csv(getFilename('step3_mediaSumDf_%s'%mediaName))
+    for media in mediaList:
+        mediaName = media['name']
+        mediaSumDf = pd.read_csv(getFilename('step3_mediaSumDf_%s_30'%mediaName))
         mediaSumDf = mediaSumDf.loc[mediaSumDf.install_date_group < '2023-02-27']
         mediaNp1 = mediaSumDf['usd'].to_numpy().reshape((-1,1))
         np1List.append(mediaNp1)
     
-    mediaSumDf = pd.read_csv(getFilename('step3_organicSumDf'))
+    mediaSumDf = pd.read_csv(getFilename('step3_organicSumDf_30'))
     mediaSumDf = mediaSumDf.loc[mediaSumDf.install_date_group < '2023-02-27']
     mediaNp1 = mediaSumDf['usd'].to_numpy().reshape((-1,1))
     np1List.append(mediaNp1)
-
-    # print(np64List[0].shape,np1List[0].shape,
-    #     np64List[1].shape,np1List[1].shape,
-    #     np64List[2].shape,np1List[2].shape,
-    #     np64List[3].shape,np1List[3].shape)
 
     x = np.concatenate(
         (np64List[0],np1List[0],
@@ -315,14 +447,12 @@ def step6(np64List):
         np64List[4],np1List[4],
         )
     ,axis=1)
-    
-    print(x.shape)
 
     return x
 
 
 from tensorflow import keras
-epochMax = 500
+epochMax = 300
 lossAndErrorPrintingCallbackSuffixStr = ''
 class LossAndErrorPrintingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -342,9 +472,9 @@ def train(x,y,message):
     lossAndErrorPrintingCallbackSuffixStr = name
     
     m = message
-    for w in (1000000.0,10000000.0,100000000.0):
-        message = '%s%.0f'%(m,w)
-        for _ in range(100):
+    w = 10000.0
+    message = '%s%.0f'%(m,w)
+    for _ in range(100):
             filenameSuffix = datetime.datetime.now().strftime('_%Y%m%d_%H%M%S')
             
             # mod = createModEasy05_b()
@@ -361,12 +491,18 @@ def train(x,y,message):
                 save_best_only=True
             )
 
-            trainingX = x[0:180]
-            trainingY = y[0:180]
-            testingX = x[180:]
-            testingY = y[180:]
+            # trainingX = x[0:120]
+            # trainingY = y[0:120]
+            # testingX = x[120:]
+            # testingY = y[120:]
+
+            trainingX = x[120:]
+            trainingY = y[120:]
+            testingX = x[:120]
+            testingY = y[:120]
 
             history = mod.fit(trainingX, trainingY, epochs=epochMax, validation_data=(testingX,testingY)
+            # history = mod.fit(x, y, epochs=epochMax, validation_split = 0.3
                 ,callbacks=[
                     # earlyStoppingValLoss,
                     model_checkpoint_callback,
@@ -632,7 +768,7 @@ def report(docDirname):
     
     # print(len(trainDf),len(testDf),len(totalDf))
     # 添加安装日期
-    install_date_group = pd.read_csv(getFilename('step4_SumDf'))['install_date_group']
+    install_date_group = pd.read_csv(getFilename('step4_SumDf_30'))['install_date_group']
     totalDf.loc[:,'install_date_group'] = install_date_group
     # print(totalDf)
     # totalDf.to_csv(getFilename('reportTotalDf'))
@@ -672,39 +808,39 @@ def report(docDirname):
         totalDf.loc[:,'pred_roi'] = totalDf['pred']/totalDf['cost']
         
         totalDf = totalDf.rename(columns={
-            'pred%s1'%(media['sname']) : '%s r7/r1(pred)'%(media['name']),
-            'pred%s2'%(media['sname']) : '%s revenue7(pred)'%(media['name']),
-            '%s roi'%(media['name']) : '%s roi7(pred)'%(media['name']),
+            'pred%s1'%(media['sname']) : '%s r30/r1(pred)'%(media['name']),
+            'pred%s2'%(media['sname']) : '%s revenue30(pred)'%(media['name']),
+            '%s roi'%(media['name']) : '%s roi30(pred)'%(media['name']),
         })
 
-        totalDfOrder.append('%s r7/r1(pred)'%(media['name']))
-        totalDfOrder.append('%s revenue7(pred)'%(media['name']))
+        totalDfOrder.append('%s r30/r1(pred)'%(media['name']))
+        totalDfOrder.append('%s revenue30(pred)'%(media['name']))
         totalDfOrder.append('%s cost'%(media['name']))
-        totalDfOrder.append('%s roi7(pred)'%(media['name']))
+        totalDfOrder.append('%s roi30(pred)'%(media['name']))
 
-    totalDfOrder.append('other r7/r1(pred)')
-    totalDfOrder.append('other revenue7(pred)')
+    totalDfOrder.append('other r30/r1(pred)')
+    totalDfOrder.append('other revenue30(pred)')
 
     totalDf = totalDf.rename(columns={
-        'true':'revenue7',
-        'pred':'revenue7(pred)',
-        'true_roi':'roi7',
-        'pred_roi':'roi7(pred)',
-        'predOg1':'other r7/r1(pred)',
-        'predOg2':'other revenue7(pred)',
+        'true':'revenue30',
+        'pred':'revenue30(pred)',
+        'true_roi':'roi30',
+        'pred_roi':'roi30(pred)',
+        'predOg1':'other r30/r1(pred)',
+        'predOg2':'other revenue30(pred)',
     })
-    totalDfOrder.append('revenue7')
-    totalDfOrder.append('revenue7(pred)')
+    totalDfOrder.append('revenue30')
+    totalDfOrder.append('revenue30(pred)')
     totalDfOrder.append('cost')
-    totalDfOrder.append('roi7')
-    totalDfOrder.append('roi7(pred)')
+    totalDfOrder.append('roi30')
+    totalDfOrder.append('roi30(pred)')
     totalDfOrder.append('mape')
     
     totalDf = totalDf[totalDfOrder]
     totalDf.to_csv(os.path.join(docDirname,'reportTotalDf.csv'))
 
     # 计算ROI
-    plt.title("7d ROI")
+    plt.title("30d ROI")
     plt.figure(figsize=(10.8, 3.2))
 
     totalDf.set_index(["install_date_group"], inplace=True)
@@ -713,7 +849,7 @@ def report(docDirname):
         if name == 'unknown':
             continue
 
-        totalDf['%s roi7(pred)'%(media['name'])].plot(label = name)
+        totalDf['%s roi30(pred)'%(media['name'])].plot(label = name)
     
     plt.xticks(rotation=45)
     plt.legend(loc='best')
@@ -730,24 +866,19 @@ def main():
     # step4()
     # np64List = step5()
     # x = step6(np64List)
-    # y = pd.read_csv(getFilename('step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
-    # y = y[:-1]
-    # np.save('/src/data/customLayer/x3R7.npy',x)
-    # np.save('/src/data/customLayer/y3R7.npy',y)
+    # y = pd.read_csv(getFilename('step4_SumDf_30'))['sumr7usd'].to_numpy().reshape(-1,1)
+    # np.save('/src/data/customLayer/x4R30.npy',x)
+    # np.save('/src/data/customLayer/y4R30.npy',y)
 
-    x = np.load('/src/data/customLayer/x3R7.npy')
-    y = np.load('/src/data/customLayer/y3R7.npy')
+    # print(x.shape)
+    # print(y.shape)
 
-    train(x,y,'ios l2 test')
+    x = np.load('/src/data/customLayer/x4R30.npy')
+    y = np.load('/src/data/customLayer/y4R30.npy')
+
+    train(x,y,'ios r30 315 R')
 
 
 if __name__ == '__main__':
-    # main()
-    report('/src/data/doc/customLayer//iOSCustom_20230314_033544')
-    
-    # l2 0.01 7%
-    # l2 0.10 7%
-    # l2 1.00 12%
-    # l2 10.00 13%
-    # l2 100.00 12%
-    # l2 
+    main()
+    # report('/src/data/doc/customLayer//iOSCustom_20230314_091040')
