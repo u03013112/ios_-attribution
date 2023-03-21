@@ -30,13 +30,23 @@ mediaList = [
     {'name':'unknown','codeList':[],'sname':'Og'}
 ]
 
+# def addMediaGroup(df):
+#     # 所有不属于mediaList的都算是unknown，和自然量一起处理
+#     df.insert(df.shape[1],'media_group','unknown')
+#     for media in mediaList:
+#         name = media['name']
+#         for code in media['codeList']:
+#             df.loc[df.media == code,'media_group'] = name
+#     return df
+
 def addMediaGroup(df):
-    # 所有不属于mediaList的都算是unknown，和自然量一起处理
-    df.insert(df.shape[1],'media_group','unknown')
-    for media in mediaList:
-        name = media['name']
-        for code in media['codeList']:
-            df.loc[df.media == code,'media_group'] = name
+    # Initialize the media_group column with default value 'unknown'
+    df['media_group'] = 'unknown'
+
+    # Iterate through the mediaList and update the media_group column accordingly
+    for group in mediaList:
+        df.loc[df['media'].isin(group['codeList']), 'media_group'] = group['name']
+
     return df
 
 def getDataFromAF():
@@ -119,33 +129,49 @@ def getDataFromAF():
 # 重做install_date_group
 # 不再是7天汇总成一个值，而是每天都是前7天的均值
 def step0():
-    def dataFill(dataDf3):
-        # 每天补充满64组数据，没有的补0
-        install_date_list = dataDf3['install_date'].unique()
-        for install_date in install_date_list:
-            # print(install_date)
-            df = dataDf3.loc[(dataDf3.install_date == install_date)]
-            dataNeedAppend = {
-                'install_date':[],
-                'cv':[],
-                'media_group':[]
-            }
-            for i in range(64):
-                for media in mediaList:
-                    name = media['name']
-                    if df.loc[
-                        (df.media_group == name) &
-                        (df.cv == i)
-                    ]['count'].sum() == 0:
-                        dataNeedAppend['install_date'].append(install_date)
-                        dataNeedAppend['cv'].append(i)
-                        dataNeedAppend['media_group'].append(name)
+    # def dataFill(dataDf3):
+    #     # 每天补充满64组数据，没有的补0
+    #     install_date_list = dataDf3['install_date'].unique()
+    #     for install_date in install_date_list:
+    #         # print(install_date)
+    #         df = dataDf3.loc[(dataDf3.install_date == install_date)]
+    #         dataNeedAppend = {
+    #             'install_date':[],
+    #             'cv':[],
+    #             'media_group':[]
+    #         }
+    #         for i in range(64):
+    #             for media in mediaList:
+    #                 name = media['name']
+    #                 if df.loc[
+    #                     (df.media_group == name) &
+    #                     (df.cv == i)
+    #                 ]['count'].sum() == 0:
+    #                     dataNeedAppend['install_date'].append(install_date)
+    #                     dataNeedAppend['cv'].append(i)
+    #                     dataNeedAppend['media_group'].append(name)
 
-            dataDf3 = dataDf3.append(pd.DataFrame(data=dataNeedAppend))
-        dataDf3 = dataDf3.sort_values(by=['install_date','cv','media_group']).reset_index(drop=True)
-        dataDf3 = dataDf3.fillna(0)
-        return dataDf3
+    #         dataDf3 = dataDf3.append(pd.DataFrame(data=dataNeedAppend))
+    #     dataDf3 = dataDf3.sort_values(by=['install_date','cv','media_group']).reset_index(drop=True)
+    #     dataDf3 = dataDf3.fillna(0)
+    #     return dataDf3
 
+    def dataFill(df):
+        # Get unique values of 'install_date' and 'media_group'
+        install_dates = df['install_date'].unique()
+        media_groups = df['media_group'].unique()
+
+        # Create a new DataFrame with all possible combinations of 'install_date', 'cv', and 'media_group'
+        new_df = pd.DataFrame(columns=['install_date', 'cv', 'media_group'])
+        for install_date in install_dates:
+            for media_group in media_groups:
+                for cv in range(64):
+                    new_df = new_df.append({'install_date': install_date, 'cv': cv, 'media_group': media_group}, ignore_index=True)
+
+        # Merge the original DataFrame with the new DataFrame, filling missing values with 0
+        merged_df = pd.merge(new_df, df, on=['install_date', 'cv', 'media_group'], how='left').fillna(0)
+
+        return merged_df
     # afDf = getDataFromAF()
     # afDf.to_csv(getFilename('androidAfR7_20220501_20230201'))
 
@@ -741,21 +767,21 @@ def report2(docDirname):
 def main():
     step0()
     
-    step3()
-    step4()
-    np64List = step5()
-    x = step6(np64List)
-    y = pd.read_csv(getFilename('a_step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
+    # step3()
+    # step4()
+    # np64List = step5()
+    # x = step6(np64List)
+    # y = pd.read_csv(getFilename('a_step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
 
-    np.save('/src/data/customLayer/a5_xR7.npy',x)
-    np.save('/src/data/customLayer/a5_yR7.npy',y)
+    # np.save('/src/data/customLayer/a5_xR7.npy',x)
+    # np.save('/src/data/customLayer/a5_yR7.npy',y)
 
-    x = np.load('/src/data/customLayer/a5_xR7.npy')
-    y = np.load('/src/data/customLayer/a5_yR7.npy')
+    # x = np.load('/src/data/customLayer/a5_xR7.npy')
+    # y = np.load('/src/data/customLayer/a5_yR7.npy')
 
-    print(x.shape,y.shape)
+    # print(x.shape,y.shape)
 
-    train(x,y,'android 5 ::2 1622')
+    # train(x,y,'android 5 ::2 1622')
 
 def report3(docDirname):
     totalDf = pd.read_csv(os.path.join(docDirname,'reportTotalDf.csv'))
