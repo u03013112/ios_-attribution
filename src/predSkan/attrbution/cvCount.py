@@ -148,6 +148,9 @@ if __name__ == '__main__':
         meanMape = resaultMape(cvDf,meanRet)
         # meanRet 中 列 'r1pc' 改名为 'pay counts'
         meanRet.rename(columns={'r1pc': 'pay counts'}, inplace=True)
+        
+        meanRet.loc[:,'min_event_revenue'] = cvMapDf['min_event_revenue']
+        meanRet.loc[:,'max_event_revenue'] = cvMapDf['max_event_revenue']
         print(meanRet)
         meanRet.to_csv('/src/data/cvCountMean%d.csv'%(len(levels)))
         print('%d mean MAPE:%.2f%%'%(len(levels),meanMape['r1pc_mape'].mean()))
@@ -156,8 +159,11 @@ if __name__ == '__main__':
         medianMape = resaultMape(cvDf,medianRet)
         # medianRet 中 列 'r1pc' 改名为 'pay counts'
         medianRet.rename(columns={'r1pc': 'pay counts'}, inplace=True)
+        
+        medianRet.loc[:,'min_event_revenue'] = cvMapDf['min_event_revenue']
+        medianRet.loc[:,'max_event_revenue'] = cvMapDf['max_event_revenue']
         print(medianRet)
-        meanRet.to_csv('/src/data/cvCountMedian%d.csv'%(len(levels)))
+        medianRet.to_csv('/src/data/cvCountMedian%d.csv'%(len(levels)))
         print('%d Median MAPE:%.2f%%'%(len(levels),medianMape['r1pc_mape'].mean()))
 
 
