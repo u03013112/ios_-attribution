@@ -236,11 +236,11 @@ def groupScore(df,cvMapDf1,cvMapDf7):
 
     return line
 
-def makeCvMap(levels):
+def makeCvMap(levels,min = 0):
     mapData = {
         'cv':[0],
         'min_event_revenue':[-1],
-        'max_event_revenue':[0]
+        'max_event_revenue':[min]
     }
     for i in range(len(levels)):
         mapData['cv'].append(len(mapData['cv']))
@@ -250,8 +250,13 @@ def makeCvMap(levels):
     cvMapDf = pd.DataFrame(data=mapData)
     return cvMapDf
 
-def makeLevels1(userDf,usd = 'r1usd',N = 7):
+def makeLevels1(userDf,usd = 'r1usd',N = 7):    
     df = userDf.sort_values([usd])
+    # 这是为了解决7日回收分组时少一组的情况（将0~最小值划分为0组，但是这一组应该是没有人的）
+    if df[usd].min() > 0:
+        print('min:',df[usd].min())
+        N += 1
+
     # Filter out users with usd <= 0
     filtered_df = df[df[usd] > 0]
 
@@ -311,7 +316,7 @@ def checkCvMap(userDf,cvMapDf,usd = 'r1usd'):
     
     # print(df)
     mergeDf = df.groupby('install_date',as_index=False).agg({usd:'sum','cv_usd':'sum'})
-    # print(mergeDf)
+    print(mergeDf)
     # 计算mergeDf中usd列与'cv_usd'列的mape 和 r2_score
     from sklearn.metrics import mean_absolute_percentage_error, r2_score
 
@@ -379,18 +384,17 @@ def main():
 # 测试CV对大盘和媒体的分别影响
 def cvCheck():
     df = pd.read_csv(getFilename('aosCvR1R7Media_20220701_20230201'))
-
+    df = df.loc[df.install_date >= '2022-07-01']
     df = addMediaGroup(df)
 
     lines = []
     head = ['N','Media','MAPE','R2']
     lines.append(head)
-    for n1 in (64,32,16,8,4):
-    # for n1 in (64,32):
+    for n1 in (64,32,16):
         line = [n1,'total']
         levels1 = makeLevels1(df,usd = 'r1usd',N=n1)
         cvMapDf1 = makeCvMap(levels1)
-        # print(cvMapDf1)
+        print(cvMapDf1)
         cvMapDf1.to_csv(getFilename('cvMap1_%d'%n1))
         mape,r2 = checkCvMap(df,cvMapDf1,usd = 'r1usd')
         line += [mape,r2]
@@ -419,11 +423,11 @@ if __name__ == '__main__':
     # groupScore()
 
 
-    lines = main()
+    # lines = main()
 
-    GSheet().clearSheet('1111','Sheet2')
-    GSheet().updateSheet('1111','Sheet2','A1',lines)
+    # GSheet().clearSheet('1111','Sheet2')
+    # GSheet().updateSheet('1111','Sheet2','A1',lines)
 
-    # lines = cvCheck()
-    # GSheet().clearSheet('1111','Sheet3')
-    # GSheet().updateSheet('1111','Sheet3','A1',lines)
+    lines = cvCheck()
+    GSheet().clearSheet('1111','Sheet3')
+    GSheet().updateSheet('1111','Sheet3','A1',lines)
