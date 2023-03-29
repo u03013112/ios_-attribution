@@ -137,21 +137,28 @@ if __name__ == '__main__':
     ]
 
     levelsList = [
-        levels31,levels63
+        levels31
+        # ,levels63
     ]
 
     for levels in levelsList:
-        cvMapDf = makeCvMap(levels)
-        cvDf = addCV(df,cvMapDf)
+        # cvMapDf = makeCvMap(levels)
+        # cvMapDf.to_csv('/src/data/cvMap32.csv')
 
+        cvMapDf = pd.read_csv('/src/afCvMap2303.csv')
+        
+        cvDf = addCV(df,cvMapDf)
+        # print('111:',cvDf.loc[cvDf['cv']==2])
+        # exit()
         meanRet = resaultWithMean(cvDf)
+        print(meanRet)
         meanMape = resaultMape(cvDf,meanRet)
         # meanRet 中 列 'r1pc' 改名为 'pay counts'
         meanRet.rename(columns={'r1pc': 'pay counts'}, inplace=True)
         
         meanRet.loc[:,'min_event_revenue'] = cvMapDf['min_event_revenue']
         meanRet.loc[:,'max_event_revenue'] = cvMapDf['max_event_revenue']
-        print(meanRet)
+        # print(meanRet)
         meanRet.to_csv('/src/data/cvCountMean%d.csv'%(len(levels)))
         print('%d mean MAPE:%.2f%%'%(len(levels),meanMape['r1pc_mape'].mean()))
 
