@@ -6,8 +6,12 @@ from requests.adapters import HTTPAdapter
 from urllib import parse
 import json
 import datetime
+import matplotlib.pyplot as plt
+import pickle
 
+import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
 import sys
 sys.path.append('/src')
@@ -291,6 +295,57 @@ def getPayCount():
     df = pd.DataFrame({'uid': uidList, 'count': countList})
     return df
 
+# 用户等级分布
+def getUserLevelMax():
+    sql = '''
+        select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(MAX(ta_ev."user_level"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#vp@zone" is not null and "#vp@zone">=-12 and "#vp@zone"<=14, date_add('second', cast((0-"#vp@zone")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(IF(("platform" IS NULL), 8, 8)) as double) "#vp@zone",try_cast(try(date_diff('second', "internal_u@ctime", "#event_time")) as double) "#vp@lifetime_sec" from (select a.*, b."ctime" "internal_u@ctime" from (select "#event_name","user_level","#event_time","#user_id","platform","$part_date","$part_event" from v_event_2) a join (select * from (select "#update_time","#event_date","#user_id","ctime" from v_user_2) where "#event_date" > 20220624) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0 from (select *, try_cast(try(date_add('hour', -8, cast("ctime" as timestamp(3)))) as timestamp(3)) "#vp@ctime_utc0" from (select * from (select "#account_id","#update_time","#event_date","#user_id","ctime","firstplatform" from v_user_2) where "#event_date" > 20220624))) ta_u on ta_ev."#user_id" = ta_u."#user_id" where ((( ( "$part_event" IN ( 'user_levelup' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 8.64E+4)) and ((("$part_date" between '2022-06-30' and '2023-03-02') and ("@vpc_tz_#event_time" >= timestamp '2022-07-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-03-01'))) and ((ta_u."firstplatform" IN ('GooglePlay')) and ((ta_u."#vp@ctime_utc0" >= cast('2022-07-01 00:00:00' as timestamp) AND ta_u."#vp@ctime_utc0" <= cast('2023-01-31 23:59:59' as timestamp))))) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    '''
+    lines = ssSql(sql=sql)
+    # print(lines[0:10])
+    
+    uidList = []
+    countList = []
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+        uid = lineJ[0]
+        uidList.append(uid)
+        count = list(lineJ[1].values())[0]
+        if count > 80:
+            count = 80
+        countList.append(count)
+        
+    df = pd.DataFrame({'uid': uidList, 'count': countList})
+    return df
+
+# 获得用户注册时间，按照utc0天进行区分
+def getLoginByInstallDate():
+    sql = '''
+        select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,group_1,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,group_1,"$__Date_Time",cast(coalesce(COUNT(1), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#vp@zone" is not null and "#vp@zone">=-12 and "#vp@zone"<=14, date_add('second', cast((0-"#vp@zone")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(IF(("platform" IS NULL), 8, 8)) as double) "#vp@zone",try_cast(try(date_diff('second', "internal_u@ctime", "#event_time")) as double) "#vp@lifetime_sec" from (select a.*, b."ctime" "internal_u@ctime" from (select "#event_name","#user_id","platform","#event_time","$part_date","$part_event" from v_event_2) a join (select * from (select "#update_time","#event_date","#user_id","ctime" from v_user_2) where "#event_date" > 20220624) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0,format_datetime(ta_date_trunc('day',"#vp@ctime_utc0",1),'yyyy-MM-dd') group_1 from (select *, try_cast(try(date_add('hour', -8, cast("ctime" as timestamp(3)))) as timestamp(3)) "#vp@ctime_utc0" from (select * from (select "#account_id","#update_time","#event_date","#user_id","ctime","firstplatform" from v_user_2) where "#event_date" > 20220624))) ta_u on ta_ev."#user_id" = ta_u."#user_id" where ((( ( "$part_event" IN ( 'app_login' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 8.64E+4)) and ((("$part_date" between '2022-06-30' and '2023-03-02') and ("@vpc_tz_#event_time" >= timestamp '2022-07-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-03-01'))) and ((ta_u."firstplatform" IN ('GooglePlay')) and ((ta_u."#vp@ctime_utc0" >= cast('2022-07-01 00:00:00' as timestamp) AND ta_u."#vp@ctime_utc0" <= cast('2023-01-31 23:59:59' as timestamp))))) group by group_0,group_1,"$__Date_Time")) group by group_0,group_1)) ORDER BY total_amount
+    '''
+    lines = ssSql(sql=sql)
+    print(lines[0:10])
+    
+    uidList = []
+    # countList = []
+    installDateList = []
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+        uid = lineJ[0]
+        uidList.append(uid)
+        # count = list(lineJ[1].values())[0]
+        # countList.append(count)
+        installDate = lineJ[1]
+        installDateList.append(installDate)
+        
+    df = pd.DataFrame({'uid': uidList, 'installDate': installDateList})
+    return df
+
 
 
 def getResource():
@@ -408,12 +463,16 @@ def makeLabel(df):
             (df['r7usd'] > max_event_revenue),
             'cv7'
         ] = len(cvMapDf7)-1
+
+    # cv1 != 0 的 cv7 == 0 的，cv7都改为1，因为这一档位本不该有人，可能是浮点数误差导致
+    df.loc[(df.cv1 != 0) & (df.cv7 == 0),'cv7'] = 1
+
     # df['cv7']转成int
     df['cv7'] = df['cv7'].astype(int)
     # 显示df前几行
-    print(df.head())
+    # print(df.head())
 
-    # labelDf = df[['customer_user_id','cv1','cv7']]
+    # labelDf = df[['uid','cv1','cv7']]
 
     # labelDf.to_csv(getFilename('labelDf'),index = False)
 
@@ -428,17 +487,441 @@ def getXY(df,cv1):
     cv1Df = df[df['cv1'] == cv1]
     # 按照cv7分类
     y = cv1Df['cv7'].to_numpy().reshape(-1,1)
+    # 将y形状变为(n_samples, )，用ravel
+    y = y.ravel()
 
     # 深度拷贝一份df
     dfCopy = cv1Df.copy(deep = True)
 
-    # 去掉customer_user_id,cv1,cv7
-    dfCopy = dfCopy.drop(['customer_user_id','cv1','cv7'],axis = 1,inplace = True)
+    # print(dfCopy.head())
+
+    # 去掉uid,cv1,cv7
+    dfCopy.drop(['uid','cv1','cv7','r1usd','r7usd'],axis = 1,inplace = True)
 
     # 转成numpy
     x = dfCopy.to_numpy()
 
     return x,y
+
+# 这个版本不再加入任何过滤，需要将cv1的过滤写在外面，这样在整理流程里看的更明白
+def getXY2(df):
+    # 按照cv7分类
+    y = df['cv7'].to_numpy().reshape(-1,1)
+    # 将y形状变为(n_samples, )，用ravel
+    y = y.ravel()
+
+    # 深度拷贝一份df
+    dfCopy = df.copy(deep = True)
+
+    # 去掉uid,cv1,cv7
+    dfCopy.drop(['uid','cv1','cv7','r1usd','r7usd','installDate'],axis = 1,inplace = True)
+
+    # 转成numpy
+    x = dfCopy.to_numpy()
+
+    return x,y
+
+# 获得特征的名字
+def getXName(df):
+    # 深度拷贝一份df
+    dfCopy = df.copy(deep = True)
+
+    # 去掉uid,cv1,cv7
+    dfCopy.drop(['uid','cv1','cv7','r1usd','r7usd'],axis = 1,inplace = True)
+
+    # 将列名转成list
+    xName = list(dfCopy.columns)
+    return xName
+
+# 头文件为了 SelectKBest 和 f_classif
+from sklearn.feature_selection import SelectKBest, f_classif,mutual_info_classif
+
+# 计算特征重要程度
+# 多分类模型，使用f_classif
+def getFeatureImportance(x,y):
+    # 特征重要程度
+    k = SelectKBest(f_classif, k=10)
+    k.fit(x, y)
+    print(k.scores_)
+    # print(k.pvalues_)
+    # print(k.get_support())
+    return k
+
+# 进行决策树分类，按照给出的x,y，计算出决策树分类的准确率
+def getDecisionTreeAccuracy(x,y):
+    # 决策树分类
+    from sklearn.tree import DecisionTreeClassifier
+    clf = DecisionTreeClassifier()
+    clf.fit(x, y)
+    # print(clf.predict(x))
+    # print(clf.predict_proba(x))
+    # print(clf.score(x, y))
+    return clf.score(x, y)
+
+# 进行决策树多分类
+# 将x,y 按比例进行划分，分成训练集和测试集
+# 预测结果
+# 计算训练集与测试集每个分类查准率与查全率
+def getDecisionTreeMultiClassify(x,y):
+    # 决策树分类
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import classification_report
+
+    # 划分训练集和测试集
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+    # 决策树分类
+    clf = DecisionTreeClassifier(max_depth=12, min_samples_leaf=8)
+    # clf = DecisionTreeClassifier()
+    clf.fit(x_train, y_train)
+
+    depth = clf.get_depth()
+    print('The depth of the decision tree classifier is:', depth)
+
+    # 获取最小叶子节点样本数
+    min_samples_leaf = clf.min_samples_leaf
+    print('The minimum number of samples required to be at a leaf node is:', min_samples_leaf)
+    # 预测结果
+    y_pred = clf.predict(x_test)
+
+    # 计算训练集与测试集每个分类查准率与查全率
+    from sklearn.metrics import classification_report
+    print(classification_report(y_train, clf.predict(x_train)))
+    print(classification_report(y_test, y_pred))
+
+
+
+# 计算np.array中每个不同值的数量和所占比例，直接打印到终端
+def printNpArrayCountAndRatio(npArray):
+    # 计算每个不同值的数量
+    unique, counts = np.unique(npArray, return_counts=True)
+    print(dict(zip(unique, counts)))
+    # 计算每个不同值的所占比例
+    unique, counts = np.unique(npArray, return_counts=True)
+    print(dict(zip(unique, counts/len(npArray))))
+
+
+def report1():
+    df = pd.read_csv(getFilename('demoSsAllMakeLabel'))
+
+    lines = []
+    head = ['cv1']
+    for i in range(8):
+        head.append('cv7Count%d'%i)
+    for i in range(8):
+        head.append('cv7Ratio%d'%i)
+    # for i in range(12):
+    #     head.append('feature%d'%i)
+    for xName in getXName(df):
+        head.append(xName)
+
+    lines.append(head)
+
+    for cv1 in range(8):
+        x,y = getXY(df,cv1)
+
+        # 计算np.array中每个不同值的数量和所占比例，记录到字符串中，以便后续保存输出
+        line = [str(cv1)]
+        
+        unique, counts = np.unique(y, return_counts=True)
+
+        l1 = (list(dict(zip(unique, counts)).values()))
+        # 如果l1中元素类型是int64，需要转成int
+        for i in range(len(l1)):
+            l1[i] = int(l1[i])
+
+        line += l1
+        line += (list(dict(zip(unique, counts/len(y))).values()))
+
+        # 特征得分，目前共12个特征
+        k = SelectKBest(f_classif, k=10)
+        # k = SelectKBest(mutual_info_classif, k=10)
+        
+
+        # 预处理
+        preprocessing_method = RobustScaler()
+        preprocessing_method.fit(x)
+        x = preprocessing_method.transform(x)
+
+        k.fit(x, y)
+
+        scoreList = list(k.scores_)
+        scoreSum = sum(scoreList)
+        # 求出scoreList中每个元素与scoreSum的比值，并放入新的列表中
+        scoreListRatio = []
+        for i in range(len(scoreList)):
+            scoreListRatio.append(scoreList[i]/scoreSum)
+
+        line += scoreListRatio
+
+        lines.append(line)
+
+        # 然后就是训练集和测试集的准确度，为了方便记录日志，可以只记录整体准确程度，详细的结论单独看详细日志        
+    
+    # print(lines)
+    return lines
+
+def report2():
+    # 这里需要记录在不同参数的前提下，决策树的表现情况
+
+    # 需要有详细记录，以便后续分析
+
+    # 还需要有一个总体的评估计算，可以快速的在参数中获得最优的参数
+    # 总体的评估指标应该采用按天的真实7日付费金额e的MAPE和R2
+
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import classification_report
+
+    df = pd.read_csv(getFilename('demoSsAllMakeLabel'))
+
+    # 划分训练集和测试集
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3)
+                                                        # , random_state=42)
+
+    lines = []
+    head = ['max_depth','min_samples_leaf','mape','r2']
+
+    for max_depth in (5,10,15,20,25,30):
+        for min_samples_leaf in (1,3,5,7):
+            detailStr = ''
+            for cv1 in range(8):
+                x,y = getXY(df,cv1)
+                # 决策树分类
+                clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_leaf=min_samples_leaf)
+                # clf = DecisionTreeClassifier()
+                clf.fit(x_train, y_train)
+
+                # depth = clf.get_depth()
+                # print('The depth of the decision tree classifier is:', depth)
+
+                # # 获取最小叶子节点样本数
+                # min_samples_leaf = clf.min_samples_leaf
+                # print('The minimum number of samples required to be at a leaf node is:', min_samples_leaf)
+                # 预测结果
+                y_pred = clf.predict(x_test)
+
+                # 计算训练集与测试集每个分类查准率与查全率
+                detailStr += 'cv1:%d\n'%cv1
+                detailStr += 'train:\n'
+                detailStr += (classification_report(y_train, clf.predict(x_train)))
+                detailStr += '\ntest:\n'
+                detailStr += (classification_report(y_test, y_pred))
+
+            detailLogFileName = '/src/data/doc/demoSS/report2DetailLog_%d_%d.txt'%(max_depth,min_samples_leaf)
+            with open(detailLogFileName, 'w') as f:
+                f.write(detailStr)
+
+from sklearn.tree import DecisionTreeClassifier,plot_tree
+from sklearn.metrics import r2_score,mean_absolute_percentage_error
+
+def report3():
+    sheet = 'Sheet8'
+    GSheet().clearSheet('1111',sheet)
+    GSheet().updateSheet('1111',sheet,'A1', [['特征数量','最大深度','最小叶子节点样本数', '训练mape', '训练r2', '测试mape', '测试r2']])
+    gsLineCount = 2
+    installDateDf = pd.read_csv(getFilename('demoSsLoginByInstallDate'))
+    df = pd.read_csv(getFilename('demoSsAllMakeLabel'))
+
+    df = df.merge(installDateDf, on='uid', how='left')
+    # 将df按行，随机抽取30%作为测试集，剩下的70%作为训练集
+    df = df.sample(frac=1).reset_index(drop=True)
+    dfTest = df[:int(len(df)*0.3)]
+    dfTrain = df[int(len(df)*0.3):]
+
+    # 特征筛选，将原有的特征缩减至N个
+    for n in (3,):
+        for max_depth in (30,):
+            for min_samples_leaf in (1,):
+                dfTrainCopy = dfTrain.copy(deep=True)
+                dfTestCopy = dfTest.copy(deep=True)
+
+                trainRetDf = pd.DataFrame(columns=['uid','cv7p','r7usdp'])
+                testRetDf = pd.DataFrame(columns=['uid','cv7p','r7usdp'])
+                
+                # 按照cv1将df分成8个子df，遍历li每个子df，分别进行决策树分类
+                for cv1 in range(8):
+                    dfCv1 = df[df['cv1']==cv1]
+                    x,y = getXY2(dfCv1)
+                    
+                    # 用整体数据进行特征筛选
+                    k = SelectKBest(f_classif, k=n)
+                    k.fit(x, y)
+
+                    # 将训练集和测试集进行特征筛选
+                    trainCv1Df = dfTrain[dfTrain['cv1']==cv1].copy(deep=True)
+                    trainX,trainY = getXY2(trainCv1Df)
+                    trainXNew = k.transform(trainX)
+
+                    # 决策树分类
+                    clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_leaf=min_samples_leaf)
+                    clf.fit(trainXNew, trainY)
+
+                    # fig, ax = plt.subplots(figsize=(12, 12))
+                    # plot_tree(clf, ax=ax)
+                    # # plt.show()
+                    # plt.savefig('/src/data/tree_%d.png'%(cv1))
+
+                    with open('/src/data/tree_%d.pkl'%(cv1), 'wb') as f:
+                        pickle.dump(clf, f)
+
+                    trainYPred = clf.predict(trainXNew)
+                    trainCv1Df.loc[:, 'cv7p'] = trainYPred
+
+                    # 预测结果
+                    testCv1Df = dfTest[dfTest['cv1']==cv1].copy(deep=True)
+                    testX,_ = getXY2(testCv1Df)
+                    testXNew = k.transform(testX)
+                    testYPred = clf.predict(testXNew)
+                
+                    # 将预测结果标记到dfCv1的'cv7p'列中
+                    testCv1Df.loc[:, 'cv7p'] = testYPred
+
+                    cvMapDf7 = pd.read_csv(getFilename('cvMapDf7_%d'%cv1))
+                    for cv7 in range(9):
+                        if len(cvMapDf7.loc[cvMapDf7.cv == cv7]) <= 0:
+                            continue
+                        min_event_revenue = cvMapDf7.loc[cvMapDf7.cv == cv7]['min_event_revenue'].values[0]
+                        max_event_revenue = cvMapDf7.loc[cvMapDf7.cv == cv7]['max_event_revenue'].values[0]
+                        avg = (min_event_revenue + max_event_revenue)/2
+                        if avg < 0:
+                            avg = 0
+                        trainCv1Df.loc[trainCv1Df['cv7p']==cv7,'r7usdp'] = avg
+                        testCv1Df.loc[testCv1Df['cv7p']==cv7,'r7usdp'] = avg
+
+                    trainTmpDf = trainCv1Df[['uid','cv7p','r7usdp']]
+                    trainRetDf = trainRetDf.append(trainTmpDf,ignore_index=True)
+
+                    testTmpDf = testCv1Df[['uid','cv7p','r7usdp']]
+                    testRetDf = testRetDf.append(testTmpDf,ignore_index=True)
+
+                dfTrainCopy = pd.merge(dfTrainCopy, trainRetDf, on='uid', how='left')    
+                dfTestCopy = pd.merge(dfTestCopy, testRetDf, on='uid', how='left')
+
+                trainInstallDateDf = dfTrainCopy.groupby('installDate').agg({
+                    'r7usd':'sum',
+                    'r7usdp':'sum'
+                })
+                trainInstallDateDf.loc[:,'mape'] = abs(trainInstallDateDf['r7usd'] - trainInstallDateDf['r7usdp'])/trainInstallDateDf['r7usd']
+                trainMape = mean_absolute_percentage_error(trainInstallDateDf['r7usd'],trainInstallDateDf['r7usdp'])
+                trainR2Score = r2_score(trainInstallDateDf['r7usd'],trainInstallDateDf['r7usdp'])
+
+                testInstallDateDf = dfTestCopy.groupby('installDate').agg({
+                    'r7usd':'sum',
+                    'r7usdp':'sum'
+                })
+                testInstallDateDf.loc[:,'mape'] = abs(testInstallDateDf['r7usd'] - testInstallDateDf['r7usdp'])/testInstallDateDf['r7usd']
+                testMape = mean_absolute_percentage_error(testInstallDateDf['r7usd'],testInstallDateDf['r7usdp'])
+                testR2Score = r2_score(testInstallDateDf['r7usd'],testInstallDateDf['r7usdp'])
+                
+                
+                GSheet().updateSheet('1111',sheet,'A%d'%gsLineCount, [[n,max_depth,min_samples_leaf, trainMape, trainR2Score,testMape,testR2Score]])
+                gsLineCount += 1
+
+                print('n:%d max_depth:%d min_samples_leaf:%d'%(n,max_depth,min_samples_leaf))
+
+
+# 要把max_depth和min_samples_leaf的值按照cv1分开优化，并记录结果
+def report4():
+
+    sheet = 'Sheet7'
+    GSheet().clearSheet('1111',sheet)
+    GSheet().updateSheet('1111',sheet,'A1', [['cv1','最大深度','最小叶子节点样本数', '训练mape', '训练r2', '测试mape', '测试r2']])
+    gsLineCount = 2
+
+    installDateDf = pd.read_csv(getFilename('demoSsLoginByInstallDate'))
+    df = pd.read_csv(getFilename('demoSsAllMakeLabel'))
+
+    df = df.merge(installDateDf, on='uid', how='left')
+    # 将df按行，随机抽取30%作为测试集，剩下的70%作为训练集
+    df = df.sample(frac=1).reset_index(drop=True)
+
+    for cv1 in range(8):
+        dfCv1 = df[df['cv1']==cv1].copy(deep=True)
+
+        dfTrain = dfCv1[int(len(dfCv1)*0.3):]
+        dfTest = dfCv1[:int(len(dfCv1)*0.3)]
+        x,y = getXY2(dfCv1)
+
+        k = SelectKBest(f_classif, k=5)
+        k.fit(x, y)
+
+        trainX,trainY = getXY2(dfTrain)
+        trainXNew = k.transform(trainX)
+
+        for max_depth in (5,10,20,30):
+            for min_samples_leaf in (1,2,3):
+                trainRetDf = pd.DataFrame(columns=['uid','cv7p','r7usdp'])
+                testRetDf = pd.DataFrame(columns=['uid','cv7p','r7usdp'])
+
+                dfTrainCopy = dfTrain.copy(deep=True)
+                dfTestCopy = dfTest.copy(deep=True)
+
+                clf = DecisionTreeClassifier(max_depth=max_depth, min_samples_leaf=min_samples_leaf)
+                clf.fit(trainXNew, trainY)
+                trainYPred = clf.predict(trainXNew)
+                dfTrainCopy.loc[:, 'cv7p'] = trainYPred
+
+                testX,_ = getXY2(dfTest)
+                testXNew = k.transform(testX)
+                testYPred = clf.predict(testXNew)
+                dfTestCopy.loc[:, 'cv7p'] = testYPred
+
+                cvMapDf7 = pd.read_csv(getFilename('cvMapDf7_%d'%cv1))
+                for cv7 in range(9):
+                    if len(cvMapDf7.loc[cvMapDf7.cv == cv7]) <= 0:
+                        continue
+                    min_event_revenue = cvMapDf7.loc[cvMapDf7.cv == cv7]['min_event_revenue'].values[0]
+                    max_event_revenue = cvMapDf7.loc[cvMapDf7.cv == cv7]['max_event_revenue'].values[0]
+                    avg = (min_event_revenue + max_event_revenue)/2
+                    if avg < 0:
+                        avg = 0
+                    dfTrainCopy.loc[dfTrainCopy['cv7p']==cv7,'r7usdp'] = avg
+                    dfTestCopy.loc[dfTestCopy['cv7p']==cv7,'r7usdp'] = avg
+                
+                trainTmpDf = dfTrainCopy[['uid','installDate','cv7','r7usd','cv7p','r7usdp']]
+                trainRetDf = trainRetDf.append(trainTmpDf,ignore_index=True)
+                trainInstallDateDf = trainRetDf.groupby('installDate').agg({
+                    'r7usd':'sum',
+                    'r7usdp':'sum'
+                })
+                trainInstallDateDf.loc[:,'mape'] = abs(trainInstallDateDf['r7usd'] - trainInstallDateDf['r7usdp'])/trainInstallDateDf['r7usd']
+                trainMape = mean_absolute_percentage_error(trainInstallDateDf['r7usd'],trainInstallDateDf['r7usdp'])
+                trainR2Score = r2_score(trainInstallDateDf['r7usd'],trainInstallDateDf['r7usdp'])
+
+                testTmpDf = dfTestCopy[['uid','installDate','cv7','r7usd','cv7p','r7usdp']]
+                testRetDf = testRetDf.append(testTmpDf,ignore_index=True)
+                testInstallDateDf = testRetDf.groupby('installDate').agg({
+                    'r7usd':'sum',
+                    'r7usdp':'sum'
+                })
+                testInstallDateDf.loc[:,'mape'] = abs(testInstallDateDf['r7usd'] - testInstallDateDf['r7usdp'])/testInstallDateDf['r7usd']
+                testMape = mean_absolute_percentage_error(testInstallDateDf['r7usd'],testInstallDateDf['r7usdp'])
+                testR2Score = r2_score(testInstallDateDf['r7usd'],testInstallDateDf['r7usdp'])
+                
+                GSheet().updateSheet('1111',sheet,'A%d'%gsLineCount, [[cv1,max_depth,min_samples_leaf, trainMape, trainR2Score,testMape,testR2Score]])
+                gsLineCount += 1
+
+                print('cv1:%d max_depth:%d min_samples_leaf:%d'%(cv1,max_depth,min_samples_leaf))
+
+# 将模型从kpl文件读取出来，并可视化保存为图片 
+def getTreePic():
+    for cv1 in range(8):
+        with open('/src/data/tree_%d.pkl'%cv1, 'rb') as f:
+            model = pickle.load(f)
+            print(cv1)
+            plt.figure(figsize=(1200, 60))
+            plot_tree(model)
+            plt.savefig('/src/data/tree_%d.png'%cv1)
+            print(cv1,'ok')
+
+
+
+
+
+
+from src.googleSheet import GSheet
 
 if __name__ == '__main__':
     # r1usdR7usdDfDf = getR1usdR7usd()
@@ -462,26 +945,54 @@ if __name__ == '__main__':
     # payCountDf = getPayCount()
     # payCountDf.to_csv(getFilename('demoSsPayCount'), index=False)
 
+    # userLevelMax = getUserLevelMax()
+    # userLevelMax.to_csv(getFilename('demoSsUserLevelMax'), index=False)
+
     # resourceDf = getResource()
     # resourceDf.to_csv(getFilename('demoSsResource'), index=False)
 
-    csvFileList = [
-        # 将login放到最前面
-        getFilename('demoSsLogin'),
-        getFilename('demoSsLabel'),
-        getFilename('demoSsMergeBuilding'),
-        getFilename('demoSsMergeArmy'),
-        getFilename('demoSsHeroLevelUp'),
-        getFilename('demoSsHeroStarUp'),
-        getFilename('demoSsPayCount'),
-        getFilename('demoSsResource')
-    ]
+    # csvFileList = [
+    #     # 将login放到最前面
+    #     getFilename('demoSsLogin'),
+    #     getFilename('demoSsLabel'),
+    #     getFilename('demoSsMergeBuilding'),
+    #     getFilename('demoSsMergeArmy'),
+    #     getFilename('demoSsHeroLevelUp'),
+    #     getFilename('demoSsHeroStarUp'),
+    #     getFilename('demoSsPayCount'),
+    #     getFilename('demoSsUserLevelMax'),
+    #     getFilename('demoSsResource')
+    # ]
 
-    df = mergeCsv(csvFileList)
-    # 合并之后所有空位填充0
-    df = df.fillna(0)
-    df.to_csv(getFilename('demoSsAll'), index=False)
+    # df = mergeCsv(csvFileList)
+    # # 合并之后所有空位填充0
+    # df = df.fillna(0)
+    # df.to_csv(getFilename('demoSsAll'), index=False)
 
-    df = pd.read_csv(getFilename('demoSsAll'))
-    df = makeLabel(df)
-    df.to_csv(getFilename('demoSsAllMakeLabel'), index=False)
+    # df = pd.read_csv(getFilename('demoSsAll'))
+    # df = makeLabel(df)
+    # df.to_csv(getFilename('demoSsAllMakeLabel'), index=False)
+
+    # df = pd.read_csv(getFilename('demoSsAllMakeLabel'))
+    # for cv1 in range(8):
+    #     x,y = getXY(df,cv1)
+
+    #     # print(x.shape,y.shape)
+    #     # print(x[:100],y[:100])
+    #    getFeatureImportance(x,y)
+    #     printNpArrayCountAndRatio(list(y))
+
+    #     # print(getDecisionTreeAccuracy(x,y))
+    #     getDecisionTreeMultiClassify(x,y)
+
+    lines = report1()
+            
+    GSheet().clearSheet('1111','Sheet4')
+    GSheet().updateSheet('1111','Sheet4','A1',lines)
+
+    # loginByInstallDateDf = getLoginByInstallDate()
+    # loginByInstallDateDf.to_csv(getFilename('demoSsLoginByInstallDate'), index=False)
+
+    # report3()
+    # report4()
+    # getTreePic()

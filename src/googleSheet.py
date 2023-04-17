@@ -27,7 +27,11 @@ class GSheet:
 if __name__ == '__main__':
     # GSheet().updateSheet('Where is the money Lebowski?','Sheet1','A1',[[1,2,3],[4,5,6]])
     # print(GSheet().getAllValuesFromSheet('auto video test','Data'))
-    gc = gspread.service_account()
-    sh = gc.open('ios predict')
-    for i in range(64):
-        sh.add_worksheet(title='%d'%(i), rows="1000", cols="20")
+    # gc = gspread.service_account()
+    # sh = gc.open('ios predict')
+    # for i in range(64):
+    #     sh.add_worksheet(title='%d'%(i), rows="1000", cols="20")
+    gs = GSheet()
+    # gs.clearSheet('1111','Sheet6')
+    # gs.updateSheet('1111','Sheet6','A1',[[1,2,3],[4,5,6]])
+    gs.updateSheet('1111','Sheet6','A3',[[1,2,3],[4,5,6]])
