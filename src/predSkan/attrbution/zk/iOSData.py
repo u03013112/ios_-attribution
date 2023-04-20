@@ -158,6 +158,150 @@ def getDataFromAF():
     df = execSql(sql)
     return df
 
+# 更改时间，获得更新的数据
+def getDataFromAF2():
+    whenStr = ''
+    for i in range(len(afCvMapDataFrame)):
+        min_event_revenue = afCvMapDataFrame.min_event_revenue[i]
+        max_event_revenue = afCvMapDataFrame.max_event_revenue[i]
+        if pd.isna(min_event_revenue) or pd.isna(max_event_revenue):
+            continue
+        whenStr += 'when r1usd>%d and r1usd<=%d then %d\n'%(min_event_revenue, max_event_revenue,i)
+
+    sql = '''
+        select
+            cv,
+            count(*) as count,
+            media_source as media,
+            sum(r1usd) as sumR1usd,
+            sum(r7usd) as sumR7usd,
+            install_date,
+            had_idfa
+        from
+            (
+                select
+                    idfv,
+                    had_idfa,
+                    media_source,
+                    case
+                        when r1usd = 0
+                        or r1usd is null then 0
+                        %s
+                        else 63
+                    end as cv,
+                    r1usd,
+                    r7usd,
+                    install_date
+                from
+                    (
+                        SELECT
+                            t0.idfv,
+                            t0.install_date,
+                            t0.had_idfa,
+                            t0.media_source,
+                            t1.r1usd,
+                            t1.r7usd
+                        FROM
+                            (
+                                select
+                                    idfv,
+                                    case
+                                        when idfa is null then 0
+                                        else 1
+                                    end as had_idfa,
+                                    media_source,
+                                    install_date
+                                from
+                                    (
+                                        select
+                                            idfv,
+                                            idfa,
+                                            media_source,
+                                            to_char(
+                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                                "yyyy-mm-dd"
+                                            ) as install_date
+                                        from
+                                            ods_platform_appsflyer_events
+                                        where
+                                            app_id = 'id1479198816'
+                                            and event_name = 'install'
+                                            and zone = 0
+                                            and day >= 20220501
+                                            and day <= 20230301
+                                            and install_time >= "2022-05-01"
+                                            and install_time < "2023-02-28"
+                                        union
+                                        all
+                                        select
+                                            idfv,
+                                            idfa,
+                                            media_source,
+                                            to_char(
+                                                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                                "yyyy-mm-dd"
+                                            ) as install_date
+                                        from
+                                            tmp_ods_platform_appsflyer_origin_install_data
+                                        where
+                                            app_id = 'id1479198816'
+                                            and zone = '0'
+                                            and install_time >= "2022-05-01"
+                                            and install_time <= "2023-02-28"
+                                    )
+                                group by
+                                    idfv,
+                                    had_idfa,
+                                    media_source,
+                                    install_date
+                            ) as t0
+                            LEFT JOIN (
+                                select
+                                    idfv,
+                                    to_char(
+                                        to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                                        "yyyy-mm-dd"
+                                    ) as install_date,
+                                    sum(
+                                        case
+                                            when event_timestamp - install_timestamp <= 1 * 24 * 3600 then cast (event_revenue_usd as double)
+                                            else 0
+                                        end
+                                    ) as r1usd,
+                                    sum(
+                                        case
+                                            when event_timestamp - install_timestamp <= 7 * 24 * 3600 then cast (event_revenue_usd as double)
+                                            else 0
+                                        end
+                                    ) as r7usd
+                                from
+                                    ods_platform_appsflyer_events
+                                where
+                                    app_id = 'id1479198816'
+                                    and event_name = 'af_purchase'
+                                    and zone = 0
+                                    and day >= 20220501
+                                    and day <= 20230301
+                                    and install_time >= "2022-05-01"
+                                    and install_time < "2023-02-28"
+                                group by
+                                    install_date,
+                                    idfv
+                            ) as t1 ON t0.idfv = t1.idfv
+                    )
+            )
+        group by
+            cv,
+            had_idfa,
+            media_source,
+            install_date;
+    '''%(whenStr)
+    print(sql)
+    df = execSql(sql)
+    return df
+
+
+
 # 这里区别是要将SKAN中的安装时间做处理
 # 按照AF的方式，无转化用户向前推36小时，付费用户向前推48小时
 def getDataFromSKAN():
@@ -571,8 +715,8 @@ def report3():
         print(name,'7日付费金额/首日付费金额 idfa 与 分配式归因 关联',corr['p71_idfa'].values[7])
 
 if __name__ == '__main__':
-    # df = getDataFromAF()
-    # df.to_csv(getFilename('iOSAF20220501_20230227'))
+    df = getDataFromAF()
+    df.to_csv(getFilename('iOSAF20220501_20230227'))
 
     # df = getDataFromSKAN()
     # df.to_csv(getFilename('iOSSKAN20220501_20230227'))

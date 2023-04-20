@@ -722,24 +722,24 @@ def report(docDirname):
 
 
 def main():
-    # step0()
-    # step1()
-    # step2()
-    # step3()
-    # step4()
-    # np64List = step5()
-    # x = step6(np64List)
-    # y = pd.read_csv(getFilename('step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
-    # y = y[:-1]
-    # np.save('/src/data/customLayer/x3R7.npy',x)
-    # np.save('/src/data/customLayer/y3R7.npy',y)
+    step0()
+    step1()
+    step2()
+    step3()
+    step4()
+    np64List = step5()
+    x = step6(np64List)
+    y = pd.read_csv(getFilename('step4_SumDf'))['sumr7usd'].to_numpy().reshape(-1,1)
+    y = y[:-1]
+    np.save('/src/data/customLayer/x3R7.npy',x)
+    np.save('/src/data/customLayer/y3R7.npy',y)
 
-    x = np.load('/src/data/customLayer/x3R7.npy')
-    y = np.load('/src/data/customLayer/y3R7.npy')
+    # x = np.load('/src/data/customLayer/x3R7.npy')
+    # y = np.load('/src/data/customLayer/y3R7.npy')
 
     # print(x,y)
 
-    train(x,y,'ios ::2 w')
+    # train(x,y,'ios ::2 w')
 
 
 if __name__ == '__main__':
