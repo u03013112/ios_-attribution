@@ -320,16 +320,16 @@ def meanAttributionAdv(userDf):
     return userDf
 
 def meanAttributionResult(userDf, mediaList=mediaList):
-    # for media in mediaList:
-    #     print(f"Processing media: {media}")
-    #     userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
+    for media in mediaList:
+        print(f"Processing media: {media}")
+        userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
 
-    # # Drop the 'attribute' column
-    # userDf = userDf.drop(columns=['attribute'])
+    # Drop the 'attribute' column
+    userDf = userDf.drop(columns=['attribute'])
 
     # userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
-
-    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+    # userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+    
     # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
     # 最终生成列：install_date,media,r7usdp
     # 中间过程：
@@ -473,9 +473,9 @@ if __name__ == '__main__':
     # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
     # meanAttribution(userDf, skanDf)
-    # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
+    userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
     # meanAttributionAdv(userDf)
-    # meanAttributionResult(userDf)
+    meanAttributionResult(userDf)
 
     # checkRet(pd.read_csv(getFilename('attribution1Ret')))
     
