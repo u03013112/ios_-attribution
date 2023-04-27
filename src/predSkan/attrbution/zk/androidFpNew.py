@@ -14,8 +14,8 @@ import sys
 sys.path.append('/src')
 from src.maxCompute import execSql
 
-def getFilename(filename):
-    return '/src/data/zk/%s.csv'%(filename)
+def getFilename(filename,ext='csv'):
+    return '/src/data/zk/%s.%s'%(filename,ext)
 
 def getDataFromMC():
     sql = '''
@@ -242,43 +242,17 @@ def userGroupby(userDf):
     userGroupbyDf.rename(columns={'appsflyer_id':'user_count'}, inplace=True)
     return userGroupbyDf
 
-
-# 归因方案1 重分配改进版（分组版本）
-# 步骤如下
-# 1、给userDf添加列，列名为attribute,默认值是[]。里面用于存储归因的媒体名，skan index，和对应的count。
-# 格式是{'media': 'media1', 'skan index': 1, 'count': 0.5},attribute列存储的是这种结构的列表。
-# 2、遍历skanDf，每行做如下处理：获取media，cv，user_count，min_valid_install_timestamp和max_valid_install_timestamp。
-# 在userDf中匹配 userDf.cv == skanDf.cv，并且 skanDf.max_valid_install_timestamp >= userDf.install_timestamp >= skanDf.min_valid_install_timestamp 的行。
-# 该行的attribute列的列表添加一个字典，media，skan index都取自skanDf这一行。
-# count的值是M/N，M是skanDf此行中的user_count；N是userDf符合上面条件的行的user_count的和。
-# 比如skanDf 行中 user_count 是 5，匹配到userDf中共有两行，user_count分别是2和3，那么count的值是5/5=1。
-# 3、找到userDf中attribute列中count的和大于1的行，对这些行做如下处理：
-# 找到attribute列中count最小的1个元素。
-# 从attribute列中删除这个元素。
-# 找到usdDf所有attribute列中包含此skan index的行。重新计算count，count为M/N，M是skanDf行中的user_count；N为剩余usdDf所有attribute列中包含此skan index的user_count的总和。
-# 4、检查userDf中是否还有行的attribute列中count的和大于1，如果有重复步骤3。（有循环次数上限）
-# 第4步骤完成后保存一个临时csv，用于记录归因过程中的结果。getFilename('attribution1ReStep4')
-# 5、汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果。
-# 格式采用之前归因方案1的格式，即 给userDf添加列，按照mediaList中的媒体顺序，添加列，列名为mediaList中的媒体名+' count'
-# count值是从attribute列中的按照media汇总count的值。
-# 6、返回userDf
-# 输入参数：
-# userDf 拥有列 install_timestamp,cv,user_count,r7usd
-# skanDf 拥有列 media,cv,min_valid_install_timestamp,max_valid_install_timestamp,user_count
-def attribution1Re(userDf, skanDf, mediaList = mediaList):
-    # 1. 给userDf添加列，列名为attribute,默认值是[]。
+def meanAttribution(userDf, skanDf):
     userDf['attribute'] = [list() for _ in range(len(userDf))]
     unmatched_rows = 0
     unmatched_user_count = 0
 
-    # 2. 遍历skanDf，每行做如下处理
     for index, row in skanDf.iterrows():
         media = row['media']
         cv = row['cv']
         min_valid_install_timestamp = row['min_valid_install_timestamp']
         max_valid_install_timestamp = row['max_valid_install_timestamp']
 
-        # 在userDf中找到符合条件的行
         condition = (
             (userDf['cv'] == cv) &
             (userDf['install_timestamp'] >= min_valid_install_timestamp) &
@@ -301,9 +275,12 @@ def attribution1Re(userDf, skanDf, mediaList = mediaList):
     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
     print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
 
-    userDf.to_csv(getFilename('attribution1ReStep2'))
+    userDf.to_csv(getFilename('attribution1ReStep2'), index=False)
+    userDf.to_parquet(getFilename('attribution1ReStep2','parquet'), index=False)
+    return userDf
 
-    # 3. 找到userDf中attribute列中count的和大于1的行，对这些行做如下处理
+
+def meanAttributionAdv(userDf):
     watchDog = 0
     while True:
         start_time = time.time()
@@ -338,42 +315,171 @@ def attribution1Re(userDf, skanDf, mediaList = mediaList):
         elapsed_time = time.time() - start_time
         print(f"Elapsed time for iteration {watchDog}: {elapsed_time:.2f} seconds")
 
-    userDf.to_csv(getFilename('attribution1ReStep4'))
-
-    # 5. 汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果
-    for media in mediaList:
-        userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
-
-    # 6. 返回userDf
-    userDf.to_csv(getFilename('attribution1ReStep6'))
+    userDf.to_csv(getFilename('attribution1ReStep4'), index=False)
+    userDf.to_parquet(getFilename('attribution1ReStep4','parquet'), index=False)
     return userDf
 
+def meanAttributionResult(userDf, mediaList=mediaList):
+    # for media in mediaList:
+    #     print(f"Processing media: {media}")
+    #     userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
+
+    # # Drop the 'attribute' column
+    # userDf = userDf.drop(columns=['attribute'])
+
+    # userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
+
+    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+    # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
+    # 最终生成列：install_date,media,r7usdp
+    # 中间过程：
+    # install_date 是 install_timestamp（unix秒） 转换而来，精确到天
+    # 将原本的 r7usd / user_count * media count 生成 media r7usd
+    # 再将media r7usd 按照 media 和 install_date 分组，求和，生成 r7usdp，media 单拆出一列
+    # Convert 'install_timestamp' to 'install_date'
+    userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
+
+    # Calculate media r7usd
+    for media in mediaList:
+        media_count_col = media + ' count'
+        userDf[media + ' r7usd'] = (userDf['r7usd'] / userDf['user_count']) * userDf[media_count_col]
+
+    # Drop unnecessary columns
+    userDf = userDf.drop(columns=['install_timestamp', 'cv', 'user_count', 'r7usd'] + [media + ' count' for media in mediaList])
+
+    # Melt the DataFrame to have 'media' and 'r7usd' in separate rows
+    userDf = userDf.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
+    userDf['media'] = userDf['media'].str.replace(' r7usd', '')
+
+    # Group by 'media' and 'install_date' and calculate the sum of 'r7usd'
+    userDf = userDf.groupby(['media', 'install_date']).agg({'r7usd': 'sum'}).reset_index()
+    userDf.rename(columns={'r7usd': 'r7usdp'}, inplace=True)
+
+    # Save to CSV
+    userDf.to_csv(getFilename('attribution1Ret'), index=False)
+    return userDf
+
+# 结论验算，从原始数据中找到媒体的每天的r7usd，然后和结果对比，计算MAPE与R2
+from sklearn.metrics import r2_score
+def checkRet(retDf):
+    # 读取原始数据
+    rawDf = loadData()
+    # 只保留mediaList的用户
+    rawDf = rawDf[rawDf['media'].isin(mediaList)]
+    # 将install_timestamp转为install_date
+    rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
+    # 按照media和install_date分组，计算r7usd的和
+    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r7usd': 'sum'}).reset_index()
+
+    # rawDf 和 retDf 进行合并
+    # 为了防止merge不成功，将install_date转成字符串
+    rawDf['install_date'] = rawDf['install_date'].astype(str)
+    retDf['install_date'] = retDf['install_date'].astype(str)
+    rawDf = rawDf.merge(retDf, on=['media', 'install_date'], how='left')
+    # 计算MAPE
+    rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
+    rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
+    rawDf.to_csv(getFilename('attribution1RetCheck'), index=False)
+    # 计算整体的MAPE和R2
+    MAPE = rawDf['MAPE'].mean()
+    R2 = r2_score(rawDf['r7usd'], rawDf['r7usdp'])
+    print('MAPE:', MAPE)
+    print('R2:', R2)
+    # 分媒体计算MAPE和R2
+    for media in mediaList:
+        mediaDf = rawDf[rawDf['media'] == media]
+        MAPE = mediaDf['MAPE'].mean()
+        R2 = r2_score(mediaDf['r7usd'], mediaDf['r7usdp'])
+        print(f"Media: {media}, MAPE: {MAPE}, R2: {R2}")
+
+def debug():
+    df = loadData()
+    df = df[
+        (df['media'] == 'snapchat_int') &
+        (df['install_date'] >= '2023-02-15') &
+        (df['install_date'] <= '2023-02-20')
+    ]
+    print(df)
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.dates import DateFormatter
+
+def draw():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    # 将不同的媒体分开画图，图片宽一点
+    # install_date作为x轴，每隔7天画一个点
+    # 双y轴，y1是r7usd和r7usdp；y2是MAPE（用虚线）。
+    # 图片保存到'/src/data/zk/att1_{media}.jpg'
+    # Convert 'install_date' to datetime
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    for media in mediaList:
+        media_df = df[df['media'] == media]
+
+        # Create the plot with the specified figure size
+        fig, ax1 = plt.subplots(figsize=(18, 6))
+
+        # Plot r7usd and r7usdp on the left y-axis
+        ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd')
+        ax1.plot(media_df['install_date'], media_df['r7usdp'], label='r7usdp')
+        ax1.set_ylabel('r7usd and r7usdp')
+        ax1.set_xlabel('Install Date')
+
+        # Plot MAPE on the right y-axis with dashed line
+        ax2 = ax1.twinx()
+        ax2.plot(media_df['install_date'], media_df['MAPE'], label='MAPE', linestyle='--', color='red')
+        ax2.set_ylabel('MAPE')
+
+        # Set x-axis to display dates with a 7-day interval
+        ax1.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+        plt.xticks(media_df['install_date'][::7], rotation=45)
+
+        # Add legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+
+        # Save the plot as a jpg image
+        plt.savefig(f'/src/data/zk/att1_{media}.jpg', bbox_inches='tight')
+        plt.close()
+
 if __name__ == '__main__':
-    getDataFromMC()
+    # getDataFromMC()
 
-    skanDf = makeSKAN()
-    skanDf = skanAddValidInstallDate(skanDf)
-    print('skan data len:',len(skanDf))
-    skanDf.to_csv(getFilename('skanAOS2'),index=False)
-    # skanDf = pd.read_csv(getFilename('skanAOS2'))
-    skanDf = skanValidInstallDate2Min(skanDf,N = 600)
-    skanDf = skanGroupby(skanDf)
-    skanDf.to_csv(getFilename('skanAOS2G'),index=False)
-    print('skan data group len:',len(skanDf))
+    # skanDf = makeSKAN()
+    # skanDf = skanAddValidInstallDate(skanDf)
+    # print('skan data len:',len(skanDf))
+    # skanDf.to_csv(getFilename('skanAOS2'),index=False)
+    # # skanDf = pd.read_csv(getFilename('skanAOS2'))
+    # skanDf = skanValidInstallDate2Min(skanDf,N = 600)
+    # skanDf = skanGroupby(skanDf)
+    # skanDf.to_csv(getFilename('skanAOS2G'),index=False)
+    # print('skan data group len:',len(skanDf))
 
-    userDf = makeUserDf()
-    print('user data len:',len(userDf))
-    userDf.to_csv(getFilename('userAOS2'),index=False)
-    # userDf = pd.read_csv(getFilename('userAOS2'))
-    userDf = userInstallDate2Min(userDf,N = 600)
-    userDf = userGroupby(userDf)
-    userDf.to_csv(getFilename('userAOS2G'),index=False)
-    print('user data group len:',len(userDf))
+    # userDf = makeUserDf()
+    # print('user data len:',len(userDf))
+    # userDf.to_csv(getFilename('userAOS2'),index=False)
+    # # userDf = pd.read_csv(getFilename('userAOS2'))
+    # userDf = userInstallDate2Min(userDf,N = 600)
+    # userDf = userGroupby(userDf)
+    # userDf.to_csv(getFilename('userAOS2G'),index=False)
+    # print('user data group len:',len(userDf))
 
-    userDf = pd.read_csv(getFilename('userAOS2G'))
-    skanDf = pd.read_csv(getFilename('skanAOS2G'))   
+    # userDf = pd.read_csv(getFilename('userAOS2G'))
+    # skanDf = pd.read_csv(getFilename('skanAOS2G'))   
 
-    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
+    # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
-    attribution1Re(userDf, skanDf)
+    # meanAttribution(userDf, skanDf)
+    # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
+    # meanAttributionAdv(userDf)
+    # meanAttributionResult(userDf)
+
+    # checkRet(pd.read_csv(getFilename('attribution1Ret')))
     
+
+    
+    # debug()
+    draw()
