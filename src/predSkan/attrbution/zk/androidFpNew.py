@@ -262,7 +262,10 @@ def meanAttribution(userDf, skanDf):
         num_matching_rows = len(matching_rows)
 
         if num_matching_rows > 0:
-            count = 1 / num_matching_rows
+            z = row['user_count']
+            m = matching_rows['user_count'].sum()
+            count = z / m
+            # count = 1 / num_matching_rows
             attribution_item = {'media': media, 'skan index': index, 'count': count}
             userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [attribution_item])
         else:
@@ -289,7 +292,7 @@ def meanAttributionAdv(userDf):
             print('watchDog > 10')
             break
         print('while:', watchDog)
-        userDf['count_sum'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x]))
+        userDf['count_sum'] = userDf['attribute'].apply(lambda x: sum([item['user_count'] for item in x]))
         invalid_rows = userDf[userDf['count_sum'] > 1]
 
         if invalid_rows.empty:
@@ -297,7 +300,7 @@ def meanAttributionAdv(userDf):
 
         for _, invalid_row in invalid_rows.iterrows():
             attribute_list = invalid_row['attribute']
-            min_count_item = min(attribute_list, key=lambda x: x['count'])
+            min_count_item = min(attribute_list, key=lambda x: x['user_count'])
             attribute_list.remove(min_count_item)
 
             skan_index = min_count_item['skan index']
@@ -309,7 +312,7 @@ def meanAttributionAdv(userDf):
                 for _, affected_row in affected_rows.iterrows():
                     appsflyer_id = affected_row['appsflyer_id']
                     userDf.loc[userDf['appsflyer_id'] == appsflyer_id, 'attribute'] = userDf.loc[userDf['appsflyer_id'] == appsflyer_id, 'attribute'].apply(
-                        lambda x: [item if item['skan index'] != skan_index else {**item, 'count': count} for item in x]
+                        lambda x: [item if item['skan index'] != skan_index else {**item, 'user_count': count} for item in x]
                     )
 
         elapsed_time = time.time() - start_time
@@ -327,9 +330,9 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # Drop the 'attribute' column
     userDf = userDf.drop(columns=['attribute'])
 
-    # userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
-    # userDf = pd.read_csv(getFilename('attribution1ReStep6'))
-    
+    userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
+    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+
     # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
     # 最终生成列：install_date,media,r7usdp
     # 中间过程：
@@ -342,7 +345,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # Calculate media r7usd
     for media in mediaList:
         media_count_col = media + ' count'
-        userDf[media + ' r7usd'] = (userDf['r7usd'] / userDf['user_count']) * userDf[media_count_col]
+        userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
 
     # Drop unnecessary columns
     userDf = userDf.drop(columns=['install_timestamp', 'cv', 'user_count', 'r7usd'] + [media + ' count' for media in mediaList])
@@ -357,6 +360,32 @@ def meanAttributionResult(userDf, mediaList=mediaList):
 
     # Save to CSV
     userDf.to_csv(getFilename('attribution1Ret'), index=False)
+    return userDf
+
+def meanAttributionResultDebug(userDf, mediaList=mediaList):
+    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+
+    # Convert 'install_timestamp' to 'install_date'
+    userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
+
+    # Calculate media r7usd
+    for media in mediaList:
+        media_count_col = media + ' count'
+        userDf[media + ' r7usd'] = (userDf['r7usd'] / userDf['user_count']) * userDf[media_count_col]
+
+    # Drop unnecessary columns
+    userDf = userDf.drop(columns=['install_timestamp', 'user_count', 'r7usd'] + [media + ' count' for media in mediaList])
+
+    # Melt the DataFrame to have 'media' and 'r7usd' in separate rows
+    userDf = userDf.melt(id_vars=['install_date', 'cv'], var_name='media', value_name='r7usd')
+    userDf['media'] = userDf['media'].str.replace(' r7usd', '')
+
+    # Group by 'cv', 'media', and 'install_date' and calculate the sum of 'r7usd'
+    userDf = userDf.groupby(['cv', 'media', 'install_date']).agg({'r7usd': 'sum'}).reset_index()
+    userDf.rename(columns={'r7usd': 'r7usdp'}, inplace=True)
+
+    # Save to CSV
+    userDf.to_csv(getFilename('attribution1RetDebug'), index=False)
     return userDf
 
 # 结论验算，从原始数据中找到媒体的每天的r7usd，然后和结果对比，计算MAPE与R2
@@ -392,13 +421,78 @@ def checkRet(retDf):
         R2 = r2_score(mediaDf['r7usd'], mediaDf['r7usdp'])
         print(f"Media: {media}, MAPE: {MAPE}, R2: {R2}")
 
+def checkRetDebug(retDf):
+    # 读取原始数据
+    rawDf = loadData()
+    cvMapDf = getCvMap()
+    rawDf = addCv(rawDf,cvMapDf)
+    # 只保留mediaList的用户
+    rawDf = rawDf[rawDf['media'].isin(mediaList)]
+    # 将install_timestamp转为install_date
+    rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
+    # 按照media和install_date分组，计算r7usd的和
+    rawDf = rawDf.groupby(['media', 'install_date','cv']).agg({'r7usd': 'sum'}).reset_index()
+
+    # rawDf 和 retDf 进行合并
+    # 为了防止merge不成功，将install_date转成字符串
+    rawDf['install_date'] = rawDf['install_date'].astype(str)
+    retDf['install_date'] = retDf['install_date'].astype(str)
+    rawDf = rawDf.merge(retDf, on=['media', 'install_date','cv'], how='left')
+    # 计算MAPE
+    rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
+    rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
+    rawDf.to_csv(getFilename('attribution1RetCheck'), index=False)
+
+    # 分媒体计算MAPE和R2
+    for media in mediaList:
+        for cv in range(32):
+            mediaDf = rawDf[
+                (rawDf['media'] == media) &
+                (rawDf['cv'] == cv)
+                ]
+            try:
+                MAPE = mediaDf['MAPE'].mean()
+            except:
+                MAPE = 0
+            try:
+                R2 = r2_score(mediaDf['r7usd'], mediaDf['r7usdp'])
+            except:
+                R2 = 0
+            print(f"Media: {media},cv:{cv} MAPE: {MAPE}, R2: {R2}")
+
+
 def debug():
-    df = loadData()
-    df = df[
-        (df['media'] == 'snapchat_int') &
-        (df['install_date'] >= '2023-02-15') &
-        (df['install_date'] <= '2023-02-20')
-    ]
+    
+    # 希望确认一下每个步骤的正确性
+    # 先确认归因逻辑，找到一些比较少见的cv+install_date，看看是否正确
+
+    # 比如 先找到 2023-03-01 cv == 25 的结论
+
+    installDate = '2023-03-01'
+    cv = 10
+
+    # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
+    # userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date.astype(str)
+    
+    # userDf = userDf[(userDf['install_date'] == installDate) & (userDf['cv'] == cv)]
+    # print(userDf)
+    # userDf.to_csv(getFilename('debug1'),index=False)
+
+    # df = loadData()
+    # cvMapDf = getCvMap()
+    # df = addCv(df,cvMapDf)
+    
+    # df = df.loc[(df['install_date'] == installDate) & (df['cv'] == cv)]
+    # print(df)
+    # df.to_csv(getFilename('debug2'),index=False)
+
+    skanDf = pd.read_csv(getFilename('skanAOS2G'))
+    # # 在skanDf中，找到所有 min_valid_install_date <= '2023-02-01' <= max_valid_install_date & cv == 25 的记录
+    # # skanDf = skanDf[(skanDf['min_valid_install_date'] <= '2023-02-01') & (skanDf['max_valid_install_date'] >= '2023-02-01') & (skanDf['cv'] == 25)]
+    # # print(skanDf)
+    df = skanDf.iloc[[23306,23307,23308,23309,23310,23311,77619,77620,77621]]
+    df['min_valid_install'] = pd.to_datetime(df['min_valid_install_timestamp'], unit='s').astype(str)
+    df['max_valid_install'] = pd.to_datetime(df['max_valid_install_timestamp'], unit='s').astype(str)
     print(df)
 
 
@@ -467,19 +561,20 @@ if __name__ == '__main__':
     # userDf.to_csv(getFilename('userAOS2G'),index=False)
     # print('user data group len:',len(userDf))
 
-    # userDf = pd.read_csv(getFilename('userAOS2G'))
-    # skanDf = pd.read_csv(getFilename('skanAOS2G'))   
+    userDf = pd.read_csv(getFilename('userAOS2G'))
+    skanDf = pd.read_csv(getFilename('skanAOS2G'))   
 
-    # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
+    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
-    # meanAttribution(userDf, skanDf)
+    meanAttribution(userDf, skanDf)
     userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
-    # meanAttributionAdv(userDf)
+    # # meanAttributionAdv(userDf)
     meanAttributionResult(userDf)
+    # # meanAttributionResultDebug(userDf)
 
-    # checkRet(pd.read_csv(getFilename('attribution1Ret')))
-    
+    checkRet(pd.read_csv(getFilename('attribution1Ret')))
+    # # checkRetDebug(pd.read_csv(getFilename('attribution1RetDebug')))
 
     
     # debug()
-    draw()
+    # draw()
