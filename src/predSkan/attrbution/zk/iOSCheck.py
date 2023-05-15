@@ -10,7 +10,6 @@ mediaList = [
     'bytedanceglobal_int',
     'googleadwords_int',
     'Facebook Ads',
-    'snapchat_int',
     'applovin_int'
 ]
 
