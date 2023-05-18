@@ -67,6 +67,13 @@ def getDataFromMC():
             COALESCE(
                 sum(purchases.event_revenue_usd) FILTER (
                     WHERE
+                        purchases.event_timestamp <= installs.install_timestamp + 3 * 86400
+                ),
+                0
+            ) AS r3usd,
+            COALESCE(
+                sum(purchases.event_revenue_usd) FILTER (
+                    WHERE
                         purchases.event_timestamp <= installs.install_timestamp + 7 * 86400
                 ),
                 0
@@ -243,7 +250,7 @@ def makeUserDf():
     cvMapDf = getCvMap()
     userDf = addCv(df,cvMapDf)
 
-    userDf = userDf[['appsflyer_id','install_timestamp','r1usd','r7usd','cv']]
+    userDf = userDf[['appsflyer_id','install_timestamp','r1usd','r3usd','r7usd','cv']]
     userDf['cv'] = userDf['cv'].astype(int)
     return userDf
 
@@ -258,7 +265,7 @@ def userGroupby(userDf):
     # userGroupbyDf的列名为install_timestamp,cv,user_count和r7usd
     # user_count是每组的用户数
     # r7usd是每组的r7usd汇总
-    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'appsflyer_id':'count','r1usd':'sum','r7usd':'sum'}).reset_index()
+    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'appsflyer_id':'count','r1usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
     userGroupbyDf.rename(columns={'appsflyer_id':'user_count'}, inplace=True)
     return userGroupbyDf
 
@@ -628,7 +635,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
 
     userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
     userDf = pd.read_csv(getFilename('attribution1ReStep6'))
-
+    print("Results saved to file attribution1ReStep6")
     # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
     # 最终生成列：install_date,media,r7usdp
     # 中间过程：
@@ -643,6 +650,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
         media_count_col = media + ' count'
         userDf[media + ' r1usd'] = userDf['r1usd'] * userDf[media_count_col]
         userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
+        userDf[media + ' user_count'] = userDf['user_count'] * userDf[media_count_col]
 
     # 分割userDf为两个子数据框，一个包含r1usd，另一个包含r7usd
     userDf_r1usd = userDf[['install_date'] + [media + ' r1usd' for media in mediaList]]
@@ -651,54 +659,38 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # 对两个子数据框分别进行melt操作
     userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
     userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
+    userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
     userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
-    print('userDf_r1usd')
+    print(userDf_r1usd.head())
+    
     userDf_r7usd = userDf_r7usd.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
     userDf_r7usd['media'] = userDf_r7usd['media'].str.replace(' r7usd', '')
-    userDf_r1usd.to_csv(getFilename('userDf_r7usd'), index=False )
-    print('userDf_r7usd')
+    userDf_r7usd = userDf_r7usd.groupby(['install_date', 'media']).sum().reset_index()
+    userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
+    print(userDf_r7usd.head())
+
+    # 还需要统计每个媒体的首日用户数
+    userDf_count = userDf[['install_date'] + [media + ' user_count' for media in mediaList]]
+    userDf_count = userDf_count.melt(id_vars=['install_date'], var_name='media', value_name='count')
+    userDf_count['media'] = userDf_count['media'].str.replace(' user_count', '')
+    userDf_count = userDf_count.groupby(['install_date', 'media']).sum().reset_index()
+    userDf_count.to_csv(getFilename('userDf_count'), index=False )
+    print(userDf_count.head())
+    # ，和付费用户数
+    userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
+    userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
+    userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
+    userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
+    userDf_payCount.to_csv(getFilename('userDf_payCount'), index=False )
+    print(userDf_payCount.head())
 
     # 将两个子数据框连接在一起
     userDf = userDf_r1usd.merge(userDf_r7usd, on=['install_date', 'media'])
-    print('merge')
-    # Save to CSV
-    userDf.to_csv(getFilename('attribution1Ret'), index=False)
-    return userDf
-
-def meanAttributionResultDebug(userDf, mediaList=mediaList):
-    for media in mediaList:
-        print(f"Processing media: {media}")
-        userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
-
-    # Drop the 'attribute' column
-    userDf = userDf.drop(columns=['attribute'])
-
-    userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
-    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
-
-    # Convert 'install_timestamp' to 'install_date'
-    userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
-
-    # Calculate media r7usd and media user_count
-    for media in mediaList:
-        media_count_col = media + ' count'
-        userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
-        userDf[media + ' user_count'] = userDf[media_count_col]
-
-    # Drop unnecessary columns
-    userDf = userDf.drop(columns=['install_timestamp', 'cv', 'user_count', 'r7usd'] + [media + ' count' for media in mediaList])
-
-    # Melt the DataFrame to have 'media', 'r7usd', and 'user_count' in separate rows
-    userDf = userDf.melt(id_vars=['install_date'], var_name='media', value_vars=[media + ' r7usd' for media in mediaList] + [media + ' user_count' for media in mediaList], value_name='value')
-
-    userDf['metric'] = userDf['media'].apply(lambda x: x.split()[-1])
-    userDf['media'] = userDf['media'].apply(lambda x: x.split()[0])
-
-    # Pivot the DataFrame to have 'r7usd' and 'user_count' in separate columns
-    userDf = userDf.pivot_table(index=['media', 'install_date', 'metric'], values='value', aggfunc='sum').unstack(level=-1).reset_index()
-    userDf.columns = userDf.columns.droplevel(0)
-    userDf.columns.name = None
-    userDf.rename(columns={'': 'media', 'r7usd': 'r7usdp'}, inplace=True)
+    print('merge1')
+    userDf = userDf.merge(userDf_count, on=['install_date', 'media'])
+    print('merge2')
+    userDf = userDf.merge(userDf_payCount, on=['install_date', 'media'])
+    print('merge3')
 
     # Save to CSV
     userDf.to_csv(getFilename('attribution1Ret'), index=False)
@@ -786,65 +778,14 @@ def cv_group(cv):
         return "21-32"
     
 def debug():
-    # 读取原始数据
-    rawDf = loadData()
-    cvMapDf = getCvMap()
-    rawDf = addCv(rawDf,cvMapDf)
+    userDf2 = pd.read_csv(getFilename('userAOS3G'))
+    userDf2 = userDf2[['install_timestamp','cv','r3usd']]
 
-    rawDf = rawDf[['install_date','media','cv','r7usd']]
-    
-    # print(rawDf.head())
-    #   install_date         media   cv  r7usd
-    # 0   2023-02-27           NaN  0.0    0.0
-    # 1   2023-01-04           NaN  0.0    0.0
-    # 2   2023-01-24           NaN  0.0    0.0
-    # 3   2023-01-04  Facebook Ads  0.0    0.0
-    # 4   2023-03-01           NaN  0.0    0.0
+    userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
+    userDf = userDf.merge(userDf2,on=['install_timestamp','cv'],how='left')
 
-    # 将cv按照 0~10,11~20,21~32 （cv有效范围是0~31）分成三个区间，标记为cv group
-    # 针对媒体‘bytedanceglobal_int’与所有媒体汇总进行比较
-    # 比较每个cv group的r7usd
-    # 具体比较内容：中位数，Q1，Q2，Q3，行数
-    # install_date上分成两个部分，‘2023-02-13’之前，‘2023-02-13’之后
-    # 结论保存到csv中，文件名为‘/src/data/zk/debug1.csv’
-
-    rawDf['cv_group'] = rawDf['cv'].apply(cv_group)
-    rawDf['install_date'] = pd.to_datetime(rawDf['install_date'])
-    rawDf['period'] = rawDf['install_date'].apply(lambda x: 'before' if x < pd.Timestamp('2023-02-13') else 'after')
-
-    rawDf.to_csv(getFilename('debug0'),index=False)
-
-    media_list = ['bytedanceglobal_int', 'all']
-    result = []
-
-    for media in media_list:
-        for period in ['before', 'after']:
-            if media == 'all':
-                total_rows = rawDf[rawDf['period'] == period].shape[0]
-                total_r7usd = rawDf[rawDf['period'] == period]['r7usd'].sum()
-            else:
-                total_rows = rawDf[(rawDf['media'] == media) & (rawDf['period'] == period)].shape[0]
-                total_r7usd = rawDf[(rawDf['media'] == media) & (rawDf['period'] == period)]['r7usd'].sum()
-
-            for cv_group in ["0-10", "11-20", "21-32"]:
-                if media == 'all':
-                    data = rawDf[(rawDf['cv_group'] == cv_group) & (rawDf['period'] == period)]
-                else:
-                    data = rawDf[(rawDf['media'] == media) & (rawDf['cv_group'] == cv_group) & (rawDf['period'] == period)]
-
-                mean = data['r7usd'].mean()
-                q1 = data['r7usd'].quantile(0.25)
-                q2 = data['r7usd'].quantile(0.5)
-                q3 = data['r7usd'].quantile(0.75)
-                row_percentage = data.shape[0] / total_rows
-                r7usd_percentage = data['r7usd'].sum() / total_r7usd
-
-                result.append([media, period, cv_group, mean, q1, q2, q3, row_percentage, r7usd_percentage])
-
-    result_df = pd.DataFrame(result, columns=['media', 'period', 'cv_group', 'mean', 'Q1', 'Q2', 'Q3', 'row_percentage', 'r7usd_percentage'])
-    result_df.sort_values(by=['cv_group', 'period', 'media'], inplace=True)
-    result_df.to_csv('/src/data/zk/debug1.csv', index=False)
-    print(result_df)
+    userDf.to_parquet(getFilename('attribution1ReStep2R3usd','parquet'), index=False)
+    userDf.to_csv(getFilename('attribution1ReStep2R3usd'), index=False)
 
 def debug2():
     rawDf = loadData()
@@ -1410,36 +1351,29 @@ import matplotlib.dates as mdates
 
 def debug9():
     df = pd.read_csv(getFilename('attribution1RetCheck'))
+    df['install_date'] = pd.to_datetime(df['install_date'])
     facebookDf = df.loc[df['media'] == 'Facebook Ads']
     mape = facebookDf['MAPE'].mean()
-    # 显示总体MAPE，按照12.34%的格式显示
     print('MAPE:', '{:.2%}'.format(mape))
 
-    # 设置图形大小
-    plt.figure(figsize=(24, 6))
+    plt.figure(figsize=(28, 6))
 
-    # 绘制 r7usd 和 r7usdp 的折线图
+    ax1 = plt.gca()  # 获取当前的Axes对象
     sns.lineplot(x='install_date', y='r7usd', data=facebookDf, label='r7usd')
     sns.lineplot(x='install_date', y='r7usdp', data=facebookDf, label='r7usdp')
+    ax1.legend(loc='upper left')  # 将左侧y轴的图例放置在左上角
 
-    # 绘制 MAPE 的折线图（虚线）
     ax2 = plt.twinx()
     sns.lineplot(x='install_date', y='MAPE', data=facebookDf, ax=ax2, linestyle='--', label='MAPE')
 
-    # 将 MAPE > 0.37 的部分用半透明颜色填充
     ax2.fill_between(facebookDf['install_date'], 0.37, facebookDf['MAPE'], where=(facebookDf['MAPE'] > 0.37), color='red', alpha=0.5)
+    ax2.legend(loc='upper right')  # 将右侧y轴的图例放置在右上角
 
-    # 设置图例
-    ax2.legend()
-
-    # 设置横坐标刻度为每月一个刻度
     ax2.xaxis.set_major_locator(mdates.MonthLocator())
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     plt.xticks(rotation=45)
 
-    # 保存图像
     plt.savefig('/src/data/zk/facebook.jpg')
-
 def debug9_5():
     
     df2 = loadData()
@@ -1455,6 +1389,50 @@ def debug9_5():
 
     mergeDf = df.merge(df2, left_on='install_date', right_index=True, how='left')
     mergeDf.to_csv(getFilename('attribution1RetCheck2'))
+
+def debug9_6():
+    # 将attribution1RetCheck2和attribution1Ret合并，也就是真实数据与融合归因数据合并
+    attribution1RetCheck2 = pd.read_csv(getFilename('attribution1RetCheck2'))
+    attribution1Ret = pd.read_csv(getFilename('attribution1Ret'))
+    mergeDf = attribution1RetCheck2.merge(attribution1Ret, on=['install_date','media'], how='left', suffixes=('', '_att'))
+
+    # 列改名
+    mergeDf.rename(columns={
+        'count': 'user_count_att', 
+        'payCount': 'pay_count_att',
+    }, inplace=True)
+
+    # 计算r1usd与r1usd_att的MAPE，结果在列'r1usd MAPE'
+    mergeDf['r1usd MAPE'] = abs(mergeDf['r1usd'] - mergeDf['r1usd_att'])/mergeDf['r1usd']
+
+    # 计算r7usd与r7usd_att的MAPE，结果在列'r7usd MAPE'
+    mergeDf['r7usd MAPE'] = abs(mergeDf['r7usd'] - mergeDf['r7usd_att'])/mergeDf['r7usd']
+    
+    # 计算user_count和user_count_att的MAPE，结果在列'user_count MAPE'
+    mergeDf['user_count MAPE'] = abs(mergeDf['user_count'] - mergeDf['user_count_att'])/mergeDf['user_count']
+
+    # 计算pay_count和pay_count_att的MAPE，结果在列'pay_count MAPE'
+    mergeDf['pay_count MAPE'] = abs(mergeDf['pay_count'] - mergeDf['pay_count_att'])/mergeDf['pay_count']
+
+    mergeDf = mergeDf[[
+        'install_date',
+        'media',
+        'r1usd',
+        'r1usd_att',
+        'r1usd MAPE',
+        'r7usd',
+        'r7usd_att',
+        'r7usd MAPE',
+        'user_count',
+        'user_count_att',
+        'user_count MAPE',
+        'pay_count',
+        'pay_count_att',
+        'pay_count MAPE',
+    ]]
+    print(mergeDf.head(10))
+    mergeDf.to_csv(getFilename('attribution1RetCheck3'),index=False)
+
 
 def debug10():
     df = pd.read_csv(getFilename('attribution1RetCheck2'))
@@ -1509,7 +1487,6 @@ def debug10():
 
     print('MAPE > 0.37的数据user_count_diff平均值/所有数据user_count_diff平均值:',facebookDf2['user_count_diff'].mean()/facebookDf['user_count_diff'].mean())
 
-    
 
 if __name__ == '__main__':
     # getDataFromMC()
@@ -1545,8 +1522,10 @@ if __name__ == '__main__':
     # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
     # # meanAttributionAdv2(userDf,skanDf)
 
-    # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
-    # userDf = meanAttributionResult(userDf)
+    userDf = pd.read_parquet(getFilename('attribution1ReStep2R3usd','parquet'))
+    userDf = meanAttributionResult(userDf)
+    # userDf = meanAttributionResult(None)
+
     # meanAttributionResultDebug(userDf)
 
     # userDf = pd.read_csv(getFilename('attribution1Ret'))
@@ -1574,5 +1553,6 @@ if __name__ == '__main__':
     # debug8()
     # afSkan()
     # debug9()
-    debug9_5()
+    # debug9_5()
+    # debug9_6()
     # debug10()
