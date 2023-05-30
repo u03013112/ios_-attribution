@@ -24,6 +24,7 @@
 
 import pandas as pd
 import numpy as np
+from keras.constraints import MinMaxNorm, Constraint
 
 mediaList = [
     'googleadwords_int',
@@ -338,32 +339,322 @@ def check1(rNUsd = 'r1usd_mmm'):
 
     media_df.to_csv('/src/data/zk2/check1_mmm2.csv', index=False)
 
+# 原本的train1和check1是针对所有数据只拟合出一套用户质量（即7日付费金额与N日付费金额的比例），并计算拟合值与真实值的总体MAPE和分媒体MAPE
+# 现在希望对数据进行分组，按照install_date（天）进行分组，每N天分一组，默认是30天
+# 每一组数据都拟合出一套用户质量，即一套参数（模型）。仍然采用train1的方式将每一组数据都拿出一部分做测试集
+# 然后跨越分组，计算拟合值与真实值的总体MAPE和分媒体MAPE
+import datetime
 
+def parse_date(date_str):
+    return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+
+# 将日期分组，每N天为一组
+def group_dates(dates, days_per_group=30):
+    min_date = min(dates)
+    max_date = max(dates)
+    date_ranges = []
+    start_date = min_date
+    while start_date <= max_date:
+        end_date = start_date + datetime.timedelta(days=days_per_group - 1)
+        date_ranges.append((start_date, end_date))
+        start_date = end_date + datetime.timedelta(days=1)
+    return date_ranges
+
+# 根据日期范围筛选数据
+def filter_data_by_date_range(df, start_date, end_date):
+    return df[(df['install_date'] >= start_date) & (df['install_date'] <= end_date)]
+
+def train2(rNUsd='r1usd_mmm', days_per_group=30):
+    # 读取数据
+    df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    df = df[['install_date', 'media', 'r7usd_raw', rNUsd]]
+    df['install_date'] = df['install_date'].apply(parse_date)
+
+    # 按照安装日期进行汇总，并pivot_table
+    media_df = df.pivot_table(index='install_date', columns='media', values=rNUsd).reset_index()
+    media_df = media_df.fillna(0)
+
+    # 将y，即r7usd_raw的按天汇总做成df
+    y_df = df.groupby('install_date')['r7usd_raw'].sum().reset_index()
+
+    # 将两个df进行merge
+    merged_df = pd.merge(media_df, y_df, on='install_date')
+
+    # 获取日期分组
+    unique_install_dates = df['install_date'].unique()
+    date_ranges = group_dates(unique_install_dates, days_per_group)
+
+    models = []
+
+    # 对每个日期范围进行处理
+    for start_date, end_date in date_ranges:
+        print(f"Processing date range: {start_date} - {end_date}")
+
+        # 筛选出当前日期范围内的数据
+        date_range_df = filter_data_by_date_range(merged_df, start_date, end_date)
+
+        # 准备训练数据
+        input_columns = ['googleadwords_int', 'Facebook Ads', 'bytedanceglobal_int', 'snapchat_int', 'other']
+        X_train = date_range_df[input_columns].values
+        y_train = date_range_df['r7usd_raw'].values
+
+        # 创建模型
+        inputs = Input(shape=(5,))
+        inputs_list = [Lambda(lambda x, i=i: x[:, i:i+1])(inputs) for i in range(5)]
+
+        outputs_list = [Dense(1, activation='linear', bias_initializer=Zeros())(input) for input in inputs_list]
+        # 添加权重限制：w至少为1，b只能是0
+        # outputs_list = [Dense(1, activation='linear', kernel_constraint=MinMaxNorm(min_value=1.0), bias_initializer=Zeros())(input) for input in inputs_list]
+        
+        outputs_sum = Add()(outputs_list)
+        model = Model(inputs=inputs, outputs=outputs_sum)
+
+        # 编译模型
+        model.compile(optimizer='RMSprop', loss='mse', metrics=['mape'])
+        # model.compile(optimizer='Adam', loss='mse', metrics=['mape'])
+
+        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+
+        # 训练模型，使用validation_split参数划分30%的数据作为测试集
+        history = model.fit(X_train, y_train, validation_split=0.3, epochs=5000, batch_size=20,
+                            callbacks=[early_stopping])
+
+        # 保存模型
+        model.save(f'/src/data/zk2/model_{start_date}_to_{end_date}.h5')
+        models.append(model)
+
+    return models
+
+def check2(models=None, rNUsd='r1usd_mmm', days_per_group=30):
+    # 读取数据
+    df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    df = df[['install_date', 'media', 'r7usd_raw', rNUsd]]
+    df['install_date'] = df['install_date'].apply(parse_date)
+
+    # 按照安装日期进行汇总，并pivot_table
+    media_df = df.pivot_table(index='install_date', columns='media', values=[rNUsd, 'r7usd_raw']).reset_index()
+    media_df = media_df.fillna(0)
+
+    # 获取日期分组
+    unique_install_dates = df['install_date'].unique()
+    date_ranges = group_dates(unique_install_dates, days_per_group)
+
+    if not models:
+        models = []
+        for start_date, end_date in date_ranges:
+            model_path = f'/src/data/zk2/model_{start_date}_to_{end_date}.h5'
+            model = load_model(model_path)
+            models.append(model)
+
+    all_date_range_df = pd.DataFrame()
+
+    # 对每个日期范围进行处理
+    for (start_date, end_date), model in zip(date_ranges, models):
+        print(f"Processing date range: {start_date} - {end_date}")
+
+        # 筛选出当前日期范围内的数据
+        date_range_df = filter_data_by_date_range(media_df, start_date, end_date)
+
+        # 准备测试数据
+        input_columns = [(rNUsd, 'googleadwords_int'), (rNUsd, 'Facebook Ads'), (rNUsd, 'bytedanceglobal_int'), (rNUsd, 'snapchat_int'), (rNUsd, 'other')]
+
+        # 对每个媒体进行预测并计算MAPE
+        for i, media in enumerate(input_columns):
+            X_single_media = np.zeros_like(date_range_df[input_columns].values)
+            X_single_media[:, i] = date_range_df[media].values
+            y_pred = model.predict(X_single_media)
+
+            date_range_df[f'{media[1]}_pred'] = y_pred
+            date_range_df[f'{media[1]}_mape'] = abs(date_range_df[('r7usd_raw', media[1])] - date_range_df[f'{media[1]}_pred']) / date_range_df[('r7usd_raw', media[1])]
+            
+            # 计算每个媒体在当前日期范围内的MAPE
+            media_mape = date_range_df[f'{media[1]}_mape'].mean()
+            print(f"{media[1]} MAPE in date range {start_date} - {end_date}: {media_mape}")
+        
+        # 输出5个媒体对应的ax+b中的a和b
+        all_weights = model.get_weights()
+        for i, media in enumerate(input_columns):
+            a = all_weights[2 * i][0][0]
+            b = all_weights[2 * i + 1][0]
+            print(f"Media {media}: a = {a}, b = {b}")
+
+        all_date_range_df = all_date_range_df.append(date_range_df)
+
+    all_date_range_df.to_csv('/src/data/zk2/check2.csv', index=False)
+
+    # 计算每个媒体的总体MAPE
+    media_mape_df = pd.DataFrame(columns=['media', 'mape'])
+    for media in input_columns:
+        media_mape = np.mean(np.abs((all_date_range_df[('r7usd_raw', media[1])] - all_date_range_df[f'{media[1]}_pred']) / all_date_range_df[('r7usd_raw', media[1])]))
+        media_mape_df = media_mape_df.append({'media': media[1], 'mape': media_mape}, ignore_index=True)
+
+    print("\nMedia total MAPEs:")
+    print(media_mape_df)
 
 def debug1():
-    df = pd.read_csv('/src/data/zk/check1_mmm.csv')
-    groupDf = df.groupby('install_date').agg('sum').reset_index()
-    print(groupDf.corr())
-    for media in mediaList:
-        mediaDf = df[df['media'] == media]
-        print(media)
-        print(mediaDf.corr())
+    # input_columns = ['googleadwords_int', 'Facebook Ads', 'bytedanceglobal_int', 'snapchat_int', 'other']
+    input_columns = [
+        'googleadwords_int', 
+        'Facebook Ads', 
+        'bytedanceglobal_int', 
+        'snapchat_int', 
+        'other'
+    ]
 
+    model = load_model('/src/data/zk2/model1.h5')
+    all_weights = model.get_weights()
+    for i, media in enumerate(input_columns):
+        a = all_weights[2 * i][0][0]
+        b = all_weights[2 * i + 1][0]
+        print(f"Media {media}: a = {a}, b = {b}")
+
+    modelPathList = [
+        '/src/data/zk2/model_2022-08-29_to_2022-09-27.h5',
+        '/src/data/zk2/model_2022-01-01_to_2022-01-30.h5',
+        '/src/data/zk2/model_2022-09-28_to_2022-10-27.h5',
+        '/src/data/zk2/model_2022-01-31_to_2022-03-01.h5',
+        '/src/data/zk2/model_2022-10-28_to_2022-11-26.h5',
+        '/src/data/zk2/model_2022-03-02_to_2022-03-31.h5',
+        '/src/data/zk2/model_2022-11-27_to_2022-12-26.h5',
+        '/src/data/zk2/model_2022-04-01_to_2022-04-30.h5',
+        '/src/data/zk2/model_2022-12-27_to_2023-01-25.h5',
+        '/src/data/zk2/model_2022-05-01_to_2022-05-30.h5',
+        '/src/data/zk2/model_2023-01-26_to_2023-02-24.h5',
+        '/src/data/zk2/model_2022-05-31_to_2022-06-29.h5',
+        '/src/data/zk2/model_2023-02-25_to_2023-03-26.h5',
+        '/src/data/zk2/model_2022-06-30_to_2022-07-29.h5',
+        '/src/data/zk2/model_2023-03-27_to_2023-04-25.h5',
+        '/src/data/zk2/model_2022-07-30_to_2022-08-28.h5',
+    ]
+
+    for modelPath in modelPathList:
+        print(f"Model: {modelPath}")
+        model = load_model(modelPath)
+        all_weights = model.get_weights()
+        for i, media in enumerate(input_columns):
+            a = all_weights[2 * i][0][0]
+            b = all_weights[2 * i + 1][0]
+            print(f"Media {media}: a = {a}, b = {b}")
+
+import matplotlib.dates as mdates
 def debug2():
-    df = pd.DataFrame(
-        {
-            'a':[1,2,3,4,5],
-        }
-    )
-    random_factors = np.random.uniform(3.0, 5.0, len(df))
-    random_b = np.random.uniform(0, 1.0, len(df))
-    df['b'] = df['a'] * random_factors 
-    # + random_b
-    df['c'] = df['a'] * 4.0 
-    # + 0.5
+    df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    facebook_df = df[df['media']=='Facebook Ads']
+    print(facebook_df.head())
 
-    print(mean_absolute_percentage_error(df['c'].values, df['b'].values))
-    print(df.corr())
+    facebook_df['r7/r1'] = facebook_df['r7usd_raw'] / facebook_df['r1usd_raw']
+    facebook_df['r7/r1 mmm'] = facebook_df['r7usd_raw'] / facebook_df['r1usd_mmm']
+    facebook_df['r7/r3 mmm'] = facebook_df['r7usd_raw'] / facebook_df['r3usd_mmm']
+
+    facebook_df['install_date'] = pd.to_datetime(facebook_df['install_date'])
+
+    # 设置图像大小
+    plt.figure(figsize=(12, 6))
+
+    # 画图，install_date是x
+    plt.plot(facebook_df['install_date'], facebook_df['r7/r1'], label='r7/r1')
+    plt.plot(facebook_df['install_date'], facebook_df['r7/r1 mmm'], label='r7/r1 mmm')
+    plt.plot(facebook_df['install_date'], facebook_df['r7/r3 mmm'], label='r7/r3 mmm')
+    plt.xlabel('install_date')
+    plt.ylabel('r7/r1')
+
+    # 设置x轴刻度为每月一个点
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+    plt.legend()
+    plt.savefig('/src/data/zk2/debug2.jpg')
+
+def debug4():
+    df = pd.read_csv('/src/data/zk2/check1_mmm2.csv')
+    df = df.sort_values('install_date')
+
+    for media in mediaList:
+        print(media)
+        print('按天MAPE：',df['%s_mape'%(media)].mean())
+        print('整体MAPE：',(df['%s'%(media)].mean() - df['%s_pred'%(media)].mean())/df['%s'%(media)].mean())
+
+        df['%s_3d'%(media)] = df['%s'%(media)].rolling(3).mean()
+        df['%s_pred_3d'%(media)] = df['%s_pred'%(media)].rolling(3).mean()
+        df['%s_3d_mape'%(media)] = abs(df['%s_3d'%(media)] - df['%s_pred_3d'%(media)]) / df['%s_3d'%(media)]
+        print('3日均线MAPE：',df['%s_3d_mape'%(media)].mean())
+
+        df['%s_3d'%(media)] = df['%s'%(media)].rolling(7).mean()
+        df['%s_pred_3d'%(media)] = df['%s_pred'%(media)].rolling(7).mean()
+        df['%s_3d_mape'%(media)] = abs(df['%s_3d'%(media)] - df['%s_pred_3d'%(media)]) / df['%s_3d'%(media)]
+        print('7日均线MAPE：',df['%s_3d_mape'%(media)].mean())
+
+        df['%s_3d_ema'%(media)] = df['%s'%(media)].ewm(span=3).mean()
+        df['%s_pred_3d_ema'%(media)] = df['%s_pred'%(media)].ewm(span=3).mean()
+        df['%s_3d_ema_mape'%(media)] = abs(df['%s_3d_ema'%(media)] - df['%s_pred_3d_ema'%(media)]) / df['%s_3d_ema'%(media)]
+        print('3日EMA MAPE：',df['%s_3d_ema_mape'%(media)].mean())
+
+        df['%s_7d_ema'%(media)] = df['%s'%(media)].ewm(span=7).mean()
+        df['%s_pred_7d_ema'%(media)] = df['%s_pred'%(media)].ewm(span=7).mean()
+        df['%s_7d_ema_mape'%(media)] = abs(df['%s_7d_ema'%(media)] - df['%s_pred_7d_ema'%(media)]) / df['%s_7d_ema'%(media)]
+        print('7日EMA MAPE：',df['%s_7d_ema_mape'%(media)].mean())
+
+def draw():
+    df = pd.read_csv('/src/data/zk2/check1_mmm2.csv')
+
+    # 目前df 中列 install_date 是 str 类型，需要转换成 datetime 类型
+    # 画图，install_date是x
+    # 分媒体画图，目前的列install_date,Facebook Ads,bytedanceglobal_int,googleadwords_int,other,snapchat_int,googleadwords_int_pred,googleadwords_int_mape,Facebook Ads_pred,Facebook Ads_mape,bytedanceglobal_int_pred,bytedanceglobal_int_mape,snapchat_int_pred,snapchat_int_mape,other_pred,other_mape
+    # 用媒体和媒体预测两个指标做y划线，比如facebook Ads和facebook Ads_pred
+    # x点一个月一个就好，太密看不清
+    # 保存早src/data/zk2/media.jpg下
+    # 将install_date转换为datetime类型
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    # 设置绘图风格
+    plt.style.use('seaborn-darkgrid')
+
+    # 媒体列表
+    media_list = [
+        ('Facebook Ads', 'Facebook Ads_pred'),
+        ('bytedanceglobal_int', 'bytedanceglobal_int_pred'),
+        ('googleadwords_int', 'googleadwords_int_pred'),
+        ('other', 'other_pred'),
+        ('snapchat_int', 'snapchat_int_pred')
+    ]
+
+    # 颜色列表
+    colors = [
+        ('blue', 'cyan'),
+        ('green', 'lime'),
+        ('red', 'orange'),
+        ('purple', 'magenta'),
+        ('brown', 'yellow')
+    ]
+
+    for (media, media_pred), (color, pred_color) in zip(media_list, colors):
+        # 创建一个新的图形，包含两个子图
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12), sharex=True)
+
+        # 第一个子图：绘制媒体的线条和预测线条
+        ax1.plot(df['install_date'], df[media], label=media, linewidth=2, color=color)
+        ax1.plot(df['install_date'], df[media_pred], label=media_pred, linewidth=2, color=pred_color)
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax1.xaxis.set_major_locator(mdates.MonthLocator())
+        ax1.legend()
+
+        # 计算7日均线
+        df[f'{media}_7d'] = df[media].rolling(7).mean()
+        df[f'{media_pred}_7d'] = df[media_pred].rolling(7).mean()
+
+        # 第二个子图：绘制7日均线
+        ax2.plot(df['install_date'], df[f'{media}_7d'], label=f'{media} 7-day average', linewidth=2, color=color)
+        ax2.plot(df['install_date'], df[f'{media_pred}_7d'], label=f'{media_pred} 7-day average', linewidth=2, color=pred_color)
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax2.xaxis.set_major_locator(mdates.MonthLocator())
+        ax2.legend()
+
+        # 旋转X轴刻度标签以避免重叠
+        plt.xticks(rotation=45)
+
+        # 保存图形到文件
+        plt.savefig(f'/src/data/zk2/{media}_with_7d_avg.jpg', bbox_inches='tight')
+        plt.close(fig)
 
 if __name__ == '__main__':
     import warnings
@@ -371,11 +662,17 @@ if __name__ == '__main__':
 
     # prepareData()
     
-    train1()
-    check1()
+    # train1(rNUsd = 'r3usd_mmm')
+    # check1(rNUsd = 'r3usd_mmm')
 
     # debug1()
     # debug2()
     # debug3()
+    # debug4()
 
+    # mods = train2(rNUsd='r3usd_mmm', days_per_group=60)
+    # check2(rNUsd='r3usd_mmm', days_per_group=60)
+
+    # debug2()
+    draw()
 

@@ -318,25 +318,27 @@ def mind8(df):
 import os
 def mind9():
     if not os.path.exists('/src/data/zk/mind9-0.csv'):
-        df = pd.read_csv('/src/data/zk/androidFp03.csv')
-        # 列 media_source 改名 media
-        df = df.rename(columns={'media_source':'media'})
+        # df = pd.read_csv('/src/data/zk/androidFp03.csv')
+        # # 列 media_source 改名 media
+        # df = df.rename(columns={'media_source':'media'})
+
+        df = pd.read_csv('/src/data/zk/androidFpMergeDataStep3.csv')
         # 列 uid 改名 appsflyer_id
         df = df.rename(columns={'uid':'appsflyer_id'})
 
-        cvMapDf = pd.read_csv('/src/afCvMap2304.csv')
-        cvMapDf = cvMapDf.loc[(cvMapDf['event_name'] == 'af_skad_revenue') & (cvMapDf['conversion_value']<32)]
-        cvMapDf = cvMapDf[['conversion_value','min_event_revenue','max_event_revenue']]
+        # cvMapDf = pd.read_csv('/src/afCvMap2304.csv')
+        # cvMapDf = cvMapDf.loc[(cvMapDf['event_name'] == 'af_skad_revenue') & (cvMapDf['conversion_value']<32)]
+        # cvMapDf = cvMapDf[['conversion_value','min_event_revenue','max_event_revenue']]
 
-        df.loc[:,'cv'] = 0
-        for index, row in cvMapDf.iterrows():
-            df.loc[(df['r1usd'] > row['min_event_revenue']) & (df['r1usd'] <= row['max_event_revenue']),'cv'] = row['conversion_value']
-        # 如果r1usd > 最大max_event_revenue，则取最大值
-        df.loc[df['r1usd'] > cvMapDf['max_event_revenue'].max(),'cv'] = cvMapDf['conversion_value'].max()
+        # df.loc[:,'cv'] = 0
+        # for index, row in cvMapDf.iterrows():
+        #     df.loc[(df['r1usd'] > row['min_event_revenue']) & (df['r1usd'] <= row['max_event_revenue']),'cv'] = row['conversion_value']
+        # # 如果r1usd > 最大max_event_revenue，则取最大值
+        # df.loc[df['r1usd'] > cvMapDf['max_event_revenue'].max(),'cv'] = cvMapDf['conversion_value'].max()
 
-        df['cv'] = df['cv'].astype(int)
-        df['cvGroup'] = df['cv']//10
-        df['cv'] = df['cvGroup'].astype(int)
+        # df['cv'] = df['cv'].astype(int)
+        # df['cvGroup'] = df['cv']//10
+        # df['cv'] = df['cvGroup'].astype(int)
 
         df.to_csv('/src/data/zk/mind9-0.csv', index=False)
     else:
@@ -381,36 +383,47 @@ def mind9():
         deviation_df.to_csv(f'/src/data/zk/mind9-1-{media}.csv', index=False)
 
 import matplotlib.dates as mdates
-def mind9_1(df):
-    dDf = pd.read_csv('/src/data/zk/mind9-1-Facebook Ads.csv')
-    df = df.merge(dDf, on=['install_date'])
-    df['mape'] = abs(df['r7usd'] - df['r7usd_att']) / df['r7usd']
-    df['deviation'] = abs(df['deviation'])
-    df['install_date'] = pd.to_datetime(df['install_date'])
+def mind9_1(df0):
+    mediaList = [
+        'googleadwords_int',
+        'Facebook Ads',
+        'bytedanceglobal_int',
+        'snapchat_int'
+    ]
 
-    # 计算3日均线
-    df['mape_3d_avg'] = df['mape'].rolling(window=3).mean()
-    df['deviation_3d_avg'] = df['deviation'].rolling(window=3).mean()
 
-    fig, ax1 = plt.subplots(figsize=(15, 6))
+    for media in mediaList:
+        df = df0.copy()
+        dDf = pd.read_csv('/src/data/zk/mind9-1-%s.csv'%media)
 
-    ax1.set_xlabel('install_date')
-    ax1.set_ylabel('mape', color='tab:blue')
-    ax1.plot(df['install_date'], df['mape_3d_avg'], color='tab:blue')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
+        df = df.merge(dDf, on=['install_date'])
+        df['mape'] = abs(df['r7usd'] - df['r7usd_att']) / df['r7usd']
+        df['deviation'] = abs(df['deviation'])
+        df['install_date'] = pd.to_datetime(df['install_date'])
 
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('deviation', color='tab:red')
-    ax2.plot(df['install_date'], df['deviation_3d_avg'], color='tab:red')
-    ax2.axhline(y=0, color='gray', linestyle='--')
-    ax2.tick_params(axis='y', labelcolor='tab:red')
+        # 计算3日均线
+        df['mape_3d_avg'] = df['mape'].rolling(window=14).mean()
+        df['deviation_3d_avg'] = df['deviation'].rolling(window=3).mean()
 
-    ax1.xaxis.set_major_locator(mdates.MonthLocator())
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-    fig.autofmt_xdate()
+        fig, ax1 = plt.subplots(figsize=(15, 6))
 
-    fig.tight_layout()
-    plt.savefig('/src/data/zk/mind9.jpg')
+        ax1.set_xlabel('install_date')
+        ax1.set_ylabel('mape', color='tab:blue')
+        ax1.plot(df['install_date'], df['mape_3d_avg'], color='tab:blue')
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('deviation', color='tab:red')
+        ax2.plot(df['install_date'], df['deviation_3d_avg'], color='tab:red')
+        ax2.axhline(y=0, color='gray', linestyle='--')
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+
+        ax1.xaxis.set_major_locator(mdates.MonthLocator())
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        fig.autofmt_xdate()
+
+        fig.tight_layout()
+        plt.savefig('/src/data/zk/mind9%s.jpg'%media)
 
 def mind10(df):
     df['r7/r1'] = df['r7usd'] / df['r1usd']

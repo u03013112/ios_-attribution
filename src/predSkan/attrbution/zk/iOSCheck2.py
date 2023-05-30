@@ -14,7 +14,8 @@ mediaList = [
     'bytedanceglobal_int',
     'googleadwords_int',
     'Facebook Ads',
-    'snapchat_int'
+    'snapchat_int',
+    'applovin_int',
 ]
 
 def getSKANDataFromMC():
@@ -31,14 +32,15 @@ def getSKANDataFromMC():
         FROM 
             ods_platform_appsflyer_skad_details
         WHERE
-            day BETWEEN '20230301' AND '20230415'
+            day BETWEEN '20230401' AND '20230513'
             AND app_id = 'id1479198816'
             AND event_name = 'af_skad_revenue'
             AND media_source in (
                 'bytedanceglobal_int',
                 'googleadwords_int',
                 'Facebook Ads',
-                'snapchat_int'
+                'snapchat_int',
+                'applovin_int'
             )
         ;
     '''
@@ -85,8 +87,8 @@ def getAfDataFromMC():
         WHERE
             app_id = 'id1479198816'
             AND zone = 0
-            AND day BETWEEN '20230301' AND '20230423'
-            AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('20230301', 'yyyyMMdd') AND to_date('20230331', 'yyyyMMdd')
+            AND day BETWEEN '20230401' AND '20230513'
+            AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('20230401', 'yyyyMMdd') AND to_date('20230506', 'yyyyMMdd')
         GROUP BY
             appsflyer_id,
             install_timestamp,
@@ -99,7 +101,7 @@ def getAfDataFromMC():
 
 def getCvMap():
     # 加载CV Map
-    cvMapDf = pd.read_csv('/src/afCvMap2303.csv')
+    cvMapDf = pd.read_csv('/src/afCvMap2304.csv')
     cvMapDf = cvMapDf.loc[(cvMapDf['event_name'] == 'af_skad_revenue') & (cvMapDf['conversion_value']<32)]
     cvMapDf = cvMapDf[['conversion_value','min_event_revenue','max_event_revenue']]
     

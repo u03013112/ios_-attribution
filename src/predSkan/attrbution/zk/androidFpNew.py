@@ -707,13 +707,18 @@ def checkRet(retDf):
     rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
     rawDf['user_count'] = 1
     # 按照media和install_date分组，计算r7usd的和
-    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r7usd': 'sum','user_count':'sum'}).reset_index()
+    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r1usd': 'sum','r7usd': 'sum','user_count':'sum'}).reset_index()
 
     # rawDf 和 retDf 进行合并
     # 为了防止merge不成功，将install_date转成字符串
     rawDf['install_date'] = rawDf['install_date'].astype(str)
     retDf['install_date'] = retDf['install_date'].astype(str)
+
+    retDf.rename(columns={'r1usd':'r1usdp'},inplace=True)
+    retDf.rename(columns={'r7usd':'r7usdp'},inplace=True)
+
     rawDf = rawDf.merge(retDf, on=['media', 'install_date'], how='left')
+    print(rawDf.head())
     # 计算MAPE
     rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
     rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
@@ -729,6 +734,85 @@ def checkRet(retDf):
         MAPE = mediaDf['MAPE'].mean()
         R2 = r2_score(mediaDf['r7usd'], mediaDf['r7usdp'])
         print(f"Media: {media}, MAPE: {MAPE}, R2: {R2}")
+
+def debug13():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    df = df[['media','install_date','r1usd','r7usd','r7usdp','MAPE']]
+    df = df.sort_values('install_date')
+
+    for media in mediaList:
+        mediaDf = df[df['media'] == media].copy()
+        print(media)
+        print('按天MAPE：',mediaDf['MAPE'].mean())
+        print('整体MAPE：',(mediaDf['r7usd'].mean() - mediaDf['r7usdp'].mean())/mediaDf['r7usd'].mean())
+
+        mediaDf['r7usd_3d'] = mediaDf['r7usd'].rolling(3).mean()
+        mediaDf['r7usdp_3d'] = mediaDf['r7usdp'].rolling(3).mean()
+        mediaDf['mape_3d'] = abs(mediaDf['r7usd_3d'] - mediaDf['r7usdp_3d']) / mediaDf['r7usd_3d']
+        print('3日均线MAPE：',mediaDf['mape_3d'].mean())
+
+        mediaDf['r7usd_7d'] = mediaDf['r7usd'].rolling(7).mean()
+        mediaDf['r7usdp_7d'] = mediaDf['r7usdp'].rolling(7).mean()
+        mediaDf['mape_7d'] = abs(mediaDf['r7usd_7d'] - mediaDf['r7usdp_7d']) / mediaDf['r7usd_7d']
+        print('7日均线MAPE：',mediaDf['mape_7d'].mean())
+
+        mediaDf['r7usd_3ema'] = mediaDf['r7usd'].ewm(span=3).mean()
+        mediaDf['r7usdp_3ema'] = mediaDf['r7usdp'].ewm(span=3).mean()
+        mediaDf['mape_3ema'] = abs(mediaDf['r7usd_3ema'] - mediaDf['r7usdp_3ema']) / mediaDf['r7usd_3ema']
+        print('3日EMA MAPE：',mediaDf['mape_3ema'].mean())
+
+        mediaDf['r7usd_7ema'] = mediaDf['r7usd'].ewm(span=7).mean()
+        mediaDf['r7usdp_7ema'] = mediaDf['r7usdp'].ewm(span=7).mean()
+        mediaDf['mape_7ema'] = abs(mediaDf['r7usd_7ema'] - mediaDf['r7usdp_7ema']) / mediaDf['r7usd_7ema']
+        print('7日EMA MAPE：',mediaDf['mape_7ema'].mean())
+
+        # 每一张图都要有3张小图，竖着排列，x坐标保持一致，方便竖着对比。
+        # install_date是str，改为日期类型，并且作为x。图例中x不要每个点都显示，太密看不清，一个月1个点就好。
+        # 第一张小图 划线 r7usd，r7usdp,r7usd_7d,r7usdp_7d,r7usd_7ema,r7usdp_7ema
+        # 由于图上线太多，将r7usd，r7usdp 透明度调大，浅浅的就好，
+        # 全用实线，不要虚线，不同颜色
+        # 第二张小图 划线 r7usd/r1usd,r7usd_7d/r1usd_7d,r7usd_7ema/r1usd_7ema
+        # 第三张小图 划线 r7usdp_7d/r1usd_7d,r7usdp_7ema/r1usd_7ema
+        # 有需要的数据上面没有提到的写代码计算，比如r1usd_7d，r1usd_7ema
+        # 图片保存在 /src/data/zk/{media}.jpg
+        mediaDf['install_date'] = pd.to_datetime(mediaDf['install_date'])
+
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 15), sharex=True)
+
+        # 第一张小图
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usd'], label='r7usd', alpha=0.3)
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usdp'], label='r7usdp', alpha=0.3)
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usd_7d'], label='r7usd_7d')
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usdp_7d'], label='r7usdp_7d')
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usd_7ema'], label='r7usd_7ema')
+        ax1.plot(mediaDf['install_date'], mediaDf['r7usdp_7ema'], label='r7usdp_7ema')
+        ax1.legend()
+        ax1.set_title(f"{media} - r7usd, r7usdp, r7usd_7d, r7usdp_7d, r7usd_7ema, r7usdp_7ema")
+
+        # 计算r1usd_7d和r1usd_7ema
+        mediaDf['r1usd_7d'] = mediaDf['r1usd'].rolling(7).mean()
+        mediaDf['r1usd_7ema'] = mediaDf['r1usd'].ewm(span=7).mean()
+
+        # 第二张小图
+        ax2.plot(mediaDf['install_date'], mediaDf['r7usd'] / mediaDf['r1usd'], label='r7usd/r1usd',alpha=0.3)
+        ax2.plot(mediaDf['install_date'], mediaDf['r7usd_7d'] / mediaDf['r1usd_7d'], label='r7usd_7d/r1usd_7d')
+        ax2.plot(mediaDf['install_date'], mediaDf['r7usd_7ema'] / mediaDf['r1usd_7ema'], label='r7usd_7ema/r1usd_7ema')
+        ax2.legend()
+        ax2.set_title(f"{media} - r7usd/r1usd, r7usd_7d/r1usd_7d, r7usd_7ema/r1usd_7ema")
+        ax2.set_ylim(0, 6.0)
+        # 第三张小图
+        ax3.plot(mediaDf['install_date'], mediaDf['r7usdp_7d'] / mediaDf['r1usd_7d'], label='r7usdp_7d/r1usd_7d')
+        ax3.plot(mediaDf['install_date'], mediaDf['r7usdp_7ema'] / mediaDf['r1usd_7ema'], label='r7usdp_7ema/r1usd_7ema')
+        ax3.legend()
+        ax3.set_title(f"{media} - r7usdp_7d/r1usd_7d, r7usdp_7ema/r1usd_7ema")
+
+        # 设置x轴日期格式和间隔
+        ax3.xaxis.set_major_locator(mdates.MonthLocator())
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+        # 保存图片
+        plt.savefig(f'/src/data/zk/debug13_{media}.jpg')
+        plt.close(fig)
 
 def checkRetDebug(retDf):
     # 读取原始数据
@@ -1488,6 +1572,45 @@ def debug10():
     print('MAPE > 0.37的数据user_count_diff平均值/所有数据user_count_diff平均值:',facebookDf2['user_count_diff'].mean()/facebookDf['user_count_diff'].mean())
 
 
+from datetime import datetime, timedelta
+def debug11():
+    df = pd.read_csv(getFilename('attribution1Ret'))
+
+    dfRaw = loadData()
+    # 过滤，df的media属于mediaList的条目
+    dfRaw = dfRaw.loc[dfRaw['media'].isin(mediaList)]
+
+
+    result = []
+
+    start_date = datetime.strptime('2022-01-01', '%Y-%m-%d')
+    end_date = datetime.strptime('2022-12-31', '%Y-%m-%d')
+
+    while start_date <= end_date:
+        date_str = start_date.strftime('%Y-%m-%d')
+
+        df_day = df.loc[df['install_date'] == date_str]
+        r7usd = df_day['r7usd'].sum()
+
+        df_raw_day = dfRaw.loc[dfRaw['install_date'] == date_str]
+        r7usd_raw = df_raw_day['r7usd'].sum()
+
+        if r7usd_raw != 0:
+            mape = abs(r7usd - r7usd_raw) / r7usd_raw * 100
+        else:
+            mape = 0
+
+        result.append([date_str, r7usd, r7usd_raw, mape])
+
+        start_date += timedelta(days=1)
+
+    result_df = pd.DataFrame(result, columns=['install_date', 'r7usd', 'r7usd_raw', 'mape'])
+    result_df.to_csv('/src/data/zk/mape_result.csv', index=False)
+
+def debug12():
+    df = pd.read_csv('/src/data/zk/mape_result.csv')
+    print(df['mape'].mean())
+
 if __name__ == '__main__':
     # getDataFromMC()
 
@@ -1522,8 +1645,8 @@ if __name__ == '__main__':
     # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
     # # meanAttributionAdv2(userDf,skanDf)
 
-    userDf = pd.read_parquet(getFilename('attribution1ReStep2R3usd','parquet'))
-    userDf = meanAttributionResult(userDf)
+    # userDf = pd.read_parquet(getFilename('attribution1ReStep2R3usd','parquet'))
+    # userDf = meanAttributionResult(userDf)
     # userDf = meanAttributionResult(None)
 
     # meanAttributionResultDebug(userDf)
@@ -1556,3 +1679,6 @@ if __name__ == '__main__':
     # debug9_5()
     # debug9_6()
     # debug10()
+    # debug11()
+    # debug12()
+    debug13()
