@@ -419,6 +419,69 @@ def getResource():
         
     return df
 
+def getServerPing():
+    sql = '''
+        select * from (select *,count(data_map_0) over () group_num_0,count(data_map_1) over () group_num_1 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,map_agg("$__Date_Time", amount_1) filter (where amount_1 is not null and is_finite(amount_1) ) data_map_1,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0,internal_amount_1 amount_1 from (select group_0,"$__Date_Time",cast(coalesce(COUNT(if((( ( "$part_event" IN ( 'server_ping' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 8.64E+4),1)), 0) as double) internal_amount_0,cast(coalesce(COUNT(if((( ( "$part_event" IN ( 'server_ping' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 1.728E+5),1)), 0) as double) internal_amount_1 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#vp@zone" is not null and "#vp@zone">=-12 and "#vp@zone"<=14, date_add('second', cast((0-"#vp@zone")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(IF(("platform" IS NULL), 8, 8)) as double) "#vp@zone",try_cast(try(date_diff('second', "internal_u@ctime", "#event_time")) as double) "#vp@lifetime_sec" from (select a.*, b."ctime" "internal_u@ctime" from (select "#event_name","#user_id","platform","#event_time","$part_date","$part_event" from v_event_2) a join (select * from (select "#update_time","#event_date","#user_id","ctime" from v_user_2) where "#event_date" > 20220624) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0 from (select *, try_cast(try(date_add('hour', -8, cast("ctime" as timestamp(3)))) as timestamp(3)) "#vp@ctime_utc0" from (select * from (select "#account_id","#update_time","#event_date","#user_id","ctime","firstplatform" from v_user_2) where "#event_date" > 20220624))) ta_u on ta_ev."#user_id" = ta_u."#user_id" where ("$part_event" in ('server_ping')) and (((( ( "$part_event" IN ( 'server_ping' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 8.64E+4)) or ((( ( "$part_event" IN ( 'server_ping' ) ) )) and (ta_ev."#vp@lifetime_sec" <= 1.728E+5))) and ((("$part_date" between '2022-06-30' and '2023-03-02') and ("@vpc_tz_#event_time" >= timestamp '2022-07-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-03-01'))) and ((ta_u."firstplatform" IN ('GooglePlay')) and ((ta_u."#vp@ctime_utc0" >= cast('2022-07-01 00:00:00' as timestamp) AND ta_u."#vp@ctime_utc0" <= cast('2023-01-31 23:59:59' as timestamp))))) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    '''
+    lines = ssSql(sql=sql)
+    # print(lines[0:10])
+    # [
+    #     '["903252908605",{"1981-01-01 00:00:00":29868.0},{"1981-01-01 00:00:00":31927.0},29868.0,8498566,8498566]',
+    #     '["852240673095",{"1981-01-01 00:00:00":1695.0},{"1981-01-01 00:00:00":1809.0},1695.0,8498566,8498566]',
+    #     '["888843303442",{"1981-01-01 00:00:00":1413.0},{"1981-01-01 00:00:00":1549.0},1413.0,8498566,8498566]',
+    #     '["820606834881",{"1981-01-01 00:00:00":1094.0},{"1981-01-01 00:00:00":1297.0},1094.0,8498566,8498566]',
+    #     '["899969215024",{"1981-01-01 00:00:00":1042.0},{"1981-01-01 00:00:00":1373.0},1042.0,8498566,8498566]',
+    #     '["898762529328",{"1981-01-01 00:00:00":954.0},{"1981-01-01 00:00:00":1154.0},954.0,8498566,8498566]',
+    #     '["819211606187",{"1981-01-01 00:00:00":920.0},{"1981-01-01 00:00:00":920.0},920.0,8498566,8498566]',
+    #     '["884311124479",{"1981-01-01 00:00:00":905.0},{"1981-01-01 00:00:00":1176.0},905.0,8498566,8498566]',
+    #     '["907846699593",{"1981-01-01 00:00:00":901.0},{"1981-01-01 00:00:00":1200.0},901.0,8498566,8498566]',
+    #     '["818571450548",{"1981-01-01 00:00:00":883.0},{"1981-01-01 00:00:00":976.0},883.0,8498566,8498566]'
+    # ]
+    uidList = []
+    sp1List = []
+    sp2List = []
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+        uid = lineJ[0]
+        uidList.append(uid)
+        sp1 = list(lineJ[1].values())[0]
+        sp1List.append(sp1)
+        sp2 = list(lineJ[2].values())[0]
+        sp2List.append(sp2)
+    
+    df = pd.DataFrame({'uid': uidList, 'sp1': sp1List, 'sp2': sp2List})
+    return df
+
+
+def getLogin2():
+    # 次登和7登
+    sql = '''
+        select * from (select *,count(data_map_0) over () group_num_0,count(data_map_1) over () group_num_1 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,map_agg("$__Date_Time", amount_1) filter (where amount_1 is not null and is_finite(amount_1) ) data_map_1,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0,internal_amount_1 amount_1 from (select group_0,"$__Date_Time",cast(coalesce(COUNT(if((( ( ( ( "$part_event" IN ( 'server_ping' ) ) OR ( "$part_event" IN ( 'ta_app_end' ) ) OR ( "$part_event" IN ( 'app_login' ) ) ) ) )) and ((ta_ev."#vp@lifetime_sec" > 8.64E+4) and (ta_ev."#vp@lifetime_sec" <= 1.728E+5)),1)), 0) as double) internal_amount_0,cast(coalesce(COUNT(if((( ( ( ( "$part_event" IN ( 'server_ping' ) ) OR ( "$part_event" IN ( 'ta_app_end' ) ) OR ( "$part_event" IN ( 'app_login' ) ) ) ) )) and ((ta_ev."#vp@lifetime_sec" > 8.64E+4) and (ta_ev."#vp@lifetime_sec" <= 6.048E+5)),1)), 0) as double) internal_amount_1 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#vp@zone" is not null and "#vp@zone">=-12 and "#vp@zone"<=14, date_add('second', cast((0-"#vp@zone")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(IF(("platform" IS NULL), 8, 8)) as double) "#vp@zone",try_cast(try(date_diff('second', "internal_u@ctime", "#event_time")) as double) "#vp@lifetime_sec" from (select a.*, b."ctime" "internal_u@ctime" from (select "#event_name","#user_id","platform","#event_time","$part_date","$part_event" from v_event_2) a join (select * from (select "#update_time","#event_date","#user_id","ctime" from v_user_2) where "#event_date" > 20220624) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0 from (select *, try_cast(try(date_add('hour', -8, cast("ctime" as timestamp(3)))) as timestamp(3)) "#vp@ctime_utc0" from (select * from (select "#account_id","#update_time","#event_date","#user_id","ctime","firstplatform" from v_user_2) where "#event_date" > 20220624))) ta_u on ta_ev."#user_id" = ta_u."#user_id" where ("$part_event" in ('server_ping','ta_app_end','app_login')) and (((( ( ( ( "$part_event" IN ( 'server_ping' ) ) OR ( "$part_event" IN ( 'ta_app_end' ) ) OR ( "$part_event" IN ( 'app_login' ) ) ) ) )) and ((ta_ev."#vp@lifetime_sec" > 8.64E+4) and (ta_ev."#vp@lifetime_sec" <= 1.728E+5))) or ((( ( ( ( "$part_event" IN ( 'server_ping' ) ) OR ( "$part_event" IN ( 'ta_app_end' ) ) OR ( "$part_event" IN ( 'app_login' ) ) ) ) )) and ((ta_ev."#vp@lifetime_sec" > 8.64E+4) and (ta_ev."#vp@lifetime_sec" <= 6.048E+5)))) and ((("$part_date" between '2022-06-30' and '2023-03-02') and ("@vpc_tz_#event_time" >= timestamp '2022-07-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-03-01'))) and ((ta_u."firstplatform" IN ('GooglePlay')) and ((ta_u."#vp@ctime_utc0" >= cast('2022-07-01 00:00:00' as timestamp) AND ta_u."#vp@ctime_utc0" <= cast('2023-01-31 23:59:59' as timestamp))))) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    '''
+    lines = ssSql(sql=sql)
+    uidList = []
+    login2List = []
+    login7List = []
+
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+        uid = lineJ[0]
+        uidList.append(uid)
+        sp1 = list(lineJ[1].values())[0]
+        login2List.append(sp1)
+        sp2 = list(lineJ[2].values())[0]
+        login7List.append(sp2)
+    
+    df = pd.DataFrame({'uid': uidList, 'login2': login2List, 'login7': login7List})
+    return df
+
+
 # 将csvFileList合并，用uid做key，按照第一个csv为主，后面全部都是left join。
 # 如果有重复的列名，会自动加上后缀，后缀用csvFileName，由于之前的命名都是demoSs开头，这里直接写死是文件名去除demoSs开头和结尾的".csv"的部分
 def mergeCsv(csvFileList):
@@ -951,23 +1014,31 @@ if __name__ == '__main__':
     # resourceDf = getResource()
     # resourceDf.to_csv(getFilename('demoSsResource'), index=False)
 
-    # csvFileList = [
-    #     # 将login放到最前面
-    #     getFilename('demoSsLogin'),
-    #     getFilename('demoSsLabel'),
-    #     getFilename('demoSsMergeBuilding'),
-    #     getFilename('demoSsMergeArmy'),
-    #     getFilename('demoSsHeroLevelUp'),
-    #     getFilename('demoSsHeroStarUp'),
-    #     getFilename('demoSsPayCount'),
-    #     getFilename('demoSsUserLevelMax'),
-    #     getFilename('demoSsResource')
-    # ]
+    # serverPingDf = getServerPing()
+    # serverPingDf.to_csv(getFilename('demoSsServerPing'), index=False)
 
-    # df = mergeCsv(csvFileList)
+    login2Df = getLogin2()
+    login2Df.to_csv(getFilename('demoSsLogin2'), index=False)
+
+    csvFileList = [
+        # 将login放到最前面
+        getFilename('demoSsLogin'),
+        getFilename('demoSsLabel'),
+        getFilename('demoSsMergeBuilding'),
+        getFilename('demoSsMergeArmy'),
+        getFilename('demoSsHeroLevelUp'),
+        getFilename('demoSsHeroStarUp'),
+        getFilename('demoSsPayCount'),
+        getFilename('demoSsUserLevelMax'),
+        getFilename('demoSsResource'),
+        getFilename('demoSsServerPing'),
+        getFilename('demoSsLogin2'),
+    ]
+
+    df = mergeCsv(csvFileList)
     # # 合并之后所有空位填充0
-    # df = df.fillna(0)
-    # df.to_csv(getFilename('demoSsAll'), index=False)
+    df = df.fillna(0)
+    df.to_csv(getFilename('demoSsAll'), index=False)
 
     # df = pd.read_csv(getFilename('demoSsAll'))
     # df = makeLabel(df)
@@ -985,10 +1056,10 @@ if __name__ == '__main__':
     #     # print(getDecisionTreeAccuracy(x,y))
     #     getDecisionTreeMultiClassify(x,y)
 
-    lines = report1()
+    # lines = report1()
             
-    GSheet().clearSheet('1111','Sheet4')
-    GSheet().updateSheet('1111','Sheet4','A1',lines)
+    # GSheet().clearSheet('1111','Sheet4')
+    # GSheet().updateSheet('1111','Sheet4','A1',lines)
 
     # loginByInstallDateDf = getLoginByInstallDate()
     # loginByInstallDateDf.to_csv(getFilename('demoSsLoginByInstallDate'), index=False)

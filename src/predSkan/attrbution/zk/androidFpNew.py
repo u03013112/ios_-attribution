@@ -476,46 +476,46 @@ def debugResult1(message='2022'):
                 mape = mergeDf['mape7'].mean()
                 print(media+' '+str(N)+' '+str(M)+' mape7: '+str(mape))
 
-def meanAttribution(userDf, skanDf):
-    userDf['attribute'] = [list() for _ in range(len(userDf))]
-    unmatched_rows = 0
-    unmatched_user_count = 0
+# def meanAttribution(userDf, skanDf):
+#     userDf['attribute'] = [list() for _ in range(len(userDf))]
+#     unmatched_rows = 0
+#     unmatched_user_count = 0
 
-    # 使用tqdm包装skanDf.iterrows()以显示进度条
-    for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
-        media = row['media']
-        cv = row['cv']
-        min_valid_install_timestamp = row['min_valid_install_timestamp']
-        max_valid_install_timestamp = row['max_valid_install_timestamp']
+#     # 使用tqdm包装skanDf.iterrows()以显示进度条
+#     for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
+#         media = row['media']
+#         cv = row['cv']
+#         min_valid_install_timestamp = row['min_valid_install_timestamp']
+#         max_valid_install_timestamp = row['max_valid_install_timestamp']
 
-        condition = (
-            (userDf['cv'] == cv) &
-            (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-            (userDf['install_timestamp'] <= max_valid_install_timestamp)
-        )
-        matching_rows = userDf[condition]
-        num_matching_rows = len(matching_rows)
+#         condition = (
+#             (userDf['cv'] == cv) &
+#             (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+#             (userDf['install_timestamp'] <= max_valid_install_timestamp)
+#         )
+#         matching_rows = userDf[condition]
+#         num_matching_rows = len(matching_rows)
 
-        if num_matching_rows > 0:
-            z = row['user_count']
-            m = matching_rows['user_count'].sum()
-            count = z / m
-            # count = 1 / num_matching_rows
-            attribution_item = {'media': media, 'skan index': index, 'count': count}
-            userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [attribution_item])
-        else:
-            print(f"Unmatched row: {row}")
-            unmatched_rows += 1
-            unmatched_user_count += row['user_count']
+#         if num_matching_rows > 0:
+#             z = row['user_count']
+#             m = matching_rows['user_count'].sum()
+#             count = z / m
+#             # count = 1 / num_matching_rows
+#             attribution_item = {'media': media, 'skan index': index, 'count': count}
+#             userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [attribution_item])
+#         else:
+#             print(f"Unmatched row: {row}")
+#             unmatched_rows += 1
+#             unmatched_user_count += row['user_count']
 
-    unmatched_ratio = unmatched_rows / len(skanDf)
-    unmatched_user_count_ratio = unmatched_user_count / skanDf['user_count'].sum()
-    print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
-    print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
+#     unmatched_ratio = unmatched_rows / len(skanDf)
+#     unmatched_user_count_ratio = unmatched_user_count / skanDf['user_count'].sum()
+#     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
+#     print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
 
-    userDf.to_csv(getFilename('attribution1ReStep2'), index=False)
-    userDf.to_parquet(getFilename('attribution1ReStep2','parquet'), index=False)
-    return userDf
+#     userDf.to_csv(getFilename('attribution1ReStep2'), index=False)
+#     userDf.to_parquet(getFilename('attribution1ReStep2','parquet'), index=False)
+#     return userDf
 
 def meanAttributionAdv(userDf,skanDf):
     userDf['temp_index'] = userDf.index
@@ -625,40 +625,136 @@ def meanAttributionAdv2(userDf, skanDf):
 
     return userDf
 
-def meanAttributionResult(userDf, mediaList=mediaList):
+# def meanAttributionResult(userDf, mediaList=mediaList):
+#     for media in mediaList:
+#         print(f"Processing media: {media}")
+#         userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
+
+#     # Drop the 'attribute' column
+#     userDf = userDf.drop(columns=['attribute'])
+
+#     userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
+#     userDf = pd.read_csv(getFilename('attribution1ReStep6'))
+#     print("Results saved to file attribution1ReStep6")
+#     # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
+#     # 最终生成列：install_date,media,r7usdp
+#     # 中间过程：
+#     # install_date 是 install_timestamp（unix秒） 转换而来，精确到天
+#     # 将原本的 r7usd / user_count * media count 生成 media r7usd
+#     # 再将media r7usd 按照 media 和 install_date 分组，求和，生成 r7usdp，media 单拆出一列
+#     # Convert 'install_timestamp' to 'install_date'
+#     userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
+
+#     # Calculate media r7usd
+#     for media in mediaList:
+#         media_count_col = media + ' count'
+#         userDf[media + ' r1usd'] = userDf['r1usd'] * userDf[media_count_col]
+#         userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
+#         userDf[media + ' user_count'] = userDf['user_count'] * userDf[media_count_col]
+
+#     # 分割userDf为两个子数据框，一个包含r1usd，另一个包含r7usd
+#     userDf_r1usd = userDf[['install_date'] + [media + ' r1usd' for media in mediaList]]
+#     userDf_r7usd = userDf[['install_date'] + [media + ' r7usd' for media in mediaList]]
+
+#     # 对两个子数据框分别进行melt操作
+#     userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
+#     userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
+#     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
+#     userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
+#     print(userDf_r1usd.head())
+    
+#     userDf_r7usd = userDf_r7usd.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
+#     userDf_r7usd['media'] = userDf_r7usd['media'].str.replace(' r7usd', '')
+#     userDf_r7usd = userDf_r7usd.groupby(['install_date', 'media']).sum().reset_index()
+#     userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
+#     print(userDf_r7usd.head())
+
+#     # 还需要统计每个媒体的首日用户数
+#     userDf_count = userDf[['install_date'] + [media + ' user_count' for media in mediaList]]
+#     userDf_count = userDf_count.melt(id_vars=['install_date'], var_name='media', value_name='count')
+#     userDf_count['media'] = userDf_count['media'].str.replace(' user_count', '')
+#     userDf_count = userDf_count.groupby(['install_date', 'media']).sum().reset_index()
+#     userDf_count.to_csv(getFilename('userDf_count'), index=False )
+#     print(userDf_count.head())
+#     # ，和付费用户数
+#     userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
+#     userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
+#     userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
+#     userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
+#     userDf_payCount.to_csv(getFilename('userDf_payCount'), index=False )
+#     print(userDf_payCount.head())
+
+#     # 将两个子数据框连接在一起
+#     userDf = userDf_r1usd.merge(userDf_r7usd, on=['install_date', 'media'])
+#     print('merge1')
+#     userDf = userDf.merge(userDf_count, on=['install_date', 'media'])
+#     print('merge2')
+#     userDf = userDf.merge(userDf_payCount, on=['install_date', 'media'])
+#     print('merge3')
+
+#     # Save to CSV
+#     userDf.to_csv(getFilename('attribution1Ret'), index=False)
+#     return userDf
+
+def meanAttribution(userDf, skanDf):
     for media in mediaList:
-        print(f"Processing media: {media}")
-        userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
+        userDf['%s count'%(media)] = 0
 
-    # Drop the 'attribute' column
-    userDf = userDf.drop(columns=['attribute'])
+    unmatched_rows = 0
+    unmatched_user_count = 0
 
-    userDf.to_csv(getFilename('attribution1ReStep6'), index=False)
-    userDf = pd.read_csv(getFilename('attribution1ReStep6'))
-    print("Results saved to file attribution1ReStep6")
-    # 原本的列：install_timestamp,cv,user_count,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
-    # 最终生成列：install_date,media,r7usdp
-    # 中间过程：
-    # install_date 是 install_timestamp（unix秒） 转换而来，精确到天
-    # 将原本的 r7usd / user_count * media count 生成 media r7usd
-    # 再将media r7usd 按照 media 和 install_date 分组，求和，生成 r7usdp，media 单拆出一列
-    # Convert 'install_timestamp' to 'install_date'
+    # 使用tqdm包装skanDf.iterrows()以显示进度条
+    for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
+        media = row['media']
+        cv = row['cv']
+        min_valid_install_timestamp = row['min_valid_install_timestamp']
+        max_valid_install_timestamp = row['max_valid_install_timestamp']
+
+        condition = (
+            (userDf['cv'] == cv) &
+            (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+            (userDf['install_timestamp'] <= max_valid_install_timestamp)
+        )
+        matching_rows = userDf[condition]
+        num_matching_rows = len(matching_rows)
+
+        if num_matching_rows > 0:
+            z = row['user_count']
+            m = matching_rows['user_count'].sum()
+            count = z / m
+
+            userDf.loc[condition, '%s count'%(media)] += count
+        else:
+            print(f"Unmatched row: {row}")
+            unmatched_rows += 1
+            unmatched_user_count += row['user_count']
+
+    unmatched_ratio = unmatched_rows / len(skanDf)
+    unmatched_user_count_ratio = unmatched_user_count / skanDf['user_count'].sum()
+    print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
+    print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
+
+    userDf.to_csv(getFilename('attribution1ReStep1'), index=False)
+    userDf.to_parquet(getFilename('attribution1ReStep1','parquet'), index=False)
+    return userDf
+
+def meanAttributionResult(userDf, mediaList=mediaList):
     userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
 
     # Calculate media r7usd
     for media in mediaList:
         media_count_col = media + ' count'
-        userDf[media + ' r1usd'] = userDf['r1usd'] * userDf[media_count_col]
+        userDf[media + ' r3usd'] = userDf['r3usd'] * userDf[media_count_col]
         userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
         userDf[media + ' user_count'] = userDf['user_count'] * userDf[media_count_col]
 
     # 分割userDf为两个子数据框，一个包含r1usd，另一个包含r7usd
-    userDf_r1usd = userDf[['install_date'] + [media + ' r1usd' for media in mediaList]]
+    userDf_r1usd = userDf[['install_date'] + [media + ' r3usd' for media in mediaList]]
     userDf_r7usd = userDf[['install_date'] + [media + ' r7usd' for media in mediaList]]
 
     # 对两个子数据框分别进行melt操作
-    userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
-    userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
+    userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r3usd')
+    userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r3usd', '')
     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
     userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
     print(userDf_r1usd.head())
@@ -677,7 +773,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_count.to_csv(getFilename('userDf_count'), index=False )
     print(userDf_count.head())
     # ，和付费用户数
-    userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
+    userDf_payCount = userDf.loc[userDf['r3usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
     userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
     userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
     userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
@@ -693,8 +789,10 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     print('merge3')
 
     # Save to CSV
-    userDf.to_csv(getFilename('attribution1Ret'), index=False)
+    userDf.to_csv(getFilename('attribution1Ret3'), index=False)
     return userDf
+
+
 
 # 结论验算，从原始数据中找到媒体的每天的r7usd，然后和结果对比，计算MAPE与R2
 from sklearn.metrics import r2_score
@@ -1635,24 +1733,24 @@ if __name__ == '__main__':
     # userDf.to_csv(getFilename('userAOS3G'),index=False)
     # print('user data group len:',len(userDf))
 
-    # userDf = pd.read_csv(getFilename('userAOS3G'))
-    # skanDf = pd.read_csv(getFilename('skanAOS3G'))
+    userDf = pd.read_csv(getFilename('userAOS3G'))
+    skanDf = pd.read_csv(getFilename('skanAOS3G'))
     # skanDf = pd.read_csv(getFilename('skanAOS4G'))   
 
     # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
-    # userDf = meanAttribution(userDf, skanDf)
+    userDf = meanAttribution(userDf, skanDf)
     # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
     # # meanAttributionAdv2(userDf,skanDf)
 
     # userDf = pd.read_parquet(getFilename('attribution1ReStep2R3usd','parquet'))
-    # userDf = meanAttributionResult(userDf)
+    userDf = meanAttributionResult(userDf)
     # userDf = meanAttributionResult(None)
 
     # meanAttributionResultDebug(userDf)
 
     # userDf = pd.read_csv(getFilename('attribution1Ret'))
-    # checkRet(userDf)
+    checkRet(userDf)
     # # # checkRetDebug(pd.read_csv(getFilename('attribution1RetDebug')))
 
     # userDf = attribution1(userDf,skanDf)
@@ -1681,4 +1779,4 @@ if __name__ == '__main__':
     # debug10()
     # debug11()
     # debug12()
-    debug13()
+    # debug13()

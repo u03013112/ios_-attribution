@@ -22,6 +22,7 @@
 # 目前遇到的困难是：
 # 1、自然量的评估
 
+import tensorflow as tf
 import pandas as pd
 import numpy as np
 from keras.constraints import MinMaxNorm, Constraint
@@ -46,13 +47,16 @@ mediaList = [
 # 5、广告信息，按安装日期和媒体分组 作为X的一部分
 # 6、其他信息，按安装日期 作为X的一部分
 def prepareData(mediaList = mediaList):
-    userDf = pd.read_csv('/src/data/zk/attribution1ReStep6.csv')
+    # userDf = pd.read_csv('/src/data/zk/attribution1ReStep6.csv')
+    userDf = pd.read_csv('/src/data/zk/attribution1ReStep1.csv')
+    # userDf = pd.read_csv('/src/data/zk/attribution1ReStep2.csv')
+
     userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
     # df列install_timestamp,cv,user_count,r1usd,r7usd,googleadwords_int count,Facebook Ads count,bytedanceglobal_int count,snapchat_int count
     # 新增加一列 'other count'
     userDf['other count'] = 1 - userDf[[media + ' count' for media in mediaList]].sum(axis=1)
     userDf.loc[userDf['other count']<0,'other count'] = 0
-    print(userDf.head(10))
+    # print(userDf.head(10))
     mediaList.append('other')
     for media in mediaList:
         media_count_col = media + ' count'
@@ -117,78 +121,17 @@ from keras.callbacks import EarlyStopping
 
 import matplotlib.pyplot as plt
 # https://rivergame.feishu.cn/docx/UIpjdW3tIohOHdxXnG9crBKonPg
-# def train1():
-#     # 读取数据
-#     df = pd.read_csv('/src/data/zk/check1_mmm.csv')
-#     df = df[['install_date', 'media', 'r7usd_raw', 'r7usd_mmm']]
 
-#     mediaList.append('other')
-#     media_list = mediaList
-#     media_count = len(media_list)
-
-#     # 按照安装日期进行8:2分割
-#     unique_install_dates = df['install_date'].unique()
-#     train_dates, test_dates = train_test_split(unique_install_dates, test_size=0.2, random_state=42)
-
-#     # 根据分割的安装日期划分训练集和测试集
-#     train_df = df[df['install_date'].isin(train_dates)].sort_values('install_date')
-#     test_df = df[df['install_date'].isin(test_dates)].sort_values('install_date')
-
-#     # 准备训练和测试数据
-#     train_pivot = train_df.pivot_table(index='install_date', columns='media', values='r7usd_mmm').reset_index()
-#     test_pivot = test_df.pivot_table(index='install_date', columns='media', values='r7usd_mmm').reset_index()
-
-#     # train_pivot,test_pivot 填充缺失值
-#     train_pivot = train_pivot.fillna(0)
-#     test_pivot = test_pivot.fillna(0)
-
-#     X_train_list = [train_pivot[media].values.reshape(-1, 1) for media in media_list]
-#     y_train = train_df.groupby('install_date')['r7usd_raw'].sum().values
-
-#     X_test_list = [test_pivot[media].values.reshape(-1, 1) for media in media_list]
-#     y_test = test_df.groupby('install_date')['r7usd_raw'].sum().values
-
-#     # 创建模型
-#     inputs_list = [Input(shape=(1,)) for _ in range(media_count)]
-#     outputs_list = [Dense(1, activation='linear', bias_initializer=Zeros())(inputs) for inputs in inputs_list]
-#     outputs_sum = Add()(outputs_list)
-#     model = Model(inputs=inputs_list, outputs=outputs_sum)
-
-#     # 编译模型
-#     model.compile(optimizer=Adam(lr=0.001), loss='mse', metrics=['mape'])
-
-#     early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-#     # 训练模型
-#     history = model.fit(X_train_list, y_train, validation_data=(X_test_list, y_test), epochs=3000, batch_size=32,
-#             callbacks=[early_stopping]
-#         )
-
-#     # 画出loss曲线
-#     plt.plot(history.history['loss'], label='train_loss')
-#     plt.plot(history.history['val_loss'], label='val_loss')
-#     plt.xlabel('Epochs')
-#     plt.ylabel('Loss')
-#     plt.legend()
-#     plt.savefig('/src/data/zk2/history1.jpg')
-#     plt.show()
-
-#     # 评估模型
-#     test_mape = np.min(history.history['val_mape'])
-#     print("Test MAPE: {:.4f}".format(test_mape))
-
-#     # 输出5个媒体对应的ax+b中的a和b
-#     all_weights = model.get_weights()
-#     print(all_weights)
-#     for i, media in enumerate(media_list):
-#         a = all_weights[2 * i][0][0]
-#         b = all_weights[2 * i + 1][0]
-#         print(f"Media {media}: a = {a}, b = {b}")
-#     # 保存模型
-#     model.save('/src/data/zk2/model1.h5')
+class CustomWeightConstraint(Constraint):
+    def __call__(self, w):
+        return tf.clip_by_value(w, 1.5, 2.5)
 
 def train1(rNUsd = 'r1usd_mmm'):
     # 读取数据
+    
     df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    df = dateFilter(df)
+
     df = df[['install_date', 'media', 'r7usd_raw', rNUsd]]
 
     # 按照安装日期进行汇总，并pivot_table
@@ -218,11 +161,14 @@ def train1(rNUsd = 'r1usd_mmm'):
 
     # 创建模型
     inputs = Input(shape=(5,))
-    # inputs_list = [Lambda(lambda x: x[:, i:i+1])(inputs) for i in range(len(input_columns))]
     inputs_list = [Lambda(lambda x, i=i: x[:, i:i+1])(inputs) for i in range(5)]
-
     
-    outputs_list = [Dense(1, activation='linear', bias_initializer=Zeros())(input) for input in inputs_list]
+
+
+    # outputs_list = [Dense(1, activation='linear', bias_initializer=Zeros())(input) for input in inputs_list]
+
+    outputs_list = [Dense(1, activation='linear', kernel_constraint=CustomWeightConstraint(), use_bias=False)(input) for input in inputs_list]
+
     outputs_sum = Add()(outputs_list)
     model = Model(inputs=inputs, outputs=outputs_sum)
     keras.utils.plot_model(model, '/src/data/zk2/model1.jpg', show_shapes=True)
@@ -261,11 +207,18 @@ def train1(rNUsd = 'r1usd_mmm'):
     print("Test MAPE: {:.4f}".format(test_mape))
 
     # 输出5个媒体对应的ax+b中的a和b
+    # all_weights = model.get_weights()
+    # for i, media in enumerate(input_columns):
+    #     a = all_weights[2 * i][0][0]
+    #     b = all_weights[2 * i + 1][0]
+    #     print(f"Media {media}: a = {a}, b = {b}")
+
     all_weights = model.get_weights()
     for i, media in enumerate(input_columns):
-        a = all_weights[2 * i][0][0]
-        b = all_weights[2 * i + 1][0]
-        print(f"Media {media}: a = {a}, b = {b}")
+        w = all_weights[i][0][0]
+        print(f"Media {media}: w = {w}")
+
+        
     # 保存模型
     model.save('/src/data/zk2/model1.h5')
 
@@ -276,6 +229,7 @@ from keras.models import load_model
 def check1(rNUsd = 'r1usd_mmm'):
     # 读取数据
     df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    df = dateFilter(df)
     df = df[['install_date', 'media', 'r7usd_raw', rNUsd]]
 
     # 按照安装日期进行汇总，并pivot_table
@@ -286,7 +240,7 @@ def check1(rNUsd = 'r1usd_mmm'):
     y_df = df.groupby('install_date')['r7usd_raw'].sum().reset_index()
 
     # 将两个df进行merge
-    merged_df = pd.merge(media_df, y_df, on='install_date')
+    merged_df = pd.merge(media_df, y_df,how = 'left', on='install_date')
 
     # print(merged_df.head())
     # #   install_date  Facebook Ads  bytedanceglobal_int  googleadwords_int       other  snapchat_int     r7usd_raw
@@ -302,7 +256,8 @@ def check1(rNUsd = 'r1usd_mmm'):
     y = merged_df['r7usd_raw'].values
 
     # 加载模型
-    model = load_model('/src/data/zk2/model1.h5')
+    # model = load_model('/src/data/zk2/model1.h5')
+    model = load_model('/src/data/zk2/model1.h5', custom_objects={'CustomWeightConstraint': CustomWeightConstraint})
     # 用此模型预测r7usd_pred，并计算与r7usd_raw的mape
     y_pred = model.predict(X)
     
@@ -311,11 +266,9 @@ def check1(rNUsd = 'r1usd_mmm'):
     merged_df.to_csv('/src/data/zk2/check1_mmm.csv', index=False)
     print("Global MAPE:", merged_df['mape'].mean())
 
-    # 创建一个新的数据框，用于存储每个媒体的MAPE
-    media_mape_df = pd.DataFrame(columns=['media', 'mape'])
-
     # 获取每个媒体的真实付费金额
     df = pd.read_csv('/src/data/zk/check1_mmm.csv')
+    df = dateFilter(df)
     df = df[['install_date', 'media', 'r7usd_raw']]
 
     # 按照安装日期进行汇总，并pivot_table
@@ -333,7 +286,7 @@ def check1(rNUsd = 'r1usd_mmm'):
 
         media_df['%s_pred' % media] = y_pred
         media_df['%s_mape' % media] = abs(media_df[media] - media_df['%s_pred' % media]) / media_df[media]
-    
+
         print(media_df['%s_mape' % media].mean())
     
 
@@ -596,6 +549,7 @@ def debug4():
 
 def draw():
     df = pd.read_csv('/src/data/zk2/check1_mmm2.csv')
+    df = dateFilter(df)
 
     # 目前df 中列 install_date 是 str 类型，需要转换成 datetime 类型
     # 画图，install_date是x
@@ -642,6 +596,9 @@ def draw():
         df[f'{media}_7d'] = df[media].rolling(7).mean()
         df[f'{media_pred}_7d'] = df[media_pred].rolling(7).mean()
 
+        df[f'{media}_7d mape'] = abs(df[f'{media}_7d'] - df[f'{media_pred}_7d']) / df[f'{media}_7d']
+        print(f"{media} 7-day average MAPE: {df[f'{media}_7d mape'].mean()}")
+
         # 第二个子图：绘制7日均线
         ax2.plot(df['install_date'], df[f'{media}_7d'], label=f'{media} 7-day average', linewidth=2, color=color)
         ax2.plot(df['install_date'], df[f'{media_pred}_7d'], label=f'{media_pred} 7-day average', linewidth=2, color=pred_color)
@@ -656,18 +613,31 @@ def draw():
         plt.savefig(f'/src/data/zk2/{media}_with_7d_avg.jpg', bbox_inches='tight')
         plt.close(fig)
 
+# 尝试过滤一些时间，用短一点的时间段来训练模型，看看效果
+# df中必须有install_date列
+def dateFilter(df):
+    df = df.loc[
+        (df['install_date'] >= '2023-02-01') &
+        (df['install_date'] <= '2023-03-01')
+    ]
+
+    return df
+
+
 if __name__ == '__main__':
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning, module="keras")
 
     # prepareData()
     
-    # train1(rNUsd = 'r3usd_mmm')
-    # check1(rNUsd = 'r3usd_mmm')
+    # debug3()
+
+    train1(rNUsd = 'r3usd_mmm')
+    check1(rNUsd = 'r3usd_mmm')
 
     # debug1()
     # debug2()
-    # debug3()
+    
     # debug4()
 
     # mods = train2(rNUsd='r3usd_mmm', days_per_group=60)

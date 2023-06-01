@@ -352,17 +352,17 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # Calculate media r7usd
     for media in mediaList:
         media_count_col = media + ' count'
-        userDf[media + ' r1usd'] = userDf['r1usd'] * userDf[media_count_col]
+        userDf[media + ' r3usd'] = userDf['r3usd'] * userDf[media_count_col]
         userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
         userDf[media + ' user_count'] = userDf['user_count'] * userDf[media_count_col]
 
     # 分割userDf为两个子数据框，一个包含r1usd，另一个包含r7usd
-    userDf_r1usd = userDf[['install_date'] + [media + ' r1usd' for media in mediaList]]
+    userDf_r1usd = userDf[['install_date'] + [media + ' r3usd' for media in mediaList]]
     userDf_r7usd = userDf[['install_date'] + [media + ' r7usd' for media in mediaList]]
 
     # 对两个子数据框分别进行melt操作
-    userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
-    userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
+    userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r3usd')
+    userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r3usd', '')
     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
     userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
     print(userDf_r1usd.head())
@@ -381,7 +381,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_count.to_csv(getFilename('userDf_count'), index=False )
     print(userDf_count.head())
     # ，和付费用户数
-    userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
+    userDf_payCount = userDf.loc[userDf['r3usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
     userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
     userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
     userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
@@ -397,7 +397,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     print('merge3')
 
     # Save to CSV
-    userDf.to_csv(getFilename('attribution1Ret'), index=False)
+    userDf.to_csv(getFilename('attribution1Ret3'), index=False)
     return userDf
 
 
@@ -561,11 +561,12 @@ if __name__ == '__main__':
     # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
     # userDf = meanAttribution(userDf, skanDf)
-    # userDf = meanAttributionResult(userDf)
+    userDf = pd.read_csv(getFilename('attribution1ReStep2'))
+    userDf = meanAttributionResult(userDf)
 
     # # # userDf = pd.read_csv(getFilename('attribution1Ret'))
-    # checkRet(userDf)
+    checkRet(userDf)
 
     # debug1()
-    mean3()
+    # mean3()
     
