@@ -103,6 +103,7 @@ def debug3():
 
     # print(df.head(10))
     df.to_csv('/src/data/zk/check1_mmm.csv', index=False)
+    # df.to_csv('/src/data/zk/check1_mmm2.csv', index=False)
     mediaList.append('other')
     for media in mediaList:
         df_media = df[df['media']==media]
@@ -628,12 +629,12 @@ if __name__ == '__main__':
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning, module="keras")
 
-    # prepareData()
+    prepareData()
     
-    # debug3()
+    debug3()
 
-    train1(rNUsd = 'r3usd_mmm')
-    check1(rNUsd = 'r3usd_mmm')
+    # train1(rNUsd = 'r3usd_mmm')
+    # check1(rNUsd = 'r3usd_mmm')
 
     # debug1()
     # debug2()

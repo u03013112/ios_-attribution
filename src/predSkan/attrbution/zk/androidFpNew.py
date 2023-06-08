@@ -103,7 +103,9 @@ def getDataFromMC():
 
 def loadData():
     # 加载数据
-    df = pd.read_csv(getFilename('androidFp03'))
+    # df = pd.read_csv(getFilename('androidFp03'))
+    # androidFp05 比 androidFp03 多了 r2usd 列
+    df = pd.read_csv(getFilename('androidFp05'))
     # 列 media_source 改名 media
     df = df.rename(columns={'media_source':'media'})
     # 列 uid 改名 appsflyer_id
@@ -250,7 +252,7 @@ def makeUserDf():
     cvMapDf = getCvMap()
     userDf = addCv(df,cvMapDf)
 
-    userDf = userDf[['appsflyer_id','install_timestamp','r1usd','r3usd','r7usd','cv']]
+    userDf = userDf[['appsflyer_id','install_timestamp','r1usd','r2usd','r3usd','r7usd','cv']]
     userDf['cv'] = userDf['cv'].astype(int)
     return userDf
 
@@ -265,7 +267,7 @@ def userGroupby(userDf):
     # userGroupbyDf的列名为install_timestamp,cv,user_count和r7usd
     # user_count是每组的用户数
     # r7usd是每组的r7usd汇总
-    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'appsflyer_id':'count','r1usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
+    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'appsflyer_id':'count','r1usd':'sum','r2usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
     userGroupbyDf.rename(columns={'appsflyer_id':'user_count'}, inplace=True)
     return userGroupbyDf
 
@@ -1724,14 +1726,14 @@ if __name__ == '__main__':
     # skanDf.to_csv(getFilename('skanAOS4G'),index=False)
     # print('skan data group len:',len(skanDf))
 
-    # userDf = makeUserDf()
-    # print('user data len:',len(userDf))
-    # userDf.to_csv(getFilename('userAOS3'),index=False)
-    # userDf = pd.read_csv(getFilename('userAOS3'))
-    # userDf = userInstallDate2Min(userDf,N = 600)
-    # userDf = userGroupby(userDf)
-    # userDf.to_csv(getFilename('userAOS3G'),index=False)
-    # print('user data group len:',len(userDf))
+    userDf = makeUserDf()
+    print('user data len:',len(userDf))
+    userDf.to_csv(getFilename('userAOS3'),index=False)
+    userDf = pd.read_csv(getFilename('userAOS3'))
+    userDf = userInstallDate2Min(userDf,N = 600)
+    userDf = userGroupby(userDf)
+    userDf.to_csv(getFilename('userAOS3G'),index=False)
+    print('user data group len:',len(userDf))
 
     userDf = pd.read_csv(getFilename('userAOS3G'))
     skanDf = pd.read_csv(getFilename('skanAOS3G'))
@@ -1744,13 +1746,13 @@ if __name__ == '__main__':
     # # meanAttributionAdv2(userDf,skanDf)
 
     # userDf = pd.read_parquet(getFilename('attribution1ReStep2R3usd','parquet'))
-    userDf = meanAttributionResult(userDf)
+    # userDf = meanAttributionResult(userDf)
     # userDf = meanAttributionResult(None)
 
     # meanAttributionResultDebug(userDf)
 
     # userDf = pd.read_csv(getFilename('attribution1Ret'))
-    checkRet(userDf)
+    # checkRet(userDf)
     # # # checkRetDebug(pd.read_csv(getFilename('attribution1RetDebug')))
 
     # userDf = attribution1(userDf,skanDf)

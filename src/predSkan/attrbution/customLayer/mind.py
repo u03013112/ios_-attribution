@@ -34,6 +34,9 @@ def p1():
         r7usdSum=('r7usd', 'sum')
     ).reset_index()
 
+    result_df['r7/r1'] = result_df['r7usdSum'] / result_df['r1usdSum']
+    result_df['r7-r1'] = result_df['r7usdSum'] - result_df['r1usdSum']
+
     for media in mediaList:
         print('media: %s'%media)
         mediaDf = result_df.loc[result_df['media_source'] == media]
@@ -118,8 +121,9 @@ def p2():
     # df['ctr'] = df['clicks'] / df['impressions']
     # df['cvr'] = df['installs'] / df['clicks']
 
-    # df['r7/r1'] = df['r7usd'] / df['r1usd']
-
+    df['r7/r1'] = df['r7usd'] / df['r1usd']
+    df['r7-r1'] = df['r7usd'] - df['r1usd']
+    
     for media in mediaList:
         print('media: %s'%media)
         mediaDf = df.loc[df['media_source'] == media]
@@ -157,5 +161,5 @@ def p3():
 
 if __name__ == '__main__':
     # p1()
-    # p2()
-    p3()
+    p2()
+    # p3()
