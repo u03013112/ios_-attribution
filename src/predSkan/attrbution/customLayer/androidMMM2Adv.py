@@ -117,6 +117,18 @@ def train_and_predict(df, train_days, predict_days,output_path):
     # 保存预测结果到 CSV 文件
     predictions_df.to_csv(output_path, index=False)
 
+def debug(df,retDf):
+    # df 拥有列 install_date,media,r1usd_raw,r3usd_raw,r7usd_raw,r1usd_mmm,r3usd_mmm,r7usd_mmm
+    # retDf 拥有列 install_date,media,r7usd_raw,r7usd_pred,mape
+
+    df = df[['install_date','media','r3usd_mmm']]
+    # retDf = retDf[['install_date','media','r7usd_raw','r7usd_pred']]
+    mergeDf = pd.merge(df,retDf,on=['install_date','media'])
+    mergeDf['r7/r3'] = mergeDf['r7usd_raw']/mergeDf['r3usd_mmm']
+    mergeDf['r7p/r3'] = mergeDf['r7usd_pred']/mergeDf['r3usd_mmm']
+    return mergeDf
+
+
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
@@ -131,11 +143,14 @@ def draw(df, output_path):
         media_df = df[df['media'] == media]
 
         # 创建一个新的图形和轴，设置图形大小为宽 12 英寸，高 6 英寸
-        fig, ax1 = plt.subplots(figsize=(12, 6))
+        fig, ax1 = plt.subplots(figsize=(16, 6))
 
         # 绘制r7usd_raw和r7usd_pred曲线
-        ax1.plot(media_df['install_date'], media_df['r7usd_raw'], label='r7usd_raw', color='blue')
-        ax1.plot(media_df['install_date'], media_df['r7usd_pred'], label='r7usd_pred', color='green')
+        # ax1.plot(media_df['install_date'], media_df['r7usd_raw'], label='r7usd_raw', color='blue')
+        # ax1.plot(media_df['install_date'], media_df['r7usd_pred'], label='r7usd_pred', color='green')
+
+        ax1.plot(media_df['install_date'], media_df['r7/r3'], label='r7/r3', color='blue')
+        ax1.plot(media_df['install_date'], media_df['r7p/r3'], label='r7p/r3', color='green')
 
         # 设置x轴的刻度
         ax1.xaxis.set_major_locator(mdates.MonthLocator())
@@ -244,8 +259,10 @@ if __name__ == '__main__':
     df24 = pd.read_csv(file24)
     df48 = pd.read_csv(file48)
 
-    # draw(df24,'/src/data/zk2/24')
+    debugDf = debug(pd.read_csv('/src/data/zk/check1_mmm.csv'),df24)
+
+    draw(debugDf,'/src/data/zk2/24')
     # draw(df48,'/src/data/zk2/48')
-    roll(df24)
-    roll(df48)
+    # roll(df24)
+    # roll(df48)
 

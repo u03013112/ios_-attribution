@@ -114,7 +114,7 @@ def dateFilter(df):
 
 def prepareData2(mediaList = mediaList):
     df = pd.read_csv('/src/data/zk/df_zk.csv')
-    df = dateFilter(df)
+    # df = dateFilter(df)
 
     # df拥有列：install_date,media,r3usd,impressions,clicks,installs,cost,r7usd
     # 数据整理，按照mediaList中的media顺序，进行按媒体的特征展开
@@ -122,6 +122,7 @@ def prepareData2(mediaList = mediaList):
     
     mergeDf = df[['install_date']].copy()
     mergeDf = mergeDf.drop_duplicates()
+
     mergeDf = mergeDf.sort_values(by=['install_date']).reset_index(drop=True)
 
     mediaList.append('other')
@@ -267,10 +268,25 @@ def check():
     mapeDf = mergeDf.groupby('media')['mape'].mean().reset_index()
     print(mapeDf)
 
+def corr():
+    df = pd.read_csv('/src/data/zk/df_zk.csv')
+    print(df.corr())
 
-
+def debug():
+    df = pd.read_csv('/src/data/zk2/check4m.csv')
+    df = df.groupby(['install_date']).agg({
+        'r7usd':'sum',
+        'r7usdPred':'sum'
+    })
+    df['mape'] = abs(df['r7usd'] - df['r7usdPred']) / df['r7usd']
+    print(df['mape'].mean())    
 
 if __name__ == '__main__':
     # prepareData()
-    # train()
+    # prepareData2()
+    train()
     check()
+
+    # corr()
+
+    # debug()

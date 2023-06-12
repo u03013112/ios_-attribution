@@ -124,6 +124,8 @@ def p2():
     df['r7/r1'] = df['r7usd'] / df['r1usd']
     df['r7-r1'] = df['r7usd'] - df['r1usd']
     
+    df.to_csv('/src/data/zk2/p2.csv', index=False)
+
     for media in mediaList:
         print('media: %s'%media)
         mediaDf = df.loc[df['media_source'] == media]
@@ -159,7 +161,40 @@ def p3():
     print(mean_values)
 
 
+import pandas as pd
+from statsmodels.tsa.stattools import ccf
+
+# 计算特征与目标值之间的互相关性
+def compute_cross_correlation(df, media, feature, target):
+    media_df = df.loc[df['media_source'] == media]
+    cross_correlation = ccf(media_df[feature], media_df[target])
+    return cross_correlation
+
+def analyze_cross_correlations(file_path):
+    # 读取数据
+    df = pd.read_csv(file_path)
+
+    # 媒体列表
+    media_list = mediaList
+
+    # 特征列表
+    feature_list = ['r1usd', 'impressions', 'clicks', 'installs', 'cost', 'r7/r1', 'r7-r1']
+
+    # 目标值：7日回收金额
+    target = 'r7usd'
+
+    # 计算互相关性
+    for media in media_list:
+        print('Media:', media)
+        for feature in feature_list:
+            cross_correlation = compute_cross_correlation(df, media, feature, target)
+            print(f'Cross-correlation between {feature} and {target}:', cross_correlation)
+
+
+
 if __name__ == '__main__':
     # p1()
-    p2()
+    # p2()
     # p3()
+
+    analyze_cross_correlations('/src/data/zk2/p2.csv')

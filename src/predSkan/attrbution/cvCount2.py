@@ -127,6 +127,51 @@ def debug():
     # 打印df中不同uid的数量
     print(df['customer_user_id'].unique().shape[0])
 
+def tmp():
+    df = pd.read_csv('/src/data/cvCount20230501Debug.csv')
+
+    # 添加 'tmp' 列
+    df['tmp'] = 0
+
+    # 获得所有不同的 customer_user_id
+    unique_customer_user_ids = df['customer_user_id'].unique()
+
+    total_revenue_sum = 0
+
+    # 遍历 customer_user_id
+    for user_id in unique_customer_user_ids:
+        user_df = df[df['customer_user_id'] == user_id]
+
+        # 统计用户付费次数
+        user_payment_count = len(user_df)
+
+        # 找到用户付费次数对应的最高行
+        valid_rows = user_df[(user_df['min_counter'] <= user_payment_count)]
+
+        # 检查是否有满足条件的行
+        if not valid_rows.empty:
+            valid_row = valid_rows.iloc[-1]
+
+            # 将这一行的 'tmp' 列值设为 1
+            df.loc[valid_row.name, 'tmp'] = 1
+
+        # 累加每个用户的累计最大值
+        total_revenue_sum += user_df['cumulative_revenue'].max()
+
+    # 计算累计付费金额的合法比例
+    valid_revenue_sum = df[df['tmp'] == 1]['cumulative_revenue'].sum()
+    valid_revenue_ratio = valid_revenue_sum / total_revenue_sum
+
+    # 保存 df 到新的 CSV 文件
+    df.to_csv('/src/data/cvCount20230501Debug2.csv', index=False)
+
+    return valid_revenue_ratio
+
+
+
 if __name__ == '__main__':
-    main()
-    debug()
+    # main()
+    # debug()
+
+    valid_revenue_ratio = tmp()
+    print("累计付费金额的合法比例:", valid_revenue_ratio)
