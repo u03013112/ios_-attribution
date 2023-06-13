@@ -22,7 +22,8 @@ def getXAndY(media_list):
     df = pd.read_csv('/src/data/zk/df_zk2.csv')
     df = df.fillna(0)
 
-    train_df, test_df = train_test_split(df, test_size=0.3, random_state=42)
+    # train_df, test_df = train_test_split(df, test_size=0.3, random_state=42)
+    train_df, test_df = train_test_split(df, test_size=0.3)
 
     X_train = train_df.drop(columns=['install_date', 'r7usd'])
     X_train_filled = X_train.fillna(0)
@@ -72,12 +73,12 @@ class ConstraintPenalty(Layer):
         output = inputs[:, 1]
 
         lower_bound = 0.8 * r3usd
-        upper_bound = 2.5 * r3usd
+        upper_bound = 2.0 * r3usd
 
         lower_violation = tf.maximum(0.0, lower_bound - output)
         upper_violation = tf.maximum(0.0, output - upper_bound)
 
-        penalty = 1000 * (lower_violation + upper_violation)
+        penalty = 10000 * (lower_violation + upper_violation)
 
         if penalty is np.nan:
             tf.print('inputs:', inputs)
@@ -108,7 +109,7 @@ def train():
         hidden_layer1 = Dense(8, activation='relu', name=f'{media_name}_hidden1')(input_layer)
         hidden_layer2 = Dense(8, activation='relu', name=f'{media_name}_hidden2')(hidden_layer1)
         hidden_layer3 = Dense(8, activation='relu', name=f'{media_name}_hidden3')(hidden_layer2)
-        output = Dense(1, activation='linear', name=f'{media_name}_output')(hidden_layer3)
+        output = Dense(1, activation='relu', name=f'{media_name}_output')(hidden_layer3)
         dense_layers.append(output)
 
     # 为每个媒体创建ConstraintPenalty层
@@ -212,7 +213,160 @@ def check():
     print(mapeDf)
 
 
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+def draw(df, output_path):
+    # 将install_date列转换为日期类型
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    # 对每个媒体进行绘图
+    for media in df['media'].unique():
+        media_df = df[df['media'] == media]
+
+        # 创建一个新的图形和轴，设置图形大小为宽 12 英寸，高 6 英寸
+        fig, ax1 = plt.subplots(figsize=(16, 6))
+
+        # 绘制r7usd_raw和r7usd_pred曲线
+        ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd', color='blue')
+        ax1.plot(media_df['install_date'], media_df['r7usdPred'], label='r7usdPred', color='green')
+
+        # 设置x轴的刻度
+        ax1.xaxis.set_major_locator(mdates.MonthLocator())
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+        # 设置第一个y轴的标签
+        ax1.set_ylabel('r7usd')
+
+        # 添加图例
+        ax1.legend(loc='upper left')
+
+        # 创建一个共享x轴的第二个y轴
+        ax2 = ax1.twinx()
+
+        # 绘制mape曲线
+        ax2.plot(media_df['install_date'], media_df['mape'], label='mape', linestyle='dashed', color='red')
+
+        # 设置第二个y轴的标签
+        ax2.set_ylabel('mape')
+
+        # 添加图例
+        ax2.legend(loc='upper right')
+
+        # 设置标题
+        plt.title(media)
+
+        # 保存图形到文件
+        plt.savefig(f"{output_path}{media}.jpg")
+
+        # 关闭图形，以便在下一个迭代中创建新的图形
+        plt.close(fig)
+    
+def debug1():
+    # 尝试找到r7usd/r3usd的有效范围，然后对模型约束进行调整
+    df = pd.read_csv('/src/data/zk/df_zk.csv')
+    df = df.fillna(0)
+    df['r7/r3'] = df['r7usd'] / df['r3usd']
+    mediaList = ['googleadwords_int', 'Facebook Ads', 'bytedanceglobal_int', 'snapchat_int', 'other']
+    print('真实值的分布')
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        # 打印媒体的r7/r3的 分布
+        print(media)
+        print('1%:',mediaDf['r7/r3'].quantile(0.01),'99%', mediaDf['r7/r3'].quantile(0.99))
+        print('5%:',mediaDf['r7/r3'].quantile(0.05),'95%', mediaDf['r7/r3'].quantile(0.95))
+        print('10%:',mediaDf['r7/r3'].quantile(0.1),'90%', mediaDf['r7/r3'].quantile(0.9))
+        print('mean:',mediaDf['r7/r3'].mean())
+
+    # 预测结果的r7/r3 的分布
+    dfP = pd.read_csv('/src/data/zk2/check4m.csv')
+    dfP = dfP[['install_date','media','r7usdPred']]
+    dfRaw = df[['install_date','media','r3usd']]
+    df = dfRaw.merge(dfP, how='right', on=['install_date','media'])
+    df['r7/r3'] = df['r7usdPred'] / df['r3usd']
+    print('预测结果的r7/r3 的分布')
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        # 打印媒体的r7/r3的 分布
+        print(media)
+        print('1%:',mediaDf['r7/r3'].quantile(0.01),'99%', mediaDf['r7/r3'].quantile(0.99))
+        print('5%:',mediaDf['r7/r3'].quantile(0.05),'95%', mediaDf['r7/r3'].quantile(0.95))
+        print('10%:',mediaDf['r7/r3'].quantile(0.1),'90%', mediaDf['r7/r3'].quantile(0.9))
+        print('mean:',mediaDf['r7/r3'].mean())
+
+def draw2(output_path):
+    df = pd.read_csv('/src/data/zk/df_zk.csv')
+    df = df.fillna(0)
+    df['r7/r3'] = df['r7usd'] / df['r3usd']
+    df0 = df[['install_date','media','r7/r3']]
+
+    df = pd.read_csv('/src/data/zk/df_zk.csv')
+    dfP = pd.read_csv('/src/data/zk2/check4m.csv')
+    dfP = dfP[['install_date','media','r7usdPred']]
+    dfRaw = df[['install_date','media','r3usd']]
+    df2 = dfRaw.merge(dfP, how='right', on=['install_date','media'])
+    df2['r7/r3'] = df2['r7usdPred'] / df2['r3usd']
+    df2 = df2[['install_date','media','r7/r3']]
+
+    df = df0.merge(df2, how='right', on=['install_date','media'],suffixes=('_raw', '_pred'))
+
+    # 画图有关r7/r3的
+    # 将install_date列转换为日期类型
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    # 对每个媒体进行绘图
+    for media in df['media'].unique():
+        media_df = df[df['media'] == media]
+
+        # 创建一个新的图形和轴，设置图形大小为宽 12 英寸，高 6 英寸
+        fig, ax1 = plt.subplots(figsize=(16, 6))
+
+        # 绘制r7usd_raw和r7usd_pred曲线
+        # ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd', color='blue')
+        # ax1.plot(media_df['install_date'], media_df['r7usdPred'], label='r7usdPred', color='green')
+        ax1.plot(media_df['install_date'], media_df['r7/r3_raw'], label='r7/r3_raw', color='blue')
+        ax1.plot(media_df['install_date'], media_df['r7/r3_pred'], label='r7/r3_pred', color='green')
+
+        # 设置x轴的刻度
+        ax1.xaxis.set_major_locator(mdates.MonthLocator())
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+        # 设置第一个y轴的标签
+        ax1.set_ylabel('r7usd')
+
+        # 添加图例
+        ax1.legend(loc='upper left')
+
+        # # 创建一个共享x轴的第二个y轴
+        # ax2 = ax1.twinx()
+
+        # # 绘制mape曲线
+        # ax2.plot(media_df['install_date'], media_df['mape'], label='mape', linestyle='dashed', color='red')
+
+        # # 设置第二个y轴的标签
+        # ax2.set_ylabel('mape')
+
+        # # 添加图例
+        # ax2.legend(loc='upper right')
+
+        # 设置标题
+        plt.title(media)
+
+        # 保存图形到文件
+        plt.savefig(f"{output_path}{media}.jpg")
+
+        # 关闭图形，以便在下一个迭代中创建新的图形
+        plt.close(fig)
+    
+
+
+
+
 if __name__ == '__main__':
     # getXAndY()
-    train()
-    check()
+    # train()
+    # check()
+    # draw(pd.read_csv('/src/data/zk2/check4m.csv'), '/src/data/zk2/m4a')
+
+    # debug1()
+    draw2('/src/data/zk2/m4a2')

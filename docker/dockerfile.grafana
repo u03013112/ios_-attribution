@@ -1,0 +1,7 @@
+FROM grafana/grafana
+
+USER grafana
+
+RUN mkdir -p /var/lib/grafana/plugins
+RUN curl -L -o /tmp/marcusolsson-csv-datasource-0.2.0.zip https://github.com/marcusolsson/grafana-csv-datasource/releases/download/v0.2.0/marcusolsson-csv-datasource-0.2.0.zip
+RUN unzip /tmp/marcusolsson-csv-datasource-0.2.0.zip -d /var/lib/grafana/plugins

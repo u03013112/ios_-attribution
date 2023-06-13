@@ -6,8 +6,8 @@ services:
     container_name: 'ios_attribution'
     tty: true
     volumes:
-        - ../:/src:cached
-        - service_account.json:/root/.config/gspread/service_account.json
+      - ../:/src:cached
+      - ./service_account.json:/root/.config/gspread/service_account.json
     working_dir: /src/
     network_mode: host
     logging:
@@ -15,3 +15,11 @@ services:
       options:
         max-size: "10m"
         max-file: "1"
+  
+  grafana:
+    image: my-grafana
+    container_name: 'grafana'
+    ports:
+      - 3000:3000
+    volumes:
+      - ../:/src:cached
