@@ -1,10 +1,10 @@
-# 与旧的androidFpNew.py相比，做如下优化
-# 时间改为2022-07~2023-03，这个时间的部分用户属性已经从数数获得过，所以这样比较省事
-# 将部分其他用户属性加入到撞库中
-# 暂时不考虑cv位数，但是也不要太过分
-# 尝试将首日付费金额，用户等级，能量花费，付费次数，英雄升星等属性进行分档，暂定分档数为8
-# 这样得到的档位数应该是8*8*8*8*8=32768
-# 先看看效果，然后再缩减档位数
+# 与旧的androidFpNew2.py相比，做如下优化
+# 不再使用能量花费，付费次数，英雄升星等属性进行分档
+# 而是使用国家进行分档
+# 其中国家属性直接从appsflyer中获取
+# 另外，国家部分不是按照自然国家，而是会给国家进行分组
+# 后续逻辑类似，将国家属性也放入cv
+# 再进行融合归因
 
 import time
 import datetime
@@ -72,6 +72,13 @@ def getDataFromMC():
             COALESCE(
                 sum(purchases.event_revenue_usd) FILTER (
                     WHERE
+                        purchases.event_timestamp <= installs.install_timestamp + 2 * 86400
+                ),
+                0
+            ) AS r2usd,
+            COALESCE(
+                sum(purchases.event_revenue_usd) FILTER (
+                    WHERE
                         purchases.event_timestamp <= installs.install_timestamp + 3 * 86400
                 ),
                 0
@@ -117,27 +124,6 @@ def loadData():
     # df = df.rename(columns={'uid':'appsflyer_id'})
 
     return df
-
-def mergeData():
-    # 将mc数据与数数数据合并
-    mcData = loadData()
-    # 数数数据
-    ssData = pd.read_csv('/src/data/demoSsAllMakeLabel.csv')
-    ssData = ssData[['uid','countUserLevelMax','ENERGY','countPayCount','countHeroStarUp']]
-
-    # # 打印mcData所有列和类型
-    # print(mcData.dtypes)
-    # # 打印ssData所有列和类型
-    # print(ssData.dtypes)
-
-    # 将mcData的uid转成str
-    mcData['uid'] = mcData['uid'].astype(str)
-    ssData['uid'] = ssData['uid'].astype(str)
-    
-    # merge两个Df，用uid作为key，取两个Df的交集
-    mergeData = mcData.merge(ssData,on='uid',how='inner')
-    mergeData.to_csv(getFilename('androidFpMergeData'), index=False)
-
 
 def makeLevels1(userDf, usd='r1usd', N=32):
     # `makeLevels1`函数接受一个包含用户数据的DataFrame（`userDf`），一个表示用户收入的列名（`usd`，默认为'r1usd'），以及分组的数量（`N`，默认为8）。
@@ -217,52 +203,45 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     return userDfCopy
 
 def dataStep1():
-    df = pd.read_csv(getFilename('androidFpMergeData'))
+    df = pd.read_csv(getFilename('androidFp06'))
     # r1usd
-    levels = makeLevels1(df,usd='r1usd',N=32)
+    levels = makeLevels1(df,usd='r2usd',N=32)
     cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='r1usd',cv='cv r1usd')
-    # countUserLevelMax
-    levels = makeLevels1(df,usd='countUserLevelMax',N=8)
-    cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='countUserLevelMax',cv='cv countUserLevelMax')
-    # ENERGY
-    levels = makeLevels1(df,usd='ENERGY',N=8)
-    cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='ENERGY',cv='cv ENERGY')
-    # countPayCount
-    levels = makeLevels1(df,usd='countPayCount',N=8)
-    cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='countPayCount',cv='cv countPayCount')
-    # countHeroStarUp
-    levels = makeLevels1(df,usd='countHeroStarUp',N=8)
-    cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='countHeroStarUp',cv='cv countHeroStarUp')
+    df = addCv(df,cvMapDf,usd='r2usd',cv='cv r1usd')
+    # # 国家分组
+    # geoMap = [
+    #     {'name':'US','cv':0,'code':['US']},
+    #     {'name':'T1','cv':1,'code':['KR','JP','DE','TR','UK','TW','FR','RU','PL','SA','ES','IQ','HK','AU','SG']},
+    #     {'name':'T2','cv':2,'code':[]}
+    # ]
+    # geoMap = [
+    #     {'name':'US','cv':0,'code':['US']},
+    #     {'name':'Asia','cv':1,'code':['KR','JP','TW','HK','SG']},
+    #     {'name':'Europe','cv':2,'code':['DE','TR','UK','FR','RU','PL','SA','ES','IQ','AU']}
+    # ]
+    geoMap = [
+        {'name':'US','cv':0,'code':['US']},
+        {'name':'KR','cv':1,'code':['KR']},
+        {'name':'JP','cv':2,'code':['JP']},
+        {'name':'T1','cv':3,'code':['DE','TR','UK','FR','RU','PL','SA','ES','IQ','AU','TW','HK','SG']}
+    ]
+    # 将df中的country_code与geoMap中的code进行匹配，匹配到的设置为geoMap中的name，未匹配到的设置为'T3'
+    df['cv geo'] = 9
+    for geo in geoMap:
+        df.loc[df['country_code'].isin(geo['code']),'cv geo'] = geo['cv']
 
-    df.to_csv(getFilename('androidFpMergeDataStep1'), index=False)
-    
+    df.to_csv(getFilename('androidFpMergeDataStep1g'), index=False)
+    print('dataStep1 done')    
 
 def dataStep2():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep1'))
-    # 目前有列'cv r1usd','cv countUserLevelMax','cv ENERGY','cv countPayCount','cv countHeroStarUp'
-    # 其中'cv r1usd'的范围是0~31，其他的范围是0~7
-    # 希望将这5列合成1列，最终列名cv
-    # cv = 'cv countHeroStarUp' * 1 + 'cv countPayCount' * 8 + 'cv ENERGY' * 64 + 'cv countUserLevelMax' * 512 + 'cv r1usd' * 4096
-    
-    # df['cv'] = df['cv countHeroStarUp'] + df['cv countPayCount'] * 8 + df['cv ENERGY'] * 64 + df['cv countUserLevelMax'] * 512 + df['cv r1usd'] * 4096
-
-    # df['cv'] = df['cv countUserLevelMax'] + df['cv ENERGY'] * 8 + df['cv r1usd'] * 64
-
-    df['cv'] = df['cv countUserLevelMax'] + df['cv r1usd'] * 8
-
-    # df['cv'] = df['cv r1usd']
-
-
-    df.to_csv(getFilename('androidFpMergeDataStep2'), index=False)
-
+    df = pd.read_csv(getFilename('androidFpMergeDataStep1g'))
+    df['cv'] = df['cv geo'] + df['cv r1usd'] * 10
+    df.to_csv(getFilename('androidFpMergeDataStep2g'), index=False)
+    print('dataStep2 done')
 
 def dataStep3():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep2'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep2g'))
+    df.rename(columns={'media_source':'media'},inplace=True)
     df = df [[
         'uid',
         'install_date',
@@ -274,7 +253,8 @@ def dataStep3():
         'media',
         'cv'
     ]]
-    df.to_csv(getFilename('androidFpMergeDataStep3'), index=False)
+    df.to_csv(getFilename('androidFpMergeDataStep3g'), index=False)
+    print('dataStep3 done')
 
 # 暂时就只关心这4个媒体
 mediaList = [
@@ -286,7 +266,7 @@ mediaList = [
 
 # 制作一个模拟的SKAN报告
 def makeSKAN():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep3'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep3g'))
     # 过滤，只要媒体属于mediaList的条目
     df = df.loc[df['media'].isin(mediaList)]
     # 重排索引
@@ -380,7 +360,7 @@ def skanGroupby(skanDf):
 
 # 制作待归因用户Df
 def makeUserDf():
-    userDf = pd.read_csv(getFilename('androidFpMergeDataStep3'))
+    userDf = pd.read_csv(getFilename('androidFpMergeDataStep3g'))
 
     userDf = userDf[['uid','install_timestamp','r1usd','r3usd','r7usd','cv']]
     userDf['cv'] = userDf['cv'].astype(int)
@@ -551,8 +531,6 @@ def checkRet(retDf):
         # print(f"Media: {media}, MAPE: {MAPE}, R2: {R2}")
         print(f"Media: {media}, MAPE: {MAPE}")
 
-
-def debug():
     df = pd.read_csv(getFilename('attribution1RetCheck'))
     r7PR1 = df['r7usd'] / df['r1usd']
     print(r7PR1.mean())
@@ -560,71 +538,89 @@ def debug():
     print(r7pPR1)
 
 
-    # facebookDf = df[df['media'] == 'Facebook Ads']
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.dates import DateFormatter
 
-    # r7PR1 = facebookDf['r7usd'] / facebookDf['r1usd']
-    # print(r7PR1.mean())
-    # r7pPR1 = facebookDf['r7usdp'] / facebookDf['r1usd']
-    # print(r7pPR1.mean())
+def draw():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    # 将不同的媒体分开画图，图片宽一点
+    # install_date作为x轴，每隔7天画一个点
+    # 双y轴，y1是r7usd和r7usdp；y2是MAPE（用虚线）。
+    # 图片保存到'/src/data/zk/att1_{media}.jpg'
+    # Convert 'install_date' to datetime
+    df['install_date'] = pd.to_datetime(df['install_date'])
 
-    # facebookDf['r7usdp2'] = facebookDf['r7usd'] * (r7PR1/r7pPR1)
+    for media in mediaList:
+        media_df = df[df['media'] == media]
 
-    # facebookDf['MAPE2'] = abs(facebookDf['r7usd'] - facebookDf['r7usdp2']) / facebookDf['r7usd']
+        # Create the plot with the specified figure size
+        fig, ax1 = plt.subplots(figsize=(24, 6))
 
-    # print(facebookDf['MAPE2'].mean())
+        plt.title(media)
 
+        # Plot r7usd and r7usdp on the left y-axis
+        ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd')
+        ax1.plot(media_df['install_date'], media_df['r7usdp'], label='r7usdp')
+        ax1.set_ylabel('r7usd and r7usdp')
+        ax1.set_xlabel('Install Date')
+
+        # Plot MAPE on the right y-axis with dashed line
+        ax2 = ax1.twinx()
+        ax2.plot(media_df['install_date'], media_df['MAPE'], label='MAPE', linestyle='--', color='red')
+        ax2.set_ylabel('MAPE')
+
+        # Set x-axis to display dates with a 7-day interval
+        ax1.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+        plt.xticks(media_df['install_date'][::14], rotation=45)
+
+        # Add legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+
+        # Save the plot as a jpg image
+        plt.savefig(f'/src/data/zk2/attG3_{media}.jpg', bbox_inches='tight')
+        plt.close()
 
 if __name__ == '__main__':
     # getDataFromMC()
-    # mergeData()
-    # dataStep1()
-    # dataStep2()
-    # dataStep3()
+    
+    dataStep1()
+    dataStep2()
+    dataStep3()
 
     skanDf = makeSKAN()
     skanDf = skanAddValidInstallDate(skanDf)
-    # skanDf = skanAddValidInstallDate2(skanDf)
 
-    # print('skan data len:',len(skanDf))
-    # skanDf.to_csv(getFilename('skanAOS5'),index=False)
-    # skanDf = pd.read_csv(getFilename('skanAOS5'))
-    # skanDf = skanValidInstallDate2Min(skanDf,N = 600)
-    # skanDf = skanGroupby(skanDf)
-    # skanDf.to_csv(getFilename('skanAOS5G'),index=False)
-    # print('skan data group len:',len(skanDf))
+    print('skan data len:',len(skanDf))
+    skanDf.to_csv(getFilename('skanAOS6'),index=False)
+    skanDf = pd.read_csv(getFilename('skanAOS6'))
+    skanDf = skanValidInstallDate2Min(skanDf,N = 600)
+    skanDf = skanGroupby(skanDf)
+    skanDf.to_csv(getFilename('skanAOS6G'),index=False)
+    print('skan data group len:',len(skanDf))
 
-    # userDf = makeUserDf()
-    # print('user data len:',len(userDf))
-    # userDf.to_csv(getFilename('userAOS5'),index=False)
-    # userDf = pd.read_csv(getFilename('userAOS5'))
-    # userDf = userInstallDate2Min(userDf,N = 600)
-    # userDf = userGroupby(userDf)
-    # userDf.to_csv(getFilename('userAOS5G'),index=False)
-    # print('user data group len:',len(userDf))
+    userDf = makeUserDf()
+    print('user data len:',len(userDf))
+    userDf.to_csv(getFilename('userAOS6'),index=False)
+    userDf = pd.read_csv(getFilename('userAOS6'))
+    userDf = userInstallDate2Min(userDf,N = 600)
+    userDf = userGroupby(userDf)
+    userDf.to_csv(getFilename('userAOS6G'),index=False)
+    print('user data group len:',len(userDf))
 
-    # userDf = pd.read_csv(getFilename('userAOS5G'))
-    # skanDf = pd.read_csv(getFilename('skanAOS5G'))
+    # userDf = pd.read_csv(getFilename('userAOS6G'))
+    # skanDf = pd.read_csv(getFilename('skanAOS6G'))
     
 
-    # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
+    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
 
-    # userDf = meanAttribution(userDf, skanDf)
-    # # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
-    # userDf = meanAttributionResult(userDf)
-    # # userDf = meanAttributionResult(None)
-
-    # # meanAttributionResultDebug(userDf)
-
-    # userDf = pd.read_csv(getFilename('attribution1Ret'))
-    # checkRet(userDf)
-    # # # checkRetDebug(pd.read_csv(getFilename('attribution1RetDebug')))
-
-    # userDf = attribution1(userDf,skanDf)
-    # userDf.to_csv(getFilename('attribution1Ret'),index=False)
-    # userDf = pd.read_csv(getFilename('attribution1Ret'))
-    # result1(userDf,'2022')
-
-    # debugResult1()
+    userDf = meanAttribution(userDf, skanDf)
+    # # # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
+    userDf = meanAttributionResult(userDf)
     
-    # debug()
-   
+    # userDf = pd.read_csv(getFilename('attribution1Ret'))
+    checkRet(userDf)
+
+    # draw()

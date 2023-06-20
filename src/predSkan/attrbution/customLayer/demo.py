@@ -64,6 +64,20 @@ def data2():
     df.rename(columns={'r7usd_raw':'r7usd'}, inplace=True)
     df.to_csv('/src/data/zk/androidCv3Y.csv', index=False )
 
+def dataFix():
+    df = pd.read_csv('/src/data/zk/androidCv3X.csv')
+    # df 列 media 中 snapchat_int 改为 other
+    df.loc[df['media']=='snapchat_int','media'] = 'other'
+    df = df.groupby(['install_date','media','cv']).agg('sum').reset_index()
+    df.to_csv('/src/data/zk2/androidCv3Xf.csv', index=False )
+
+def data2Fix():
+    df = pd.read_csv('/src/data/zk/androidCv3Y.csv')
+    # df 列 media 中 snapchat_int 改为 other
+    df.loc[df['media']=='snapchat_int','media'] = 'other'
+    df = df.groupby(['install_date','media']).agg('sum').reset_index()
+    df.to_csv('/src/data/zk2/androidCv3Yf.csv', index=False )
+
 if __name__ == '__main__':
     data()
     data2()

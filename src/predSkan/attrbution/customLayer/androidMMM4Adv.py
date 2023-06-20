@@ -364,9 +364,9 @@ def draw2(output_path):
 
 if __name__ == '__main__':
     # getXAndY()
-    # train()
-    # check()
+    train()
+    check()
     # draw(pd.read_csv('/src/data/zk2/check4m.csv'), '/src/data/zk2/m4a')
 
     # debug1()
-    draw2('/src/data/zk2/m4a2')
+    # draw2('/src/data/zk2/m4a2')
