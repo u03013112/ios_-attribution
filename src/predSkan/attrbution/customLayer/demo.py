@@ -9,7 +9,18 @@ def data():
         # 'other'
     ]
     # 源数据格式
-    userDf = pd.read_csv('/src/data/zk/attribution1ReStep1.csv')
+    # userDf = pd.read_csv('/src/data/zk/attribution1ReStep1.csv')
+
+    userDf = pd.read_csv('/src/data/zk/attribution1ReStep24hours.csv')
+
+    # Geo版本
+    # userDf = pd.read_csv('/src/data/zk/attribution1ReStep2.csv')
+    # 由于geo版本没有r2usd,所以需要将r1usd复制一份
+    # userDf['r2usd'] = userDf['r1usd']
+    # 由于geo版本的cv中带有国家信息，国家信息在cv的个位数中，所以需要将cv//10，将个位数舍去
+    userDf['cv'] = userDf['cv'] // 10
+    userDf = userDf.groupby(['install_timestamp','cv']).sum().reset_index()
+
     # 目标数据格式
     # select dt,uid,hour24price,d6,ad_mediasource from rg_ai_bj.ads_train_needpredictusers_cnwx_rebuild where dt = '20230601' limit 100;
 
@@ -55,24 +66,24 @@ def data():
     userDf = cvDf.merge(userDf_r1usd, on=['install_date', 'media','cv'])
     userDf = userDf.merge(userDf_r2usd, on=['install_date', 'media','cv'])
     userDf = userDf.merge(userDf_r3usd, on=['install_date', 'media','cv'])
-    userDf.to_csv('/src/data/zk/androidCv3X.csv', index=False )
+    userDf.to_csv('/src/data/zk2/androidCv3X.csv', index=False )
     
 
 def data2():
     df = pd.read_csv('/src/data/zk/check1_mmm.csv')
     df = df[['install_date','media','r7usd_raw']]
     df.rename(columns={'r7usd_raw':'r7usd'}, inplace=True)
-    df.to_csv('/src/data/zk/androidCv3Y.csv', index=False )
+    df.to_csv('/src/data/zk2/androidCv3Y.csv', index=False )
 
 def dataFix():
-    df = pd.read_csv('/src/data/zk/androidCv3X.csv')
+    df = pd.read_csv('/src/data/zk2/androidCv3X.csv')
     # df 列 media 中 snapchat_int 改为 other
     df.loc[df['media']=='snapchat_int','media'] = 'other'
     df = df.groupby(['install_date','media','cv']).agg('sum').reset_index()
     df.to_csv('/src/data/zk2/androidCv3Xf.csv', index=False )
 
 def data2Fix():
-    df = pd.read_csv('/src/data/zk/androidCv3Y.csv')
+    df = pd.read_csv('/src/data/zk2/androidCv3Y.csv')
     # df 列 media 中 snapchat_int 改为 other
     df.loc[df['media']=='snapchat_int','media'] = 'other'
     df = df.groupby(['install_date','media']).agg('sum').reset_index()
@@ -81,3 +92,5 @@ def data2Fix():
 if __name__ == '__main__':
     data()
     data2()
+    dataFix()
+    data2Fix()

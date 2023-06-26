@@ -1,52 +1,47 @@
-# 与旧的androidFpNew2.py相比，做如下优化
-# 不再使用能量花费，付费次数，英雄升星等属性进行分档
-# 而是使用国家进行分档
-# 其中国家属性直接从appsflyer中获取
-# 另外，国家部分不是按照自然国家，而是会给国家进行分组
-# 后续逻辑类似，将国家属性也放入cv
-# 再进行融合归因
+# 按照国家撞库
+# 基础逻辑还是撞库，与其他的撞库逻辑一样
+# 区别是，按照campaign获得国家信息
+# 然后按照国家信息撞库，这个逻辑需要重新写，效率会比较低
+# 所以考虑用一个比较短的时间段来做这个事情
 
-import time
-import datetime
 import numpy as np
 import pandas as pd
-from sklearn.metrics import r2_score
 
-
-import os
 import sys
 sys.path.append('/src')
 from src.maxCompute import execSql
 
 def getFilename(filename,ext='csv'):
-    return '/src/data/zk/%s.%s'%(filename,ext)
+    return '/src/data/zk2/%s.%s'%(filename,ext)
 
 def getDataFromMC():
+    # 获得用户信息，这里要额外获得归因信息，精确到campaign
     sql = '''
         WITH installs AS (
             SELECT
-                customer_user_id AS uid,
+                appsflyer_id AS uid,
                 to_char(
                     to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
                     "yyyy-mm-dd"
                 ) AS install_date,
                 install_timestamp,
                 media_source,
-                country_code
+                country_code,
+                campaign_id
             FROM
                 ods_platform_appsflyer_events
             WHERE
                 app_id = 'com.topwar.gp'
                 AND zone = 0
                 AND event_name = 'install'
-                AND day BETWEEN '20220701'
+                AND day BETWEEN '20221001'
                 AND '20230308'
-                AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-07-01', "yyyy-mm-dd")
+                AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-10-01', "yyyy-mm-dd")
                 AND to_date('2023-03-01', "yyyy-mm-dd")
         ),
         purchases AS (
             SELECT
-                customer_user_id AS uid,
+                appsflyer_id AS uid,
                 event_timestamp,
                 event_revenue_usd
             FROM
@@ -54,9 +49,9 @@ def getDataFromMC():
             WHERE
                 event_name = 'af_purchase'
                 AND zone = 0
-                AND day BETWEEN '20220701'
+                AND day BETWEEN '20221001'
                 AND '20230308'
-                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-07-01', "yyyy-mm-dd")
+                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-10-01', "yyyy-mm-dd")
                 AND to_date('2023-03-01', "yyyy-mm-dd")
         )
         SELECT
@@ -99,7 +94,8 @@ def getDataFromMC():
                 0
             ) AS last_timestamp,
             installs.media_source,
-            installs.country_code
+            installs.country_code,
+            installs.campaign_id
         FROM
             installs
             LEFT JOIN purchases ON installs.uid = purchases.uid
@@ -108,21 +104,60 @@ def getDataFromMC():
             installs.install_date,
             installs.install_timestamp,
             installs.media_source,
-            installs.country_code
+            installs.country_code,
+            installs.campaign_id
         ;
     '''
     df = execSql(sql)
-    df.to_csv(getFilename('androidFp06'), index=False)
+    df.to_csv(getFilename('androidFp07'), index=False)
     return df
 
 def loadData():
     # 加载数据
-    df = pd.read_csv(getFilename('androidFp06'))
+    df = pd.read_csv(getFilename('androidFp07'))
     # 列 media_source 改名 media
     df = df.rename(columns={'media_source':'media'})
     # 列 media 中 'restricted' 改为 'Facebook Ads'
     df['media'] = df['media'].replace('restricted','Facebook Ads')
 
+    return df
+
+def getCountryFromCampaign():
+    # 获得campaign对应的国家信息
+    sql = '''
+        select
+            day,
+            media_source,
+            campaign_id,
+            country_code,
+            cost
+        from
+            ods_platform_appsflyer_masters
+        where
+            app_id = 'com.topwar.gp'
+            AND day BETWEEN '20220701' AND '20230301'
+            AND app = '102'
+            AND cost >= 1
+        ;
+    '''
+    df = execSql(sql)
+    df.to_csv(getFilename('campaignGeo'), index=False)
+    return df
+
+# 改一下格式
+def getCountryFromCampaign2():
+    df = pd.read_csv(getFilename('campaignGeo'))
+    df['country_code'].fillna('unknown', inplace=True)
+
+    # 对结果进行分组，并将country_code连接成逗号分隔的字符串
+    groupedDf = df.groupby(['day', 'media_source', 'campaign_id', 'cost']).agg({
+        'country_code': lambda x: '|'.join(sorted(set(x)))
+    }).reset_index()
+
+    # 重命名country_code列为country_code_list
+    groupedDf.rename(columns={'country_code': 'country_code_list'}, inplace=True)
+
+    groupedDf.to_csv(getFilename('campaignGeo2'), index=False)
     return df
 
 def makeLevels1(userDf, usd='r1usd', N=32):
@@ -196,52 +231,25 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
         max = cvMapDf['max_event_revenue'][cv1]
         userDfCopy.loc[
             (userDfCopy[usd]>min) & (userDfCopy[usd]<=max),cv
-        ] = cv1
+        ] = int(cv1)
         
     # 将userDfCopy[usd]>max的用户的cv1和max设置为最后一档
-    userDfCopy.loc[userDfCopy[usd]>max,cv] = cv1
+    userDfCopy.loc[userDfCopy[usd]>max,cv] = int(cv1)
     return userDfCopy
 
 def dataStep1():
-    df = pd.read_csv(getFilename('androidFp06'))
+    df = pd.read_csv(getFilename('androidFp07'))
     df['media_source'] = df['media_source'].replace('restricted','Facebook Ads')
     # r1usd
-    levels = makeLevels1(df,usd='r2usd',N=32)
+    levels = makeLevels1(df,usd='r1usd',N=32)
     cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='r2usd',cv='cv r1usd')
-    # # 国家分组
-    # geoMap = [
-    #     {'name':'US','cv':0,'code':['US']},
-    #     {'name':'T1','cv':1,'code':['KR','JP','DE','TR','UK','TW','FR','RU','PL','SA','ES','IQ','HK','AU','SG']},
-    #     {'name':'T2','cv':2,'code':[]}
-    # ]
-    # geoMap = [
-    #     {'name':'US','cv':0,'code':['US']},
-    #     {'name':'Asia','cv':1,'code':['KR','JP','TW','HK','SG']},
-    #     {'name':'Europe','cv':2,'code':['DE','TR','UK','FR','RU','PL','SA','ES','IQ','AU']}
-    # ]
-    geoMap = [
-        {'name':'US','cv':0,'code':['US']},
-        {'name':'KR','cv':1,'code':['KR']},
-        {'name':'JP','cv':2,'code':['JP']},
-        {'name':'T1','cv':3,'code':['DE','TR','UK','FR','RU','PL','SA','ES','IQ','AU','TW','HK','SG']}
-    ]
-    # 将df中的country_code与geoMap中的code进行匹配，匹配到的设置为geoMap中的name，未匹配到的设置为'T3'
-    df['cv geo'] = 9
-    for geo in geoMap:
-        df.loc[df['country_code'].isin(geo['code']),'cv geo'] = geo['cv']
-
-    df.to_csv(getFilename('androidFpMergeDataStep1g'), index=False)
+    df = addCv(df,cvMapDf,usd='r1usd',cv='cv')
+    
+    df.to_csv(getFilename('androidFpMergeDataStep1g2'), index=False)
     print('dataStep1 done')    
 
 def dataStep2():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep1g'))
-    df['cv'] = df['cv geo'] + df['cv r1usd'] * 10
-    df.to_csv(getFilename('androidFpMergeDataStep2g'), index=False)
-    print('dataStep2 done')
-
-def dataStep3():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep2g'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep1g2'))
     df.rename(columns={'media_source':'media'},inplace=True)
     df = df [[
         'uid',
@@ -253,10 +261,12 @@ def dataStep3():
         'install_timestamp',
         'last_timestamp',
         'media',
-        'cv'
+        'cv',
+        'country_code',
+        'campaign_id',
     ]]
-    df.to_csv(getFilename('androidFpMergeDataStep3g'), index=False)
-    print('dataStep3 done')
+    df.to_csv(getFilename('androidFpMergeDataStep2g2'), index=False)
+    print('dataStep2 done')
 
 # 暂时就只关心这4个媒体
 mediaList = [
@@ -268,7 +278,7 @@ mediaList = [
 
 # 制作一个模拟的SKAN报告
 def makeSKAN():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep3g'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep2g2'))
     # 过滤，只要媒体属于mediaList的条目
     df = df.loc[df['media'].isin(mediaList)]
     # 重排索引
@@ -286,16 +296,12 @@ def makeSKAN():
     cvDf.loc[zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[zero_r1usd_mask, 'install_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=zero_r1usd_mask.sum())
     cvDf.loc[non_zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[non_zero_r1usd_mask, 'last_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=non_zero_r1usd_mask.sum())
 
+    # postback_timestamp 转成 int
+    cvDf['postback_timestamp'] = cvDf['postback_timestamp'].astype(int)
+
     # print(cvDf.head(30))
 
-    
-    skanDf = cvDf[['postback_timestamp','media','cv']]
-
-    # postback_timestamp 转成 int
-    # cv转成 int
-    skanDf['postback_timestamp'] = skanDf['postback_timestamp'].astype(int)
-    skanDf['cv'] = skanDf['cv'].astype(int)
-
+    skanDf = cvDf[['uid','postback_timestamp','media','cv','campaign_id']]
     skanDf.to_csv(getFilename('skan2'), index=False)
     return skanDf
 
@@ -319,26 +325,6 @@ def skanAddValidInstallDate(skanDf):
     skanDf['max_valid_install_date'] = pd.to_datetime(skanDf['max_valid_install_timestamp'], unit='s')
     return skanDf
 
-# 为了debug，匹配范围精确到天,逻辑修改
-# 添加一列‘install_date’，记录用户的激活日期，从install_timestamp转换而来
-# 然后添加min_valid_install_timestamp和max_valid_install_timestamp，分别为install_date的0：00：00和23：59：59的时间戳
-# 为了方便查看，请将postback时间戳和min_valid_install_timestamp和max_valid_install_timestamp都转换为日期格式也记录到skanDf中
-# 命名为postback_date，min_valid_install_date，max_valid_install_date
-def skanAddValidInstallDate2(skanDf):
-    # 将install_timestamp转换为日期格式
-    skanDf['install_date'] = pd.to_datetime(skanDf['install_timestamp'], unit='s').dt.date
-    
-    # 计算min_valid_install_timestamp和max_valid_install_timestamp
-    skanDf['min_valid_install_timestamp'] = pd.to_datetime(skanDf['install_date']).astype(int) / 10**9
-    skanDf['max_valid_install_timestamp'] = (pd.to_datetime(skanDf['install_date']) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)).astype(int) / 10**9
-    
-    # 将postback_timestamp，min_valid_install_timestamp和max_valid_install_timestamp转换为日期格式
-    skanDf['postback_date'] = pd.to_datetime(skanDf['postback_timestamp'], unit='s').dt.date
-    skanDf['min_valid_install_date'] = pd.to_datetime(skanDf['min_valid_install_timestamp'], unit='s').dt.date
-    skanDf['max_valid_install_date'] = pd.to_datetime(skanDf['max_valid_install_timestamp'], unit='s').dt.date
-    
-    return skanDf
-
 # 激活时间范围 进行近似
 # 近似成分钟
 def skanValidInstallDate2Min(skanDf,N = 60):
@@ -347,24 +333,93 @@ def skanValidInstallDate2Min(skanDf,N = 60):
     skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'] // N * N
     skanDf['min_valid_install_date'] = pd.to_datetime(skanDf['min_valid_install_timestamp'], unit='s')
     skanDf['max_valid_install_date'] = pd.to_datetime(skanDf['max_valid_install_timestamp'], unit='s')
+
     return skanDf
 
 # skan数据分组，按照media,cv,min_valid_install_timestamp和max_valid_install_timestamp分组，统计每组的用户数
 def skanGroupby(skanDf):
     skanDf['user_count'] = 1
 
-    
-    skanGroupbyDf = skanDf.groupby(['media', 'cv', 'min_valid_install_timestamp', 'max_valid_install_timestamp']).agg(
+    skanGroupbyDf = skanDf.groupby(['media', 'cv', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id']).agg(
         {'user_count': 'sum'}
     ).reset_index()
 
     return skanGroupbyDf
 
+def skanAddGeo():
+    skanDf = pd.read_csv(getFilename('skanAOS6G'), converters={'campaign_id':str})
+    # skanDf = skanDf.iloc[10100:10200]
+    campaignGeo2Df = pd.read_csv(getFilename('campaignGeo2'), converters={'campaign_id':str})
+
+    # skanDf 拥有列 media,cv,min_valid_install_timestamp,max_valid_install_timestamp,campaign_id,user_count
+    # 其中min_valid_install_timestamp和max_valid_install_timestamp是时间戳格式，类似 1656547800.0 这样的数字
+    # campaignGeo2Df 拥有列 day,media_source,campaign_id,cost,country_code_list
+    # 其中day是日期格式，类似 20220701 这样的字符串
+    # 其中country_code_list 是 类似 CH|HR|NZ|US 的字符串，表示该campaign在该天的投放国家，中间用|分隔
+    # 要求将skanDf中每一行，根据campaign_id和min_valid_install_timestamp和max_valid_install_timestamp，找到对应的campaignGeo2Df中的行
+    # 并将所有匹配到的行（应该根据min_valid_install_timestamp和max_valid_install_timestamp会匹配2~3行）的country_code_list取出，合并成一个字符串
+    # 要求字符串中的国家代码按照字母顺序排列，中间用|分隔，要排重
+    # 最终合成mergeDf，应该拥有列 media,cv,min_valid_install_timestamp,max_valid_install_timestamp,campaign_id,user_count,country_code_list
+    # 将day列转换为datetime格式
+    campaignGeo2Df['day'] = pd.to_datetime(campaignGeo2Df['day'], format='%Y%m%d')
+
+    # min_valid_install_timestamp 向前推7天，因为广告的转化窗口是7天
+    # 但实际确实发现有部分转化时间超过7天的，这里放宽到8天
+    skanDf['min_valid_install_timestamp'] -= 8*24*3600
+    
+    # 将时间戳列转换为datetime格式
+    skanDf['min_valid_install_timestamp'] = pd.to_datetime(skanDf['min_valid_install_timestamp'], unit='s')
+    skanDf['max_valid_install_timestamp'] = pd.to_datetime(skanDf['max_valid_install_timestamp'], unit='s')
+
+    unmatched_rows = 0
+
+    # 定义一个函数，用于根据campaign_id和时间戳范围查找匹配的country_code_list
+    def get_country_code_list(row):
+        matched_rows = campaignGeo2Df[
+            (campaignGeo2Df['campaign_id'] == row['campaign_id']) &
+            (campaignGeo2Df['day'] >= row['min_valid_install_timestamp']) &
+            (campaignGeo2Df['day'] <= row['max_valid_install_timestamp'])
+        ]
+
+        if matched_rows.empty:
+            print('No matched rows for row: ', row)
+            nonlocal unmatched_rows
+            unmatched_rows += 1
+
+        # 合并所有匹配行的country_code_list，排序并去重
+        country_codes = set()
+        for country_code_list in matched_rows['country_code_list']:
+            country_codes.update(country_code_list.split('|'))
+
+        return '|'.join(sorted(country_codes))
+
+    # 应用函数，将匹配的country_code_list添加到skanDf
+    tqdm.pandas(desc="Processing rows")
+    skanDf['country_code_list'] = skanDf.progress_apply(get_country_code_list, axis=1)
+
+    # 将min_valid_install_timestamp 和 max_valid_install_timestamp 重新转换为时间戳格式，单位秒
+    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(np.int64) // 10 ** 9
+    skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'].astype(np.int64) // 10 ** 9
+
+    # 计算未匹配的行数在总行数中的占比
+    unmatched_rows_ratio = unmatched_rows / len(skanDf)
+
+    # 在函数结束时打印未匹配的行数以及未匹配的行数在总行数中的占比
+    print(f"Unmatched rows: {unmatched_rows}")
+    print(f"Unmatched rows ratio: {unmatched_rows_ratio:.2%}")
+
+    # 重命名skanDf为mergeDf
+    mergeDf = skanDf
+
+    mergeDf.to_csv(getFilename('skanAOS6G2'), index=False)
+    return mergeDf
+    
+
 # 制作待归因用户Df
 def makeUserDf():
-    userDf = pd.read_csv(getFilename('androidFpMergeDataStep3g'))
+    userDf = pd.read_csv(getFilename('androidFpMergeDataStep2g2'))
 
-    userDf = userDf[['uid','install_timestamp','r1usd','r2usd','r3usd','r7usd','cv']]
+    userDf = userDf[['uid','install_timestamp','r1usd','r2usd','r3usd','r7usd','cv','country_code']]
     userDf['cv'] = userDf['cv'].astype(int)
     return userDf
 
@@ -379,7 +434,7 @@ def userGroupby(userDf):
     # userGroupbyDf的列名为install_timestamp,cv,user_count和r7usd
     # user_count是每组的用户数
     # r7usd是每组的r7usd汇总
-    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
+    userGroupbyDf = userDf.groupby(['install_timestamp','cv','country_code']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
     userGroupbyDf.rename(columns={'uid':'user_count'}, inplace=True)
     return userGroupbyDf
 
@@ -391,18 +446,31 @@ def meanAttribution(userDf, skanDf):
     unmatched_rows = 0
     unmatched_user_count = 0
 
-    # 使用tqdm包装skanDf.iterrows()以显示进度条
+    # 将country_code_list列的空值填充为空字符串
+    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+
     for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
         media = row['media']
         cv = row['cv']
         min_valid_install_timestamp = row['min_valid_install_timestamp']
         max_valid_install_timestamp = row['max_valid_install_timestamp']
+        
+        # 先检查row['country_code_list']是否为空
+        if row['country_code_list'] == '':
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            )
+        else:
+            country_code_list = row['country_code_list'].split('|')
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+                (userDf['country_code'].isin(country_code_list))
+            )
 
-        condition = (
-            (userDf['cv'] == cv) &
-            (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-            (userDf['install_timestamp'] <= max_valid_install_timestamp)
-        )
         matching_rows = userDf[condition]
         num_matching_rows = len(matching_rows)
 
@@ -422,8 +490,8 @@ def meanAttribution(userDf, skanDf):
     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
     print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
 
-    userDf.to_csv(getFilename('attribution1ReStep48hours'), index=False)
-    userDf.to_parquet(getFilename('attribution1ReStep48hours','parquet'), index=False)
+    userDf.to_csv(getFilename('attribution1ReStep24hoursGeo'), index=False)
+    userDf.to_parquet(getFilename('attribution1ReStep24hoursGeo','parquet'), index=False)
     return userDf
 
 def meanAttributionResult(userDf, mediaList=mediaList):
@@ -462,13 +530,13 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
     userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
-    print(userDf_r1usd.head())
+    # print(userDf_r1usd.head())
     
     userDf_r7usd = userDf_r7usd.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
     userDf_r7usd['media'] = userDf_r7usd['media'].str.replace(' r7usd', '')
     userDf_r7usd = userDf_r7usd.groupby(['install_date', 'media']).sum().reset_index()
     userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
-    print(userDf_r7usd.head())
+    # print(userDf_r7usd.head())
 
     # 还需要统计每个媒体的首日用户数
     userDf_count = userDf[['install_date'] + [media + ' user_count' for media in mediaList]]
@@ -476,22 +544,22 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_count['media'] = userDf_count['media'].str.replace(' user_count', '')
     userDf_count = userDf_count.groupby(['install_date', 'media']).sum().reset_index()
     userDf_count.to_csv(getFilename('userDf_count'), index=False )
-    print(userDf_count.head())
+    # print(userDf_count.head())
     # ，和付费用户数
     userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
     userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
     userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
     userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
     userDf_payCount.to_csv(getFilename('userDf_payCount'), index=False )
-    print(userDf_payCount.head())
+    # print(userDf_payCount.head())
 
     # 将两个子数据框连接在一起
     userDf = userDf_r1usd.merge(userDf_r7usd, on=['install_date', 'media'])
-    print('merge1')
+    # print('merge1')
     userDf = userDf.merge(userDf_count, on=['install_date', 'media'])
-    print('merge2')
+    # print('merge2')
     userDf = userDf.merge(userDf_payCount, on=['install_date', 'media'])
-    print('merge3')
+    # print('merge3')
 
     # Save to CSV
     userDf.to_csv(getFilename('attribution1Ret'), index=False)
@@ -539,90 +607,40 @@ def checkRet(retDf):
     r7pPR1 = df['r7usdp'].mean() / df['r1usd'].mean()
     print(r7pPR1)
 
-
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.dates import DateFormatter
-
-def draw():
-    df = pd.read_csv(getFilename('attribution1RetCheck'))
-    # 将不同的媒体分开画图，图片宽一点
-    # install_date作为x轴，每隔7天画一个点
-    # 双y轴，y1是r7usd和r7usdp；y2是MAPE（用虚线）。
-    # 图片保存到'/src/data/zk/att1_{media}.jpg'
-    # Convert 'install_date' to datetime
-    df['install_date'] = pd.to_datetime(df['install_date'])
-
-    for media in mediaList:
-        media_df = df[df['media'] == media]
-
-        # Create the plot with the specified figure size
-        fig, ax1 = plt.subplots(figsize=(24, 6))
-
-        plt.title(media)
-
-        # Plot r7usd and r7usdp on the left y-axis
-        ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd')
-        ax1.plot(media_df['install_date'], media_df['r7usdp'], label='r7usdp')
-        ax1.set_ylabel('r7usd and r7usdp')
-        ax1.set_xlabel('Install Date')
-
-        # Plot MAPE on the right y-axis with dashed line
-        ax2 = ax1.twinx()
-        ax2.plot(media_df['install_date'], media_df['MAPE'], label='MAPE', linestyle='--', color='red')
-        ax2.set_ylabel('MAPE')
-
-        # Set x-axis to display dates with a 7-day interval
-        ax1.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
-        plt.xticks(media_df['install_date'][::14], rotation=45)
-
-        # Add legends
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
-
-        # Save the plot as a jpg image
-        plt.savefig(f'/src/data/zk2/attG3_{media}.jpg', bbox_inches='tight')
-        plt.close()
-
 if __name__ == '__main__':
     # getDataFromMC()
+    # getCountryFromCampaign()
+    # getCountryFromCampaign2()
+
+    # dataStep1()
+    # dataStep2()
+
+    # skanDf = makeSKAN()
+    # skanDf = skanAddValidInstallDate(skanDf)
+
+    # print('skan data len:',len(skanDf))
+    # skanDf.to_csv(getFilename('skanAOS6'),index=False)
+    # skanDf = pd.read_csv(getFilename('skanAOS6'), converters={'campaign_id': str})
+    # skanDf = skanValidInstallDate2Min(skanDf,N = 3600)
+    # skanDf = skanGroupby(skanDf)
+    # skanDf.to_csv(getFilename('skanAOS6G'),index=False)
+    # print('skan data group len:',len(skanDf))
+
+    skanAddGeo()
+
+    # userDf = makeUserDf()
+    # print('user data len:',len(userDf))
+    # userDf.to_csv(getFilename('userAOS6'),index=False)
+    # userDf = pd.read_csv(getFilename('userAOS6'))
+    # userDf = userInstallDate2Min(userDf,N = 3600)
+    # userDf = userGroupby(userDf)
+    # userDf.to_csv(getFilename('userAOS6G'),index=False)
+    # print('user data group len:',len(userDf))
+
+    userDf = pd.read_csv(getFilename('userAOS6G'))
+    skanDf = pd.read_csv(getFilename('skanAOS6G2'))
     
-    dataStep1()
-    dataStep2()
-    dataStep3()
-
-    skanDf = makeSKAN()
-    skanDf = skanAddValidInstallDate(skanDf)
-
-    print('skan data len:',len(skanDf))
-    skanDf.to_csv(getFilename('skanAOS6'),index=False)
-    skanDf = pd.read_csv(getFilename('skanAOS6'))
-    skanDf = skanValidInstallDate2Min(skanDf,N = 600)
-    skanDf = skanGroupby(skanDf)
-    skanDf.to_csv(getFilename('skanAOS6G'),index=False)
-    print('skan data group len:',len(skanDf))
-
-    userDf = makeUserDf()
-    print('user data len:',len(userDf))
-    userDf.to_csv(getFilename('userAOS6'),index=False)
-    userDf = pd.read_csv(getFilename('userAOS6'))
-    userDf = userInstallDate2Min(userDf,N = 600)
-    userDf = userGroupby(userDf)
-    userDf.to_csv(getFilename('userAOS6G'),index=False)
-    print('user data group len:',len(userDf))
-
-    # userDf = pd.read_csv(getFilename('userAOS6G'))
-    # skanDf = pd.read_csv(getFilename('skanAOS6G'))
-    
-
-    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(int)
-
     userDf = meanAttribution(userDf, skanDf)
-    # # # userDf = pd.read_parquet(getFilename('attribution1ReStep2','parquet'))
     userDf = meanAttributionResult(userDf)
-    
-    # userDf = pd.read_csv(getFilename('attribution1Ret'))
     checkRet(userDf)
-
-    # draw()
+    
