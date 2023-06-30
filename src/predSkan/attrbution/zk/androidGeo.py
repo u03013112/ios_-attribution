@@ -241,9 +241,9 @@ def dataStep1():
     df = pd.read_csv(getFilename('androidFp07'))
     df['media_source'] = df['media_source'].replace('restricted','Facebook Ads')
     # r1usd
-    levels = makeLevels1(df,usd='r1usd',N=32)
+    levels = makeLevels1(df,usd='r2usd',N=32)
     cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='r1usd',cv='cv')
+    df = addCv(df,cvMapDf,usd='r2usd',cv='cv')
     
     df.to_csv(getFilename('androidFpMergeDataStep1g2'), index=False)
     print('dataStep1 done')    
@@ -399,11 +399,7 @@ def skanAddGeo():
     print(f"Unmatched rows: {unmatched_rows}")
     print(f"Unmatched rows ratio: {unmatched_rows_ratio:.2%}")
 
-    # 重命名skanDf为mergeDf
-    mergeDf = skanDf
-
-    mergeDf.to_csv(getFilename('skanAOS6G2'), index=False)
-    return mergeDf
+    return skanDf
     
 
 # 制作待归因用户Df
@@ -481,8 +477,8 @@ def meanAttribution(userDf, skanDf):
     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
     print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
 
-    userDf.to_csv(getFilename('attribution1ReStep24hoursGeo'), index=False)
-    userDf.to_parquet(getFilename('attribution1ReStep24hoursGeo','parquet'), index=False)
+    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
+    # userDf.to_parquet(getFilename('attribution1ReStep48hoursGeo','parquet'), index=False)
     return userDf
 
 def meanAttributionResult(userDf, mediaList=mediaList):
@@ -503,13 +499,13 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
     userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
-    userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
+    # userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
     # print(userDf_r1usd.head())
     
     userDf_r7usd = userDf_r7usd.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
     userDf_r7usd['media'] = userDf_r7usd['media'].str.replace(' r7usd', '')
     userDf_r7usd = userDf_r7usd.groupby(['install_date', 'media']).sum().reset_index()
-    userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
+    # userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
     # print(userDf_r7usd.head())
 
     # 还需要统计每个媒体的首日用户数
@@ -517,14 +513,14 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     userDf_count = userDf_count.melt(id_vars=['install_date'], var_name='media', value_name='count')
     userDf_count['media'] = userDf_count['media'].str.replace(' user_count', '')
     userDf_count = userDf_count.groupby(['install_date', 'media']).sum().reset_index()
-    userDf_count.to_csv(getFilename('userDf_count'), index=False )
+    # userDf_count.to_csv(getFilename('userDf_count'), index=False )
     # print(userDf_count.head())
     # ，和付费用户数
     userDf_payCount = userDf.loc[userDf['r1usd'] >0,['install_date'] + [media + ' user_count' for media in mediaList]]
     userDf_payCount = userDf_payCount.melt(id_vars=['install_date'], var_name='media', value_name='payCount')
     userDf_payCount['media'] = userDf_payCount['media'].str.replace(' user_count', '')
     userDf_payCount = userDf_payCount.groupby(['install_date', 'media']).sum().reset_index()
-    userDf_payCount.to_csv(getFilename('userDf_payCount'), index=False )
+    # userDf_payCount.to_csv(getFilename('userDf_payCount'), index=False )
     # print(userDf_payCount.head())
 
     # 将两个子数据框连接在一起
@@ -536,7 +532,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # print('merge3')
 
     # Save to CSV
-    userDf.to_csv(getFilename('attribution1Ret'), index=False)
+    # userDf.to_csv(getFilename('attribution1Ret48'), index=False)
     return userDf
 
 from sklearn.metrics import r2_score
@@ -560,7 +556,8 @@ def checkRet(retDf):
     # 计算MAPE
     rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
     rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
-    rawDf = rawDf.loc[rawDf['install_date']<'2023-02-01']
+    # rawDf = rawDf.loc[rawDf['install_date']<'2023-02-01']
+    rawDf = rawDf.loc[rawDf['MAPE']>0]
     rawDf.to_csv(getFilename('attribution1RetCheck'), index=False)
     # 计算整体的MAPE和R2
     MAPE = rawDf['MAPE'].mean()
@@ -784,6 +781,92 @@ def skanAndCampaignGeo():
     mergeDf.to_csv(getFilename('skanAOS6G3'), index=False)
     return mergeDf
 
+import datetime
+def d1():
+    userDf = pd.read_csv(getFilename('userAOS6G'))
+    skanDf = pd.read_csv(getFilename('skanAOS6G2'))
+    
+    # 这里过滤一下，加快速度
+    timestamp = datetime.datetime(2023, 2, 1, 0, 0, 0).timestamp()
+
+    # userDf中 install_timestamp 是unix时间戳，单位秒。过滤，只要 2023-02-01 00:00:00 之后的数据
+    print('2023-02-01 00:00:00 timestamp:', timestamp)
+    userDf = userDf[userDf['install_timestamp'] >= timestamp]
+
+    skanDf = skanDf[skanDf['min_valid_install_timestamp'] >= timestamp]
+
+    userDf = meanAttribution(userDf, skanDf)
+    userDf.to_csv(getFilename('attribution1ReStep24hoursGeoFast'), index=False)
+    userDf = meanAttributionResult(userDf)
+    userDf.to_csv(getFilename('attribution1Ret24Fast'), index=False)
+    userDf = pd.read_csv(getFilename('attribution1Ret24Fast'))
+    checkRet(userDf)
+
+def d2():
+    userDf = pd.read_csv(getFilename('userAOS6G48'))
+    skanDf = pd.read_csv(getFilename('skanAOS6G48'))
+    
+    # 这里过滤一下，加快速度
+    timestamp = datetime.datetime(2023, 1, 1, 0, 0, 0).timestamp()
+
+    # userDf中 install_timestamp 是unix时间戳，单位秒。过滤，只要 2023-02-01 00:00:00 之后的数据
+    print('2023-02-01 00:00:00 timestamp:', timestamp)
+    userDf = userDf[userDf['install_timestamp'] >= timestamp]
+
+    skanDf = skanDf[skanDf['min_valid_install_timestamp'] >= timestamp]
+
+    userDf = meanAttribution(userDf, skanDf)
+    userDf.to_csv(getFilename('attribution1ReStep48hoursGeoFast'), index=False)
+    userDf = meanAttributionResult(userDf)
+    userDf.to_csv(getFilename('attribution1Ret48Fast'), index=False)
+    userDf = pd.read_csv(getFilename('attribution1Ret48Fast'))
+    checkRet(userDf)
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.dates import DateFormatter
+
+def draw():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    # 将不同的媒体分开画图，图片宽一点
+    # install_date作为x轴，每隔7天画一个点
+    # 双y轴，y1是r7usd和r7usdp；y2是MAPE（用虚线）。
+    # 图片保存到'/src/data/zk/att1_{media}.jpg'
+    # Convert 'install_date' to datetime
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    for media in mediaList:
+        media_df = df[df['media'] == media]
+
+        # Create the plot with the specified figure size
+        fig, ax1 = plt.subplots(figsize=(24, 6))
+
+        plt.title(media)
+
+        # Plot r7usd and r7usdp on the left y-axis
+        ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd')
+        ax1.plot(media_df['install_date'], media_df['r7usdp'], label='r7usdp')
+        ax1.set_ylabel('r7usd and r7usdp')
+        ax1.set_xlabel('Install Date')
+
+        # Plot MAPE on the right y-axis with dashed line
+        ax2 = ax1.twinx()
+        ax2.plot(media_df['install_date'], media_df['MAPE'], label='MAPE', linestyle='--', color='red')
+        ax2.set_ylabel('MAPE')
+
+        # Set x-axis to display dates with a 7-day interval
+        ax1.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d'))
+        plt.xticks(media_df['install_date'][::14], rotation=45)
+
+        # Add legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+
+        # Save the plot as a jpg image
+        plt.savefig(f'/src/data/zk2/attGF_{media}.jpg', bbox_inches='tight')
+        plt.close()
+
 if __name__ == '__main__':
     # getDataFromMC()
     # getCountryFromCampaign()
@@ -804,24 +887,29 @@ if __name__ == '__main__':
     # print('skan data group len:',len(skanDf))
 
     # skanDf = skanAddGeo()
+    # skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
 
     # userDf = makeUserDf()
     # print('user data len:',len(userDf))
-    # userDf.to_csv(getFilename('userAOS6'),index=False)
-    # userDf = pd.read_csv(getFilename('userAOS6'))
+    # # userDf.to_csv(getFilename('userAOS6'),index=False)
+    # # userDf = pd.read_csv(getFilename('userAOS6'))
     # userDf = userInstallDate2Min(userDf,N = 600)
     # userDf = userGroupby(userDf)
-    # userDf.to_csv(getFilename('userAOS6G'),index=False)
+    # userDf.to_csv(getFilename('userAOS6G48'),index=False)
     # print('user data group len:',len(userDf))
 
-    userDf = pd.read_csv(getFilename('userAOS6G'))
-    skanDf = pd.read_csv(getFilename('skanAOS6G2'))
+    # userDf = pd.read_csv(getFilename('userAOS6G48'))
+    # skanDf = pd.read_csv(getFilename('skanAOS6G48'))
     
-    userDf = meanAttribution(userDf, skanDf)
+    # userDf = meanAttribution(userDf, skanDf)
+    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
+    userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
     userDf = meanAttributionResult(userDf)
+    # userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
     # userDf = pd.read_csv(getFilename('attribution1Ret'))
     checkRet(userDf)
 
-    # debug()
-
+    # d1()
+    # d2()
+    draw()
     
