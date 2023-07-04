@@ -24,9 +24,8 @@ def init():
         print('this is online version')
 
         def execSql_online(sql):
-            with o.execute_sql(sql).open_reader(tunnel=True, limit=False) as reader:
+            with o.execute_sql(sql).open_reader() as reader:
                 pd_df = reader.to_pandas()
-                print('获得%d行数据' % len(pd_df))
                 return pd_df
 
         execSql = execSql_online
@@ -42,9 +41,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20230601'
-    
-    print('dayStr:', dayStr)
+        dayStr = '20230426'
 
 # 只针对下面媒体进行归因，其他媒体不管
 mediaList = [
@@ -172,8 +169,8 @@ def skanAddGeo(skanDf,campaignGeo2Df):
     skanDf['country_code_list'] = skanDf.progress_apply(get_country_code_list, axis=1)
 
     # 将min_valid_install_timestamp 和 max_valid_install_timestamp 重新转换为时间戳格式，单位秒
-    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].view(np.int64) // 10 ** 9
-    skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'].view(np.int64) // 10 ** 9
+    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype(np.int64) // 10 ** 9
+    skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'].astype(np.int64) // 10 ** 9
 
     # min_valid_install_timestamp 恢复，将上面减去的8天加回来
     skanDf['min_valid_install_timestamp'] += 8*24*3600
@@ -228,6 +225,8 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     '''
     print(sql)
     df = execSql(sql)
+    print('付费用户数',len(df[df['r1usd'] > 0]))
+    print('总用户数',len(df))
     return df
 
 def getCvMap():
@@ -294,6 +293,10 @@ def meanAttribution(userDf, skanDf):
     for media in mediaList:
         userDf['%s count'%(media)] = 0
 
+    # for debug
+    print('debug:',userDf[userDf['appsflyer_id'] == '1579604536781-2607914'])
+    debugCount = 0
+
     unmatched_rows = 0
 
     # 将country_code_list列的空值填充为空字符串
@@ -306,26 +309,40 @@ def meanAttribution(userDf, skanDf):
         max_valid_install_timestamp = row['max_valid_install_timestamp']
         
         # 先检查row['country_code_list']是否为空
-        if row['country_code_list'] == '':
-            condition = (
-                (userDf['cv'] == cv) &
-                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                (userDf['install_timestamp'] <= max_valid_install_timestamp)
-            )
-        else:
-            country_code_list = row['country_code_list'].split('|')
-            condition = (
-                (userDf['cv'] == cv) &
-                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                (userDf['country_code'].isin(country_code_list))
-            )
+        # if row['country_code_list'] == '':
+        #     condition = (
+        #         (userDf['cv'] == cv) &
+        #         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+        #         (userDf['install_timestamp'] <= max_valid_install_timestamp)
+        #     )
+        # else:
+        #     country_code_list = row['country_code_list'].split('|')
+        #     condition = (
+        #         (userDf['cv'] == cv) &
+        #         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+        #         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+        #         (userDf['country_code'].isin(country_code_list))
+        #     )
+
+        condition = (
+            (userDf['cv'] == cv) &
+            (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+            (userDf['install_timestamp'] <= max_valid_install_timestamp)
+        )
 
         matching_rows = userDf[condition]
         num_matching_rows = len(matching_rows)
 
         if num_matching_rows > 0:
             userDf.loc[condition, media + ' count'] += 1 / num_matching_rows
+            # for debug
+            if ('1579604536781-2607914' in matching_rows['appsflyer_id'].values) and (media == 'Facebook Ads'):
+                debugCount += 1
+                # print('debug:',userDf.loc[userDf['appsflyer_id'] == '1579604536781-2607914','Facebook Ads count'])
+                print('debug num_matching_rows:',num_matching_rows)
+                print(len(userDf[userDf['cv']==0]))
+                print('min_valid_install_timestamp:',min_valid_install_timestamp)
+                print('max_valid_install_timestamp:',max_valid_install_timestamp)
         else:
             print(f"Unmatched row: {row}")
             unmatched_rows += 1
@@ -333,6 +350,8 @@ def meanAttribution(userDf, skanDf):
     unmatched_ratio = unmatched_rows / len(skanDf)
     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
     
+    # for debug
+    print('debugCount:',debugCount)
     return userDf
 
 def main():
@@ -366,45 +385,18 @@ def main():
     print(attDf.head(5))
     return attDf
 
-# 下面部分就只有线上环境可以用了
-from odps.models import Schema, Column, Partition
-def createTable():
-    if 'o' in globals():
-        columns = [
-            Column(name='appsflyer_id', type='string', comment='AF ID'),
-            Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
-        ]
-        for media in mediaList:
-            columns.append(Column(name='%s count'%(media), type='double', comment='%s媒体归因值'%(media)))
-
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_raw', schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
-
-def writeTable(df,dayStr):
-    print('try to write table:')
-    print(df.head(5))
-    if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_raw')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
-    else:
-        print('writeTable failed, o is not defined')
-
 attDf = main()
-# 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
 attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
-attDf = attDf[attDf['total count'] > 0]
-attDf = attDf[['appsflyer_id','install_date'] + ['%s count'%(media) for media in mediaList]]
+l1 = len(attDf[attDf['total count'] > 1])
+l2 = len(attDf[attDf['total count'] > 0])
+l3 = len(attDf)
+print('超分用户数/付费用户数：%.2f%%'%(l1/l2*100))
+print('超分用户数/总用户数：%.2f%%'%(l1/l3*100))
 
-# attDf 列改名 所有列名改为 小写
-attDf.columns = [col.lower() for col in attDf.columns]
+attDf.to_csv('/src/data/zk2/attDf.csv',index=False)
 
-createTable()
-writeTable(attDf,dayStr)
+# attDf = pd.read_csv('/src/data/zk2/attDf.csv')
+attDf = attDf[attDf['cv'] > 0]
+attDf = attDf.sort_values(['cv','install_date','country_code'])
+attDf.to_csv('/src/data/zk2/attDf2.csv',index=False)
+
