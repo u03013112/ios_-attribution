@@ -35,80 +35,125 @@ from src.maxCompute import execSql
 def getFilename(filename,ext='csv'):
     return '/src/data/zk2/%s.%s'%(filename,ext)
 
-def getAfDataFromMC():
-    # 将minValidInstallTimestamp和maxValidInstallTimestamp转换为字符串
-    minValidInstallTimestampStr = '2023-04-01'
-    maxValidInstallTimestampStr = '2023-07-01'
-    
-    minValidInstallTimestampDayStr = '20230401'
-    maxValidInstallTimestampDayStr = '20230701'
-
-    # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
-    sql = f'''
+def getDataFromMC():
+    sql = '''
+        WITH grouped_raw_table AS (
         SELECT
             appsflyer_id,
-            SUM(CASE WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN event_revenue_usd ELSE 0 END) as r7usd
+            install_date,
+            SUM(`facebook ads count`) AS total_facebook_ads_count,
+            SUM(`googleadwords_int count`) AS total_googleadwords_int_count,
+            SUM(`bytedanceglobal_int count`) AS total_bytedanceglobal_int_count
+        FROM
+            topwar_ios_funplus02_raw
+        where
+            day > '20230401'
+        GROUP BY
+            appsflyer_id,
+            install_date
+        ),
+        grouped_events_table AS (
+        SELECT
+            appsflyer_id,
+            install_timestamp,
+            SUM(
+            CASE
+                WHEN event_timestamp BETWEEN install_timestamp
+                AND install_timestamp + 7 * 24 * 3600 THEN event_revenue_usd
+                ELSE 0
+            END
+            ) AS revenue_7_days
         FROM
             ods_platform_appsflyer_events
-        WHERE
-            app_id = 'id1479198816'
-            AND zone = 0
-            AND day BETWEEN '{minValidInstallTimestampDayStr}' AND '{maxValidInstallTimestampDayStr}'
-            AND install_time BETWEEN '{minValidInstallTimestampStr}' AND '{maxValidInstallTimestampStr}'
+        where
+            day > '20230401'
         GROUP BY
-            appsflyer_id
+            appsflyer_id,
+            install_timestamp
+        ),
+        joined_table AS (
+        SELECT
+            g1.appsflyer_id,
+            g1.install_date,
+            g1.total_facebook_ads_count,
+            g1.total_googleadwords_int_count,
+            g1.total_bytedanceglobal_int_count,
+            g2.revenue_7_days
+        FROM
+            grouped_raw_table g1
+            JOIN grouped_events_table g2 ON g1.appsflyer_id = g2.appsflyer_id
+        )
+        SELECT
+        install_date,
+        SUM(revenue_7_days * total_facebook_ads_count) AS facebook_7_days_revenue,
+        SUM(revenue_7_days * total_googleadwords_int_count) AS googleadwords_7_days_revenue,
+        SUM(revenue_7_days * total_bytedanceglobal_int_count) AS bytedanceglobal_7_days_revenue
+        FROM
+        joined_table
+        GROUP BY
+        install_date;
+    '''
+    print(sql)
+    df = execSql(sql)
+    return df
+
+def getAdCost():
+    sql = '''
+        select
+            sum(cost) as cost,
+            media_source as media,
+            to_char(to_date(day, "yyyymmdd"), "yyyy-mm-dd") as install_date
+        from
+            ods_platform_appsflyer_masters
+        where
+            app_id = 'id1479198816'
+            and day >= '20230401'
+            and media_source in ('Facebook Ads', 'googleadwords_int', 'bytedanceglobal_int')
+        group by
+            media_source,
+            install_date
         ;
     '''
     print(sql)
     df = execSql(sql)
     return df
 
-
-def getFunPlus02Ret():
-    sql = '''
-        select *
-        from topwar_ios_funplus02_raw
-        where day > 0
-    '''
-    print(sql)
-    df = execSql(sql)
-    return df
-
 def main():
-    # df = getAfDataFromMC()
-    # df.to_csv(getFilename('FunPlus02t1'), index=False)
+    # df = getDataFromMC()
+    # df.to_csv(getFilename('funplus02t1'), index=False)
 
-    # df2 = getFunPlus02Ret()
-    # df2.to_csv(getFilename('FunPlus02t2'), index=False)
+    # df = getAdCost()
+    # df.to_csv(getFilename('funplus02t2'), index=False)
 
-    mediaList = [
-        'facebook ads',
-        'googleadwords_int',
-        'bytedanceglobal_int',
-    ]
+    df1 = pd.read_csv(getFilename('funplus02t1'))
+    df2 = pd.read_csv(getFilename('funplus02t2'))
+    # df1 列：install_date,facebook_7_days_revenue,googleadwords_7_days_revenue,bytedanceglobal_7_days_revenue
+    # df2 列：cost,media,install_date，其中media只有三个值：'Facebook Ads', 'googleadwords_int', 'bytedanceglobal_int'
+    # 将df1 先改造列，变为 install_date,media,7_days_revenue
+    # 再将df1中的media名称规范，规范为 'Facebook Ads', 'googleadwords_int', 'bytedanceglobal_int'
+    # 再将df1和df2合并，按照install_date和media merge
+    # 计算ROI，记在mergeDf中, 列：install_date,media,7_days_revenue,cost,roi
+    # 保存mergeDf到csv文件到getFilename('funplus02t3')
+    def preprocess_df1(df1):
+        df1 = df1.melt(id_vars=['install_date'], var_name='media', value_name='7_days_revenue')
+        df1['media'] = df1['media'].map({
+            'facebook_7_days_revenue': 'Facebook Ads',
+            'googleadwords_7_days_revenue': 'googleadwords_int',
+            'bytedanceglobal_7_days_revenue': 'bytedanceglobal_int'
+        })
+        return df1
+    # 预处理数据
+    df1 = preprocess_df1(df1)
 
-    df = pd.read_csv(getFilename('FunPlus02t1'))
-    df2 = pd.read_csv(getFilename('FunPlus02t2'))
+    # 合并数据
+    merge_df = df1.merge(df2, on=['install_date', 'media'])
 
-    print(df2[df2['appsflyer_id'] == '1579604536781-2607914'])
-    return
+    # 计算ROI
+    merge_df['roi'] = merge_df['7_days_revenue'] / merge_df['cost']
 
-    df2.drop(['day'], axis=1, inplace=True)
-    df2 = df2.groupby(['appsflyer_id','install_date']).sum().reset_index()
-    print(df2.head())
-    # 计算media count 的sum 大于1的行的占比
-    df2['total'] = df2[['%s count'%media for media in mediaList]].sum(axis=1)
-    l1 = len(df2[df2['total'] > 1])
-    l2 = len(df2)
-    print('media count 的sum 大于1的行的占比: %d / %d = %.2f'%(l1,l2,l1/l2))
+    merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
+    merge_df.to_csv(getFilename('funplus02t3'), index=False)
 
-    mergeDf = df2.merge(df, on='appsflyer_id')
-
-    
-    for media in mediaList:
-        mergeDf[media] = mergeDf['%s count'%media] * mergeDf['r7usd']
-
-    mergeDf.groupby(['install_date']).sum().to_csv(getFilename('FunPlus02t3'), index=True)
 
 if __name__ == '__main__':
     main()
