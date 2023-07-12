@@ -1,9 +1,24 @@
-# iOS版本，进行融合归因
-# 具体方案参照文档https://rivergame.feishu.cn/docx/LBWId0meHoeNT2x4mcCc08nFnRg
-# 算法大致参照 androidGeo.py
-# 由于CV Map改变，所以暂时只处理4月1日及以后数据
-# CV Map也采用4月1日及以后的的版本
-# 此文件对应阿里线上（dataworks）iOS归因中的FunPlus02
+# FunPlus02改进版
+# 主要针对归因时的过分配问题
+# 当一个用户被分配到多个媒体的概率超过1的时候代表这个用户被过分配了
+# 这时需要针对这个用户进行重分配
+
+# 步骤如下
+# 1、给userDf添加列，列名为attribute,默认值是[]。里面用于存储归因的媒体名，skan index，和对应的count。
+# 格式是{'media': 'media1', 'skan index': 1, 'count': 0.5},attribute列存储的是这种结构的列表。
+# 2、遍历skanDf，每行做如下处理：获取media，cv，min_valid_install_timestamp和max_valid_install_timestamp。
+# 在userDf中找到userDf.cv == skanDf.cv，并且 skanDf.max_valid_install_timestamp >= userDf.install_timestamp >= skanDf.min_valid_install_timestamp 的行。
+# 该行的attribute列的列表添加一个字典，media，skan index都取自skanDf这一行。
+# count的值是1/N，N是符合上面条件的行数。比如通过cv与时间戳过滤找到符合的行是2，则'count'值就是1/2。
+# 3、找到userDf中attribute列中count的和大于1的行，对这些行做如下处理：
+# 找到attribute列中count最小的M个元素。使得剩下的元素的count的和小于等于1。
+# 从attribute列中删除这M个元素。
+# 找到usdDf所有attribute列中包含此skan index的行。重新计算count，count为1/N，N为剩余usdDf所有attribute列中包含此skan index的行数。
+# 4、检查userDf中是否还有行的attribute列中count的和大于1，如果有重复步骤3。
+# 5、汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果。
+# 格式采用之前归因方案1的格式，即 给userDf添加列，按照mediaList中的媒体顺序，添加列，列名为mediaList中的媒体名+' count'
+# count值是从attribute列中的按照media汇总count的值。
+# 6、返回userDf
 
 import io
 
@@ -289,25 +304,18 @@ def addCv(df, cvMapDf):
     df.loc[df['r1usd'] > cvMapDf['max_event_revenue'].max(), 'cv'] = cvMapDf['conversion_value'].max()
     return df# 暂时就只关心这3个媒体
 
-
 def meanAttribution(userDf, skanDf):
-    if __debug__:
-        print('meanAttribution start')
-
-    for media in mediaList:
-        userDf['%s count'%(media)] = 0
-
-    unmatched_rows = 0
-
     # 将country_code_list列的空值填充为空字符串
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+
+    userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
 
     for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
         media = row['media']
         cv = row['cv']
         min_valid_install_timestamp = row['min_valid_install_timestamp']
         max_valid_install_timestamp = row['max_valid_install_timestamp']
-        
+
         # 先检查row['country_code_list']是否为空
         if row['country_code_list'] == '':
             condition = (
@@ -328,55 +336,193 @@ def meanAttribution(userDf, skanDf):
         num_matching_rows = len(matching_rows)
 
         if num_matching_rows > 0:
-            userDf.loc[condition, media + ' count'] += 1 / num_matching_rows
+            count = 1 / num_matching_rows
+            userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'media': media, 'skan index': index, 'count': count}])
 
-            if __debug__:
-                # 如果匹配行中的appsflyer_id 等于 ‘1680398166631-5430290’ 则
-                # 打印row
-                # 打印所有匹配行
-                if '1680398166631-5430290' in matching_rows['appsflyer_id'].values:
-                    print(f"Matched row: {row}")
-                    # print(f"Matching rows: {matching_rows}")
-                    # 只打印匹配行中的appsflyer_id 等于 ‘1680398166631-5430290’ 的行
-                    print(f"Matching rows: {userDf[userDf['appsflyer_id'] == '1680398166631-5430290']}")
-                    print(f"Matching rows count: {num_matching_rows}")
+    def update_attribute(attribute_list, skan_index):
+        new_count = 1 / (len(attribute_list) - 1)
 
-        else:
-            # print(f"Unmatched row: {row}")
-            unmatched_rows += 1
+        for elem in attribute_list:
+            if elem['skan index'] == skan_index:
+                elem['count'] = new_count
+                break
 
-    unmatched_ratio = unmatched_rows / len(skanDf)
-    print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
-    
+        return attribute_list
+
+    for i in range(2):  # 最多进行2次重新分配
+        print(f"开始第 {i + 1} 次重新分配")
+        if userDf['attribute'].apply(lambda x: sum([item['count'] for item in x]) > 1).any():
+            userDf_excess = userDf[userDf['attribute'].apply(lambda x: sum([item['count'] for item in x]) > 1)]
+            for _, row in tqdm(userDf_excess.iterrows(), total=len(userDf_excess)):
+                attribute_list = row['attribute']
+                total_count = sum([item['count'] for item in attribute_list])
+                min_count_to_remove = total_count - 1
+
+                attribute_list_sorted = sorted(attribute_list, key=lambda x: x['count'])
+                removed_items = []
+                removed_count = 0
+
+                for item in attribute_list_sorted:
+                    if removed_count + item['count'] <= min_count_to_remove:
+                        removed_count += item['count']
+                        removed_items.append(item)
+                    else:
+                        break
+
+                for item in removed_items:
+                    attribute_list.remove(item)
+                    skan_index = item['skan index']
+
+                    # Find rows with the same skan index
+                    rows_with_same_skan_index = userDf['attribute'].apply(lambda x: any([elem['skan index'] == skan_index for elem in x]))
+
+                    # Get the 'attribute' column of those rows
+                    attributes_with_same_skan_index = userDf.loc[rows_with_same_skan_index, 'attribute']
+
+                    userDf.loc[rows_with_same_skan_index, 'attribute'] = attributes_with_same_skan_index.apply(lambda x: update_attribute(x, skan_index))
+
+    for media in mediaList:
+        userDf[media + ' count'] = userDf['attribute'].apply(lambda x: sum([item['count'] for item in x if item['media'] == media]))
+
     return userDf
+
+def meanAttribution2(userDf, skanDf):
+    # 将country_code_list列的空值填充为空字符串
+    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+
+    # 对userDf进行汇总
+    userDf['install_timestamp'] = userDf['install_timestamp'] // 600
+    userDf['count'] = 1
+    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp']).agg({'appsflyer_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
+    userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
+
+    skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'] // 600
+    skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'] // 600
+    skanDf['count'] = 1
+    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index()
+
+    for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
+        media = row['media']
+        cv = row['cv']
+        min_valid_install_timestamp = row['min_valid_install_timestamp']
+        max_valid_install_timestamp = row['max_valid_install_timestamp']
+
+        # 先检查row['country_code_list']是否为空
+        if row['country_code_list'] == '':
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            )
+        else:
+            country_code_list = row['country_code_list'].split('|')
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+                (userDf['country_code'].isin(country_code_list))
+            )
+
+        matching_rows = userDf[condition]
+        total_matching_count = matching_rows['count'].sum()
+
+        if total_matching_count > 0:
+            rate = row['count'] / total_matching_count
+            userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'media': media, 'skan index': index, 'rate': rate}])
+
+    def update_attribute(attribute_list, skan_index, row_count, total_matching_count):
+        new_rate = row_count / total_matching_count
+
+        for elem in attribute_list:
+            if elem['skan index'] == skan_index:
+                elem['rate'] = new_rate
+                break
+
+        return attribute_list
+
+    for i in range(2):  # 最多进行2次重新分配
+        print(f"开始第 {i + 1} 次重新分配")
+        if userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1).any():
+            userDf_excess = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
+            for _, row in tqdm(userDf_excess.iterrows(), total=len(userDf_excess)):
+                attribute_list = row['attribute']
+                total_rate = sum([item['rate'] for item in attribute_list])
+                max_rate_to_remove = total_rate - 1
+
+                attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'])
+                removed_items = []
+                removed_rate = 0
+
+                for item in attribute_list_sorted:
+                    if removed_rate + item['rate'] <= max_rate_to_remove:
+                        removed_rate += item['rate']
+                        removed_items.append(item)
+                    else:
+                        break
+
+                for item in removed_items:
+                    attribute_list.remove(item)
+                    skan_index = item['skan index']
+
+                    # Find rows with the same skan index
+                    rows_with_same_skan_index = userDf['attribute'].apply(lambda x: any([elem['skan index'] == skan_index for elem in x]))
+
+                    # Get the 'attribute' column of those rows
+                    attributes_with_same_skan_index = userDf.loc[rows_with_same_skan_index, 'attribute']
+
+                    # Calculate the total count of all rows with the same skan index
+                    total_matching_count = userDf.loc[rows_with_same_skan_index, 'count'].sum()
+
+                    userDf.loc[rows_with_same_skan_index, 'attribute'] = attributes_with_same_skan_index.apply(lambda x: update_attribute(x, skan_index, row['count'], total_matching_count))
+
+    # 拆分appsflyer_id
+    userDf['appsflyer_id'] = userDf['appsflyer_id'].apply(lambda x: x.split('|'))
+    userDf = userDf.explode('appsflyer_id')
+
+
+    for media in mediaList:
+        userDf[media + ' rate'] = userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x if item['media'] == media]))
+
+    userDf = userDf.drop(columns=['count','attribute'])
+
+    return userDf
+
 
 def main():
     init()
-    # 1、获取skan数据
-    skanDf = getSKANDataFromMC(dayStr)
-    # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
-    skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
-    skanDf['cv'] = skanDf['cv'].fillna(0)
-    skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
-    # 2、计算合法的激活时间范围
-    skanDf = skanAddValidInstallDate(skanDf)
-    # 3、获取广告信息
-    minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
-    maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    print('minValidInstallTimestamp:',minValidInstallTimestamp)
-    print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
-    campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
-    campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
-    # 4、将skan数据和广告信息合并，获得skan中的国家信息
-    skanDf = skanAddGeo(skanDf,campaignGeo2Df)
-    print('skanDf (head 5):')
-    print(skanDf.head(5))
-    # 5、获取af数据
-    afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
-    userDf = addCv(afDf,getCvMap())
-    # 进行归因
-    skanDf = skanDf[skanDf['media'].isin(mediaList)]
-    attDf = meanAttribution(userDf,skanDf)
+
+    # # 1、获取skan数据
+    # skanDf = getSKANDataFromMC(dayStr)
+    # # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
+    # skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
+    # skanDf['cv'] = skanDf['cv'].fillna(0)
+    # skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+    # # 2、计算合法的激活时间范围
+    # skanDf = skanAddValidInstallDate(skanDf)
+    # # 3、获取广告信息
+    # minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
+    # maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
+    # print('minValidInstallTimestamp:',minValidInstallTimestamp)
+    # print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
+    # campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
+    # campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
+    # # 4、将skan数据和广告信息合并，获得skan中的国家信息
+    # skanDf = skanAddGeo(skanDf,campaignGeo2Df)
+    # print('skanDf (head 5):')
+    # print(skanDf.head(5))
+    # # 5、获取af数据
+    # afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    # userDf = addCv(afDf,getCvMap())
+    # # 进行归因
+    # skanDf = skanDf[skanDf['media'].isin(mediaList)]
+    # userDf.to_csv('/src/data/zk2/FunPlus02AdvUserDf.csv',index=False)
+    # skanDf.to_csv('/src/data/zk2/FunPlus02AdvSkanDf.csv',index=False)
+
+    userDf = pd.read_csv('/src/data/zk2/FunPlus02AdvUserDf.csv')
+    skanDf = pd.read_csv('/src/data/zk2/FunPlus02AdvSkanDf.csv')
+
+    # attDf = meanAttribution(userDf,skanDf)
+    attDf = meanAttribution2(userDf,skanDf)
     print('attDf (head 5):')
     print(attDf.head(5))
     return attDf
@@ -418,24 +564,27 @@ if __debug__:
 
 attDf = main()
 # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
-attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
-attDf = attDf[attDf['total count'] > 0]
-# 将所有media的归因值大于1的，归因值设置为1
-for media in mediaList:
-    attDf.loc[attDf['%s count'%(media)] > 1,'%s count'%(media)] = 1
+attDf['total rate'] = attDf[['%s rate'%(media) for media in mediaList]].sum(axis=1)
+attDf = attDf[attDf['total rate'] > 1]
+print('attDf (head 5):')
+print(attDf.head(5))
+attDf.head(1000).to_csv('/src/data/zk2/FunPlus02AdvAttDf.csv',index=False)
+# # 将所有media的归因值大于1的，归因值设置为1
+# for media in mediaList:
+#     attDf.loc[attDf['%s count'%(media)] > 1,'%s count'%(media)] = 1
 
-# 总归因值大于1的，按照比例缩小，使得总归因值等于1
-attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
-# 打印影响的行（前5行）
-print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
-attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]] = attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].div(attDf['total count'], axis=0)
-# 打印修改后的行（前5行）
-print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
+# # 总归因值大于1的，按照比例缩小，使得总归因值等于1
+# attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
+# # 打印影响的行（前5行）
+# print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
+# attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]] = attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].div(attDf['total count'], axis=0)
+# # 打印修改后的行（前5行）
+# print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
 
-attDf = attDf[['appsflyer_id','install_date'] + ['%s count'%(media) for media in mediaList]]
+# attDf = attDf[['appsflyer_id','install_date'] + ['%s count'%(media) for media in mediaList]]
 
-# attDf 列改名 所有列名改为 小写
-attDf.columns = [col.lower() for col in attDf.columns]
+# # attDf 列改名 所有列名改为 小写
+# attDf.columns = [col.lower() for col in attDf.columns]
 
-createTable()
-writeTable(attDf,dayStr)
+# createTable()
+# writeTable(attDf,dayStr)

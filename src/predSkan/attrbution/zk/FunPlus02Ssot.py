@@ -401,6 +401,18 @@ attDf = main()
 # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
 attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
 attDf = attDf[attDf['total count'] > 0]
+# 将所有media的归因值大于1的，归因值设置为1
+for media in mediaList:
+    attDf.loc[attDf['%s count'%(media)] > 1,'%s count'%(media)] = 1
+
+# 总归因值大于1的，按照比例缩小，使得总归因值等于1
+attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
+# 打印影响的行（前5行）
+print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
+attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]] = attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].div(attDf['total count'], axis=0)
+# 打印修改后的行（前5行）
+print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
+
 attDf = attDf[['appsflyer_id','install_date'] + ['%s count'%(media) for media in mediaList]]
 
 # attDf 列改名 所有列名改为 小写

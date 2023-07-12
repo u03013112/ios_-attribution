@@ -16,7 +16,6 @@ sys.path.append('/src')
 from src.maxCompute import execSql
 from src.tools import getFilename,afCvMapDataFrame
 
-
 # 数数
 def getDataFromSS():
     data = {}
