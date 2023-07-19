@@ -1,24 +1,9 @@
-# FunPlus02改进版
-# 主要针对归因时的过分配问题
-# 当一个用户被分配到多个媒体的概率超过1的时候代表这个用户被过分配了
-# 这时需要针对这个用户进行重分配
-
-# 步骤如下
-# 1、给userDf添加列，列名为attribute,默认值是[]。里面用于存储归因的媒体名，skan index，和对应的count。
-# 格式是{'media': 'media1', 'skan index': 1, 'count': 0.5},attribute列存储的是这种结构的列表。
-# 2、遍历skanDf，每行做如下处理：获取media，cv，min_valid_install_timestamp和max_valid_install_timestamp。
-# 在userDf中找到userDf.cv == skanDf.cv，并且 skanDf.max_valid_install_timestamp >= userDf.install_timestamp >= skanDf.min_valid_install_timestamp 的行。
-# 该行的attribute列的列表添加一个字典，media，skan index都取自skanDf这一行。
-# count的值是1/N，N是符合上面条件的行数。比如通过cv与时间戳过滤找到符合的行是2，则'count'值就是1/2。
-# 3、找到userDf中attribute列中count的和大于1的行，对这些行做如下处理：
-# 找到attribute列中count最小的M个元素。使得剩下的元素的count的和小于等于1。
-# 从attribute列中删除这M个元素。
-# 找到usdDf所有attribute列中包含此skan index的行。重新计算count，count为1/N，N为剩余usdDf所有attribute列中包含此skan index的行数。
-# 4、检查userDf中是否还有行的attribute列中count的和大于1，如果有重复步骤3。
-# 5、汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果。
-# 格式采用之前归因方案1的格式，即 给userDf添加列，按照mediaList中的媒体顺序，添加列，列名为mediaList中的媒体名+' count'
-# count值是从attribute列中的按照media汇总count的值。
-# 6、返回userDf
+# FunPlus02Adv改进版
+# 主要修改
+# 每次获取3天的skan数据进行归因，而不是获取1天的skan数据进行归因，对于跨天的用户更加准确
+# 按照日期降序归因，最近的skan有更高的优先级
+# 最后一次归因不再重分配，最终可能存在一定的过分配，但是应该不过分
+# 按照安装日期进行建表与写入，不再直接删除分区，如果有必要需要手动删除分区
 
 import io
 
@@ -69,6 +54,9 @@ mediaList = [
 ]
 
 def getSKANDataFromMC(dayStr):
+    # dayStr 格式类似 '20230601'
+    # 计算before3DayStr，即3天前的日期，格式类似 '20230529'
+    before3DayStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=3)).strftime('%Y%m%d')
     sql = f'''
         SELECT
             ad_network_campaign_id as campaign_id,
@@ -78,7 +66,7 @@ def getSKANDataFromMC(dayStr):
         FROM 
             ods_platform_appsflyer_skad_details
         WHERE
-            day = '{dayStr}'
+            day between '{before3DayStr}' and '{dayStr}'
             AND app_id = 'id1479198816'
             AND event_name in (
                 'af_skad_install',
@@ -98,11 +86,8 @@ def skanAddValidInstallDate(skanDf):
     skanDf['cv'] = skanDf['cv'].astype(int)
 
     # 计算min_valid_install_timestamp和max_valid_install_timestamp
-    # cv 小于 0 的 是 null 值，当做付费用户匹配，范围稍微大一点
-    skanDf.loc[skanDf['cv'] < 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=72)
     skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=48)
     skanDf.loc[skanDf['cv'] > 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=72)
-
     skanDf.loc[:, 'max_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=24)
     # 将时间戳转换为秒
     skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].view(np.int64) // 10 ** 9
@@ -323,10 +308,14 @@ def meanAttribution(userDf, skanDf):
     skanDf['count'] = 1
     skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index()
 
+    # skanDf 排序，按照 min_valid_install_timestamp 降序。为了可以优先处理较为新的skan条目。
+    skanDf.sort_values(by=['min_valid_install_timestamp'], ascending=False, inplace=True)
+
     # 待分配的skan条目的索引
     pending_skan_indices = skanDf.index.tolist()
 
-    for i in range(3):  # 最多进行3次分配
+    N = 3
+    for i in range(N):  # 最多进行3次分配
         print(f"开始第 {i + 1} 次分配")
 
         new_pending_skan_indices = []
@@ -340,40 +329,23 @@ def meanAttribution(userDf, skanDf):
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
 
-            if cv < 0:
-                # print('cv is null')
-                if item['country_code_list'] == '':
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-                else:
-                    country_code_list = item['country_code_list'].split('|')
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
+            # 先检查item['country_code_list']是否为空
+            if item['country_code_list'] == '':
+                condition = (
+                    (userDf['cv'] == cv) &
+                    (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                    (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+                    (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+                )
             else:
-                # 先检查item['country_code_list']是否为空
-                if item['country_code_list'] == '':
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-                else:
-                    country_code_list = item['country_code_list'].split('|')
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
+                country_code_list = item['country_code_list'].split('|')
+                condition = (
+                    (userDf['cv'] == cv) &
+                    (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                    (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+                    (userDf['country_code'].isin(country_code_list)) &
+                    (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+                )
 
             matching_rows = userDf[condition]
             total_matching_count = matching_rows['count'].sum()
@@ -384,6 +356,10 @@ def meanAttribution(userDf, skanDf):
             else:
                 new_pending_skan_indices.append(index)
 
+        if i == N - 1:
+            # 最后一次分配，不需要再检查是否有需要重新分配的行
+            print(f"第 {i + 1} 次分配结束，不需要再检查是否有需要重新分配的行")
+            break
         # 找出需要重新分配的行
         rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
 
@@ -431,7 +407,7 @@ def main():
     skanDf = getSKANDataFromMC(dayStr)
     # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
     skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
-    skanDf['cv'] = skanDf['cv'].fillna(-1)
+    skanDf['cv'] = skanDf['cv'].fillna(0)
     skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
     # 2、计算合法的激活时间范围
     skanDf = skanAddValidInstallDate(skanDf)
@@ -461,29 +437,34 @@ from odps.models import Schema, Column, Partition
 def createTable():
     if 'o' in globals():
         columns = [
-            Column(name='appsflyer_id', type='string', comment='AF ID'),
-            Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
+            Column(name='appsflyer_id', type='string', comment='AF ID')
         ]
         for media in mediaList:
             columns.append(Column(name='%s rate'%(media), type='double', comment='%s媒体归因值概率'%(media)))
 
         partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
+            # 用安装日期做分区
+            Partition(name='install_date', type='string', comment='install date,like 2023-05-31')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_adv', schema, if_not_exists=True)
+        table = o.create_table('topwar_ios_funplus02_adv2', schema, if_not_exists=True)
         return table
     else:
         print('createTable failed, o is not defined')
 
-def writeTable(df,dayStr):
-    print('try to write table:')
-    print(df.head(5))
+def writeTable(df):
+    print('try to write table:topwar_ios_funplus02_adv2')
+    # print(df.head(5))
     if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
+        t = o.get_table('topwar_ios_funplus02_adv2')
+        # 不在删除分区，直接覆盖写入，如果有必要需要手动删除分区
+        # 将df按照install_date分组，然后分别写入不同的分区
+        for install_date, group in df.groupby('install_date'):
+            print('try to write partition: install_date=%s'%(install_date))
+            print('group.head(5):')
+            print(group.head(5))
+            with t.open_writer(partition='install_date=%s'%(install_date), create_partition=True, arrow=True,overwrite=True) as writer:
+                writer.write(group)
     else:
         print('writeTable failed, o is not defined')
 
@@ -492,22 +473,10 @@ attDf = main()
 attDf['total rate'] = attDf[['%s rate'%(media) for media in mediaList]].sum(axis=1)
 attDf = attDf[attDf['total rate'] > 0]
 
-# # 将所有media的归因值大于1的，归因值设置为1
-# for media in mediaList:
-#     attDf.loc[attDf['%s count'%(media)] > 1,'%s count'%(media)] = 1
-
-# # 总归因值大于1的，按照比例缩小，使得总归因值等于1
-# attDf['total count'] = attDf[['%s count'%(media) for media in mediaList]].sum(axis=1)
-# # 打印影响的行（前5行）
-# print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
-# attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]] = attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].div(attDf['total count'], axis=0)
-# # 打印修改后的行（前5行）
-# print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
-
 attDf = attDf[['appsflyer_id','install_date'] + ['%s rate'%(media) for media in mediaList]]
 
 # attDf 列改名 所有列名改为 小写
 attDf.columns = [col.lower() for col in attDf.columns]
 
 createTable()
-writeTable(attDf,dayStr)
+writeTable(attDf)

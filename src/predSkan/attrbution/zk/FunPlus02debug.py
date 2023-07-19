@@ -94,10 +94,18 @@ def ssot2ret():
     }, inplace=True)
     df5.drop(columns=['roi','cost'], inplace=True)
 
+    df6 = pd.read_csv(getFilename('funplus02t3Adv'))
+    df6.rename(columns={
+        'install_date': 'day',
+        '7_days_revenue':'融合归因Adv 7日收入（美元）'
+    }, inplace=True)
+    df6.drop(columns=['roi','cost'], inplace=True)
+
     mergeDf = df.merge(df2, how='left', on=['media', 'day'])
     mergeDf = mergeDf.merge(df3, how='left', on=['media', 'day'])
     mergeDf = mergeDf.merge(df4, how='left', on=['media', 'day'])
     mergeDf = mergeDf.merge(df5, how='left', on=['media', 'day'])
+    mergeDf = mergeDf.merge(df6, how='left', on=['media', 'day'])
 
     mergeDf.to_csv(getFilename('funplus02tSsot4Ret'), index=False)
 
@@ -127,18 +135,19 @@ def draw():
         print('SSOT 7日收入（美元） 与 融合归因+模糊归因（排除重下载） 7日收入（美元） 相关系数：', df1['SSOT 7日收入（美元）'].corr(df1['融合归因+模糊归因（排除重下载） 7日收入（美元）']))
         print('SSOT 7日收入（美元） 与 融合归因 7日收入（美元） 相关系数：', df1['SSOT 7日收入（美元）'].corr(df1['融合归因 7日收入（美元）']))
         print('SSOT 7日收入（美元） 与 融合归因（排除重下载） 7日收入（美元） 相关系数：', df1['SSOT 7日收入（美元）'].corr(df1['融合归因（排除重下载） 7日收入（美元）']))
-
-
+        print('SSOT 7日收入（美元） 与 融合归因Adv 7日收入（美元） 相关系数：', df1['SSOT 7日收入（美元）'].corr(df1['融合归因Adv 7日收入（美元）']))
+        print('\n')
         print('SSOT 7日收入（美元） 与 融合归因+模糊归因 7日收入（美元） MAPE：', mape(df1['SSOT 7日收入（美元）'], df1['融合归因+模糊归因 7日收入（美元）']))
         print('SSOT 7日收入（美元） 与 融合归因+模糊归因（排除重下载） 7日收入（美元） MAPE：', mape(df1['SSOT 7日收入（美元）'], df1['融合归因+模糊归因（排除重下载） 7日收入（美元）']))
         print('SSOT 7日收入（美元） 与 融合归因 7日收入（美元） MAPE：', mape(df1['SSOT 7日收入（美元）'], df1['融合归因 7日收入（美元）']))
         print('SSOT 7日收入（美元） 与 融合归因（排除重下载） 7日收入（美元） MAPE：', mape(df1['SSOT 7日收入（美元）'], df1['融合归因（排除重下载） 7日收入（美元）']))
-
+        print('SSOT 7日收入（美元） 与 融合归因Adv 7日收入（美元） MAPE：', mape(df1['SSOT 7日收入（美元）'], df1['融合归因Adv 7日收入（美元）']))
+        print('\n')
         print('融合归因+模糊归因 7日收入（美元）/SSOT 7日收入（美元） = ', df1['融合归因+模糊归因 7日收入（美元）'].sum() / df1['SSOT 7日收入（美元）'].sum())
         print('融合归因+模糊归因（排除重下载） 7日收入（美元）/SSOT 7日收入（美元） = ', df1['融合归因+模糊归因（排除重下载） 7日收入（美元）'].sum() / df1['SSOT 7日收入（美元）'].sum())
         print('融合归因 7日收入（美元）/SSOT 7日收入（美元） = ', df1['融合归因 7日收入（美元）'].sum() / df1['SSOT 7日收入（美元）'].sum())
         print('融合归因（排除重下载） 7日收入（美元）/SSOT 7日收入（美元） = ', df1['融合归因（排除重下载） 7日收入（美元）'].sum() / df1['SSOT 7日收入（美元）'].sum())
-        
+        print('融合归因Adv 7日收入（美元）/SSOT 7日收入（美元） = ', df1['融合归因Adv 7日收入（美元）'].sum() / df1['SSOT 7日收入（美元）'].sum())
 
         # 绘制图形
         plt.figure(figsize=(18, 6))
@@ -147,6 +156,8 @@ def draw():
         plt.plot(df1['day'], df1['融合归因 7日收入（美元）'], label='融合归因 7日收入（美元）')
         plt.plot(df1['day'], df1['融合归因（排除重下载） 7日收入（美元）'], label='融合归因（排除重下载） 7日收入（美元）')
         plt.plot(df1['day'], df1['融合归因+模糊归因（排除重下载） 7日收入（美元）'], label='融合归因+模糊归因（排除重下载） 7日收入（美元）')
+        plt.plot(df1['day'], df1['融合归因Adv 7日收入（美元）'], label='融合归因Adv 7日收入（美元）')
+        
         plt.xlabel('Install Date')
         plt.ylabel('7-Day 收入（美元）')
         plt.legend()
