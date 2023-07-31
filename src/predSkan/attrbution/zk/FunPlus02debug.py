@@ -49,6 +49,8 @@ def getSsotFromMC():
 # 将ssot，融合归因，模糊归因的结论合并
 def ssot2ret():
     df = pd.read_csv(getFilename('ads_appsflyer_ssot'))
+    df = df.sort_values(by=['day'])
+    df.to_csv(getFilename('ads_appsflyer_ssot_sorted'), index=False)
     # df 列 campaign
     # campaign 中 如果有 'VO' 或者 ‘AEO’ media = ‘Facebook Ads’
     # campaign 中 如果有 'Tiktok' media = ‘bytedanceglobal_int’
@@ -152,12 +154,12 @@ def draw():
         # 绘制图形
         plt.figure(figsize=(18, 6))
         plt.plot(df1['day'], df1['SSOT 7日收入（美元）'], label='SSOT 7日收入（美元）')
-        plt.plot(df1['day'], df1['融合归因+模糊归因 7日收入（美元）'], label='融合归因+模糊归因 7日收入（美元）')
-        plt.plot(df1['day'], df1['融合归因 7日收入（美元）'], label='融合归因 7日收入（美元）')
-        plt.plot(df1['day'], df1['融合归因（排除重下载） 7日收入（美元）'], label='融合归因（排除重下载） 7日收入（美元）')
-        plt.plot(df1['day'], df1['融合归因+模糊归因（排除重下载） 7日收入（美元）'], label='融合归因+模糊归因（排除重下载） 7日收入（美元）')
-        plt.plot(df1['day'], df1['融合归因Adv 7日收入（美元）'], label='融合归因Adv 7日收入（美元）')
-        
+        # plt.plot(df1['day'], df1['融合归因+模糊归因 7日收入（美元）'], label='融合归因+模糊归因 7日收入（美元）')
+        # plt.plot(df1['day'], df1['融合归因 7日收入（美元）'], label='融合归因 7日收入（美元）')
+        # plt.plot(df1['day'], df1['融合归因（排除重下载） 7日收入（美元）'], label='融合归因（排除重下载） 7日收入（美元）')
+        # plt.plot(df1['day'], df1['融合归因+模糊归因（排除重下载） 7日收入（美元）'], label='融合归因+模糊归因（排除重下载） 7日收入（美元）')
+        plt.plot(df1['day'], df1['融合归因Adv 7日收入（美元）'], label='融合归因 空值填充 7日收入（美元）')
+
         plt.xlabel('Install Date')
         plt.ylabel('7-Day 收入（美元）')
         plt.legend()
@@ -208,6 +210,18 @@ def checkSsotRet1():
     l2 = len(df)
     print('total', l1, l2, l1/l2)
 
+# 2023-07-31 老罗需求
+# 有没有5月22号到6月4号的每天的融合归因分渠道数据，我汇总到一个表格里
+# 要融合归因的分渠道D0和D6数据，GG，FB和TT
+def debug1():
+    df = pd.read_csv(getFilename('funplus02tSsot4Ret'))
+    df = df.loc[(df['day'] >= '2023-05-22') & (df['day'] <= '2023-06-04')]
+    df = df[['day','media','1_days_revenue','融合归因Adv 7日收入（美元）']]
+    df.rename(columns={
+        '1_days_revenue':'融合归因 1日收入（美元）',
+        '融合归因Adv 7日收入（美元）':'融合归因 7日收入（美元）'
+        }, inplace=True)
+    df.to_csv(getFilename('funplus02tSsot4Ret0522to0604'), index=False)
 
 if __name__ == '__main__':
     # getRetFromMC()
@@ -216,6 +230,7 @@ if __name__ == '__main__':
     # checkSsotRet1()
     # getSsotFromMC()
     ssot2ret()
-    draw()
+    # draw()
+    debug1()
 
 

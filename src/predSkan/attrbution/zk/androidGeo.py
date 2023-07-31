@@ -34,10 +34,10 @@ def getDataFromMC():
                 app_id = 'com.topwar.gp'
                 AND zone = 0
                 AND event_name = 'install'
-                AND day BETWEEN '20221001'
-                AND '20230308'
-                AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-10-01', "yyyy-mm-dd")
-                AND to_date('2023-03-01', "yyyy-mm-dd")
+                AND day BETWEEN '20230101'
+                AND '20230730'
+                AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2023-01-01', "yyyy-mm-dd")
+                AND to_date('2023-07-01', "yyyy-mm-dd")
         ),
         purchases AS (
             SELECT
@@ -49,10 +49,10 @@ def getDataFromMC():
             WHERE
                 event_name = 'af_purchase'
                 AND zone = 0
-                AND day BETWEEN '20221001'
-                AND '20230308'
-                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2022-10-01', "yyyy-mm-dd")
-                AND to_date('2023-03-01', "yyyy-mm-dd")
+                AND day BETWEEN '20230101'
+                AND '20230730'
+                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2023-01-01', "yyyy-mm-dd")
+                AND to_date('2023-07-01', "yyyy-mm-dd")
         )
         SELECT
             installs.uid,
@@ -135,7 +135,7 @@ def getCountryFromCampaign():
             ods_platform_appsflyer_masters
         where
             app_id = 'com.topwar.gp'
-            AND day BETWEEN '20220701' AND '20230301'
+            AND day BETWEEN '20230101' AND '20230701'
             AND app = '102'
             AND cost >= 1
         ;
@@ -867,6 +867,15 @@ def draw():
         plt.savefig(f'/src/data/zk2/attGF_{media}.jpg', bbox_inches='tight')
         plt.close()
 
+def debug():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    facebookDf = df[df['media'] == 'Facebook Ads']
+    # install_date 是类似 2023-01-01 的字符串，按照月做分组，计算列MAPE的平均值
+    facebookDf['install_date'] = pd.to_datetime(facebookDf['install_date'])
+    facebookDf['install_date'] = facebookDf['install_date'].dt.strftime('%Y-%m')
+    facebookDf = facebookDf.groupby('install_date').agg({'MAPE': 'mean'}).reset_index()
+    print(facebookDf)
+
 if __name__ == '__main__':
     # getDataFromMC()
     # getCountryFromCampaign()
@@ -886,30 +895,31 @@ if __name__ == '__main__':
     # skanDf.to_csv(getFilename('skanAOS6G'),index=False)
     # print('skan data group len:',len(skanDf))
 
-    # skanDf = skanAddGeo()
-    # skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
+    skanDf = skanAddGeo()
+    skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
 
-    # userDf = makeUserDf()
-    # print('user data len:',len(userDf))
-    # # userDf.to_csv(getFilename('userAOS6'),index=False)
-    # # userDf = pd.read_csv(getFilename('userAOS6'))
-    # userDf = userInstallDate2Min(userDf,N = 600)
-    # userDf = userGroupby(userDf)
-    # userDf.to_csv(getFilename('userAOS6G48'),index=False)
-    # print('user data group len:',len(userDf))
+    userDf = makeUserDf()
+    print('user data len:',len(userDf))
+    userDf.to_csv(getFilename('userAOS6'),index=False)
+    # userDf = pd.read_csv(getFilename('userAOS6'))
+    userDf = userInstallDate2Min(userDf,N = 600)
+    userDf = userGroupby(userDf)
+    userDf.to_csv(getFilename('userAOS6G48'),index=False)
+    print('user data group len:',len(userDf))
 
     # userDf = pd.read_csv(getFilename('userAOS6G48'))
     # skanDf = pd.read_csv(getFilename('skanAOS6G48'))
     
-    # userDf = meanAttribution(userDf, skanDf)
-    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
-    userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
+    userDf = meanAttribution(userDf, skanDf)
+    userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
+    # userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
     userDf = meanAttributionResult(userDf)
-    # userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
+    userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
     # userDf = pd.read_csv(getFilename('attribution1Ret'))
     checkRet(userDf)
 
     # d1()
     # d2()
-    draw()
+    # draw()
+    debug()
     
