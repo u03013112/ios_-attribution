@@ -545,7 +545,7 @@ def checkRet(retDf):
     rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
     rawDf['user_count'] = 1
     # 按照media和install_date分组，计算r7usd的和
-    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r7usd': 'sum','user_count':'sum'}).reset_index()
+    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r1usd':'sum','r7usd': 'sum','user_count':'sum'}).reset_index()
 
     # rawDf 和 retDf 进行合并
     # retDf.rename(columns={'r7usd':'r7usdp'}, inplace=True)
@@ -876,6 +876,76 @@ def debug():
     facebookDf = facebookDf.groupby('install_date').agg({'MAPE': 'mean'}).reset_index()
     print(facebookDf)
 
+def debug2():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    df2 = df.groupby('media').agg({'MAPE': 'mean'}).reset_index()
+    print(df2)
+
+    print(df['MAPE'].mean())
+    
+
+# 计算这种算法对整体是高估还是低估
+def debug3():
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+
+    print('融合归因算法获得r7usd/真实r7usd：', df['r7usdp'].sum() / df['r7usd'].sum())
+
+    # 分媒体计算
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        print(f"{media}融合归因算法获得r7usd/真实r7usd：", mediaDf['r7usdp'].sum() / mediaDf['r7usd'].sum())
+
+def getAdCost():
+    sql = '''
+        select
+            sum(cost) as cost,
+            media_source as media,
+            to_char(to_date(day, "yyyymmdd"), "yyyy-mm-dd") as install_date
+        from
+            ods_platform_appsflyer_masters
+        where
+            app_id = 'com.topwar.gp'
+            and day >= '20230101'
+            and media_source in ('Facebook Ads', 'googleadwords_int', 'bytedanceglobal_int')
+        group by
+            media_source,
+            install_date
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    return df
+
+def debug4():
+    # adCostDf = getAdCost()
+    # adCostDf.to_csv(getFilename('adCostAndroid'), index=False)
+    adCostDf = pd.read_csv(getFilename('adCostAndroid'))
+
+    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    df = df[['media','install_date','r1usd','r1usdp','r7usd', 'r7usdp']]
+
+    mergeDf = df.merge(adCostDf, on=['media', 'install_date'],how='left')
+    # 计算整体的1日ROI，和7日ROI
+    roi1 = mergeDf['r1usd'].sum() / mergeDf['cost'].sum()
+    roi7 = mergeDf['r7usd'].sum() / mergeDf['cost'].sum()
+    print('roi1:', roi1)
+    print('roi7:', roi7)
+    roi1p = mergeDf['r1usdp'].sum() / mergeDf['cost'].sum()
+    roi7p = mergeDf['r7usdp'].sum() / mergeDf['cost'].sum()
+    print('roi1p:', roi1p)
+    print('roi7p:', roi7p)
+
+    # 分媒体计算1日ROI，和7日ROI
+    groupDf = mergeDf.groupby('media').agg({'r1usd':'sum','r1usdp':'sum','r7usd':'sum','r7usdp':'sum','cost':'sum'}).reset_index()
+    groupDf['r1ROI'] = groupDf['r1usd'] / groupDf['cost']
+    groupDf['r7ROI'] = groupDf['r7usd'] / groupDf['cost']
+    groupDf['r1ROIp'] = groupDf['r1usdp'] / groupDf['cost']
+    groupDf['r7ROIp'] = groupDf['r7usdp'] / groupDf['cost']
+
+    print(groupDf[['media','r1ROI','r1ROIp','r7ROI','r7ROIp']])
+
+
+
 if __name__ == '__main__':
     # getDataFromMC()
     # getCountryFromCampaign()
@@ -895,31 +965,29 @@ if __name__ == '__main__':
     # skanDf.to_csv(getFilename('skanAOS6G'),index=False)
     # print('skan data group len:',len(skanDf))
 
-    skanDf = skanAddGeo()
-    skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
+    # skanDf = skanAddGeo()
+    # skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
 
-    userDf = makeUserDf()
-    print('user data len:',len(userDf))
-    userDf.to_csv(getFilename('userAOS6'),index=False)
-    # userDf = pd.read_csv(getFilename('userAOS6'))
-    userDf = userInstallDate2Min(userDf,N = 600)
-    userDf = userGroupby(userDf)
-    userDf.to_csv(getFilename('userAOS6G48'),index=False)
-    print('user data group len:',len(userDf))
+    # userDf = makeUserDf()
+    # print('user data len:',len(userDf))
+    # userDf.to_csv(getFilename('userAOS6'),index=False)
+    # # userDf = pd.read_csv(getFilename('userAOS6'))
+    # userDf = userInstallDate2Min(userDf,N = 600)
+    # userDf = userGroupby(userDf)
+    # userDf.to_csv(getFilename('userAOS6G48'),index=False)
+    # print('user data group len:',len(userDf))
 
-    # userDf = pd.read_csv(getFilename('userAOS6G48'))
-    # skanDf = pd.read_csv(getFilename('skanAOS6G48'))
+    # # userDf = pd.read_csv(getFilename('userAOS6G48'))
+    # # skanDf = pd.read_csv(getFilename('skanAOS6G48'))
     
-    userDf = meanAttribution(userDf, skanDf)
-    userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
-    # userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
-    userDf = meanAttributionResult(userDf)
-    userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
-    # userDf = pd.read_csv(getFilename('attribution1Ret'))
+    # userDf = meanAttribution(userDf, skanDf)
+    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
+    # # userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
+    # userDf = meanAttributionResult(userDf)
+    # userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
+    userDf = pd.read_csv(getFilename('attribution1Ret48Geo'))
     checkRet(userDf)
 
-    # d1()
-    # d2()
-    # draw()
-    debug()
-    
+    debug2()
+    debug3()
+    debug4()

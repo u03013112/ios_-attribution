@@ -216,12 +216,22 @@ def checkSsotRet1():
 def debug1():
     df = pd.read_csv(getFilename('funplus02tSsot4Ret'))
     df = df.loc[(df['day'] >= '2023-05-22') & (df['day'] <= '2023-06-04')]
+    df = df[['day','media','1_days_revenue','融合归因+模糊归因 7日收入（美元）']]
+    df.rename(columns={
+        '融合归因+模糊归因 7日收入（美元）':'融合归因 1日收入（美元）'
+        }, inplace=True)
+    df.to_csv(getFilename('funplus02tSsot4Ret0522to0604'), index=False)
+
+def debug2():
+    df = pd.read_csv(getFilename('funplus02tSsot4Ret'))
+    df = df.loc[(df['day'] >= '2023-05-22') & (df['day'] <= '2023-06-04')]
     df = df[['day','media','1_days_revenue','融合归因Adv 7日收入（美元）']]
     df.rename(columns={
         '1_days_revenue':'融合归因 1日收入（美元）',
         '融合归因Adv 7日收入（美元）':'融合归因 7日收入（美元）'
         }, inplace=True)
     df.to_csv(getFilename('funplus02tSsot4Ret0522to0604'), index=False)
+
 
 if __name__ == '__main__':
     # getRetFromMC()

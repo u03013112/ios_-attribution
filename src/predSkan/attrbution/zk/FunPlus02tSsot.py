@@ -104,6 +104,12 @@ def getDataFromMC2():
             media_source as media,
             SUM(
                 CASE
+                    WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) as r1usd,
+            SUM(
+                CASE
                     WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN event_revenue_usd
                     ELSE 0
                 END
@@ -256,6 +262,126 @@ def main2():
     merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
     merge_df.to_csv(getFilename('funplus02tSsot4'), index=False)
 
+def main3():
+    # df1 = getSql1()
+    # df1.to_csv(getFilename('getDataFromMC2Ssot_1'), index=False)
+
+    # df2 = getSql2()
+    # df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+
+    df1 = pd.read_csv(getFilename('getDataFromMC2Ssot_1'))
+    df1 = df1.drop(columns=['day'])
+    df1 = df1.groupby(['install_date','appsflyer_id']).sum().reset_index()
+
+    df2 = pd.read_csv(getFilename('getDataFromMC2_2'))
+    df2 = df2[df2['revenue_7_days'] > 0]
+
+    df = df1.merge(df2, on='appsflyer_id',how='inner')
+
+    df['bytedanceglobal_1_days_revenue'] = df['revenue_1_days'] * df['bytedanceglobal_int count']
+    df['googleadwords_1_days_revenue'] = df['revenue_1_days'] * df['googleadwords_int count']
+    df['facebook_1_days_revenue'] = df['revenue_1_days'] * df['facebook ads count']
+
+    df['facebook_7_days_revenue'] = df['revenue_7_days'] * df['facebook ads count']
+    df['googleadwords_7_days_revenue'] = df['revenue_7_days'] * df['googleadwords_int count']
+    df['bytedanceglobal_7_days_revenue'] = df['revenue_7_days'] * df['bytedanceglobal_int count']
+
+    df.drop(columns=['revenue_1_days','revenue_7_days','facebook ads count','googleadwords_int count','bytedanceglobal_int count'], inplace=True)
+
+    print(df.head())
+
+    # def preprocess_df1(df):
+    #     df = df.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='7_days_revenue')
+    #     df['media'] = df['media'].map({
+    #         'facebook_7_days_revenue': 'Facebook Ads',
+    #         'googleadwords_7_days_revenue': 'googleadwords_int',
+    #         'bytedanceglobal_7_days_revenue': 'bytedanceglobal_int'
+    #     })
+    #     return df
+    
+    def preprocess_df(df):
+        df_7_days = df[['install_date', 'appsflyer_id', 'facebook_7_days_revenue', 'googleadwords_7_days_revenue', 'bytedanceglobal_7_days_revenue']]
+        df_1_days = df[['install_date', 'appsflyer_id', 'facebook_1_days_revenue', 'googleadwords_1_days_revenue', 'bytedanceglobal_1_days_revenue']]
+        # df_7_days.to_csv(getFilename('funplus02tAdvMain1_0'), index=False)
+
+        df_7_days = df_7_days.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='7_days_revenue')
+        df_1_days = df_1_days.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='1_days_revenue')
+
+        # df_7_days.to_csv(getFilename('funplus02tAdvMain1_1'), index=False)
+
+        media_mapping = {
+            'facebook_7_days_revenue': 'Facebook Ads',
+            'googleadwords_7_days_revenue': 'googleadwords_int',
+            'bytedanceglobal_7_days_revenue': 'bytedanceglobal_int',
+            'facebook_1_days_revenue': 'Facebook Ads',
+            'googleadwords_1_days_revenue': 'googleadwords_int',
+            'bytedanceglobal_1_days_revenue': 'bytedanceglobal_int'
+        }
+        
+        df_7_days['media'] = df_7_days['media'].map(media_mapping)
+        df_1_days['media'] = df_1_days['media'].map(media_mapping)
+        
+        df = pd.merge(df_1_days, df_7_days, on=['install_date', 'appsflyer_id', 'media'])
+        # df.to_csv(getFilename('funplus02tAdvMain1'), index=False)
+        return df
+    # 预处理数据
+    # df1 = preprocess_df1(df)
+    # df1 = df1.groupby(['install_date','media'])['7_days_revenue'].sum().reset_index()
+    
+    df = preprocess_df(df)
+    # print('preprocess_df:')
+    # print(df.head())
+    df1 = df.groupby(['install_date','media']).agg({'1_days_revenue': 'sum', '7_days_revenue': 'sum'}).reset_index()
+    df1.to_csv(getFilename('funplus02tAdvMain2'), index=False)
+
+    df2 = pd.read_csv(getFilename('funplus02t2'))
+
+    print(df1.head())
+
+
+    # 合并数据
+    merge_df = df1.merge(df2, on=['install_date', 'media'])
+
+    # 计算ROI
+    merge_df['roi'] = merge_df['7_days_revenue'] / merge_df['cost']
+
+    merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
+    merge_df.to_csv(getFilename('funplus02tSsot4'), index=False)
+
+def main3Tail():
+    # 和模糊归因结果合并
+    # df = getDataFromMC2()
+    # df.to_csv(getFilename('funplus02tSsot2'), index=False)
+
+    df = pd.read_csv(getFilename('funplus02tSsot2'))
+    # df列media中 restricted -> Facebook Ads
+    df['media'] = df['media'].replace({'restricted': 'Facebook Ads'})
+    df.rename(columns={
+        'r1usd': '1_days_revenue',
+        'r7usd': '7_days_revenue'
+    }, inplace=True)
+
+    df2 = pd.read_csv(getFilename('funplus02tSsot4'))
+    df2 = df2[['install_date','media','1_days_revenue','7_days_revenue']]
+
+    # 合并数据，直接两个表拼接
+    # merge_df = pd.concat([df, df2], axis=0)
+    merge_df = df.merge(df2, on=['install_date', 'media'], how='left',suffixes=('_ssot', '_zk'))
+    merge_df['1_days_revenue'] = merge_df['1_days_revenue_zk'].fillna(0) + merge_df['1_days_revenue_ssot'].fillna(0)
+    merge_df['7_days_revenue'] = merge_df['7_days_revenue_zk'].fillna(0) + merge_df['7_days_revenue_ssot'].fillna(0)
+    # merge_df = merge_df.groupby(['install_date','media']).sum().reset_index()
+
+    merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
+    merge_df = merge_df[['install_date','media','1_days_revenue','7_days_revenue']]
+    merge_df = merge_df.loc[(merge_df['install_date'] >= '2023-05-22') & (merge_df['install_date'] <= '2023-06-04')]
+
+    merge_df.rename(columns={
+        '1_days_revenue':'融合归因（包含概率归因） 1日收入（美元）',
+        '7_days_revenue':'融合归因（包含概率归因） 7日收入（美元）'
+    }, inplace=True)
+
+    merge_df.to_csv(getFilename('funplus02tSsot4Tail'), index=False)
+    
 import matplotlib.pyplot as plt
 def rollAndDraw():
     df = pd.read_csv(getFilename('funplus02tSsot4'))
@@ -310,8 +436,10 @@ def ewmAndDraw():
     plt.savefig(getFilename('funplus02tSsot6Ewm', ext='jpg'))
 
 if __name__ == '__main__':
-    main2()
-    rollAndDraw()
-    ewmAndDraw()
+    # main2()
+    # rollAndDraw()
+    # ewmAndDraw()
+    # main3()
+    main3Tail()
 
 
