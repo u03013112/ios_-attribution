@@ -273,9 +273,6 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
                     country_code
             ) AS sub
             JOIN ods_platform_appsflyer_events e ON sub.customer_user_id = e.customer_user_id
-        WHERE
-            day BETWEEN '{minValidInstallTimestampDayStr}'
-                AND '{maxValidInstallTimestampDayStr}'
         GROUP BY
             sub.customer_user_id,
             sub.install_timestamp,

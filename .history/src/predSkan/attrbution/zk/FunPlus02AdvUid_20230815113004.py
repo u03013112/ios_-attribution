@@ -251,10 +251,10 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
                     customer_user_id,
                     MIN(install_timestamp) as install_timestamp,
                     MIN(install_time) as install_time,
-                    MIN(country_code) OVER (
+                    FIRST_VALUE(country_code) OVER (
                         PARTITION BY customer_user_id
                         ORDER BY
-                            install_timestamp ROWS UNBOUNDED PRECEDING
+                            install_timestamp
                     ) as country_code
                 FROM
                     ods_platform_appsflyer_events
@@ -267,15 +267,9 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
                     AND '{maxValidInstallTimestampStr}'
                     AND customer_user_id IS NOT NULL
                 GROUP BY
-                    customer_user_id,
-                    install_timestamp,
-                    install_time,
-                    country_code
+                    customer_user_id
             ) AS sub
             JOIN ods_platform_appsflyer_events e ON sub.customer_user_id = e.customer_user_id
-        WHERE
-            day BETWEEN '{minValidInstallTimestampDayStr}'
-                AND '{maxValidInstallTimestampDayStr}'
         GROUP BY
             sub.customer_user_id,
             sub.install_timestamp,

@@ -220,67 +220,30 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
     sql = f'''
         SELECT
-            sub.customer_user_id,
-            sub.install_timestamp,
-            SUM(
-                CASE
-                    WHEN e.event_timestamp <= sub.install_timestamp + 24 * 3600 THEN e.event_revenue_usd
-                    ELSE 0
-                END
-            ) as r1usd,
-            SUM(
-                CASE
-                    WHEN e.event_timestamp <= sub.install_timestamp + 48 * 3600 THEN e.event_revenue_usd
-                    ELSE 0
-                END
-            ) as r2usd,
-            SUM(
-                CASE
-                    WHEN e.event_timestamp <= sub.install_timestamp + 168 * 3600 THEN e.event_revenue_usd
-                    ELSE 0
-                END
-            ) as r7usd,
+            customer_user_id,
+            install_timestamp,
+            SUM(CASE WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN event_revenue_usd ELSE 0 END) as r1usd,
+            SUM(CASE WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN event_revenue_usd ELSE 0 END) as r2usd,
+            SUM(CASE WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN event_revenue_usd ELSE 0 END) as r7usd,
             to_char(
-                to_date(sub.install_time, "yyyy-mm-dd hh:mi:ss"),
+                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
                 "yyyy-mm-dd"
             ) as install_date,
-            sub.country_code
+            country_code
         FROM
-            (
-                SELECT
-                    customer_user_id,
-                    MIN(install_timestamp) as install_timestamp,
-                    MIN(install_time) as install_time,
-                    MIN(country_code) OVER (
-                        PARTITION BY customer_user_id
-                        ORDER BY
-                            install_timestamp ROWS UNBOUNDED PRECEDING
-                    ) as country_code
-                FROM
-                    ods_platform_appsflyer_events
-                WHERE
-                    app_id = 'id1479198816'
-                    AND zone = 0
-                    AND day BETWEEN '{minValidInstallTimestampDayStr}'
-                    AND '{maxValidInstallTimestampDayStr}'
-                    AND install_time BETWEEN '{minValidInstallTimestampStr}'
-                    AND '{maxValidInstallTimestampStr}'
-                    AND customer_user_id IS NOT NULL
-                GROUP BY
-                    customer_user_id,
-                    install_timestamp,
-                    install_time,
-                    country_code
-            ) AS sub
-            JOIN ods_platform_appsflyer_events e ON sub.customer_user_id = e.customer_user_id
+            ods_platform_appsflyer_events
         WHERE
-            day BETWEEN '{minValidInstallTimestampDayStr}'
-                AND '{maxValidInstallTimestampDayStr}'
+            app_id = 'id1479198816'
+            AND zone = 0
+            AND day BETWEEN '{minValidInstallTimestampDayStr}' AND '{maxValidInstallTimestampDayStr}'
+            AND install_time BETWEEN '{minValidInstallTimestampStr}' AND '{maxValidInstallTimestampStr}'
+            AND customer_user_id IS NOT NULL
         GROUP BY
-            sub.customer_user_id,
-            sub.install_timestamp,
-            sub.install_time,
-            sub.country_code;
+            customer_user_id,
+            install_timestamp,
+            install_date,
+            country_code
+        ;
     '''
     print(sql)
     df = execSql(sql)
