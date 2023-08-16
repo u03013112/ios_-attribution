@@ -378,15 +378,9 @@ def meanAttribution(userDf, skanDf):
             cv = item['cv']
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
-            
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600//600
             if i == N-1:
                 # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
                 item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600//600
-                # print('最后一次分配，不考虑国家，且时间范围向前推一天')
-                print(item)
             else:
                 item_country_code_list = item['country_code_list']
 
@@ -440,7 +434,7 @@ def meanAttribution(userDf, skanDf):
 
             # 找出需要重新分配的行
             rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
-            print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
+
             # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
             for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
                 attribute_list = row['attribute']
@@ -468,7 +462,7 @@ def meanAttribution(userDf, skanDf):
 
         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
         pendingDf = skanDf.loc[pending_skan_indices]
-        
+        # 打印待分配的skan数量，按照media分组
         print('待分配的skan数量：')
         print(pendingDf.groupby('media').size())
 
@@ -497,7 +491,6 @@ def main():
     # 3、获取广告信息
     minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
     maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    minValidInstallTimestamp -= 48*3600
     print('minValidInstallTimestamp:',minValidInstallTimestamp)
     print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
     campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)

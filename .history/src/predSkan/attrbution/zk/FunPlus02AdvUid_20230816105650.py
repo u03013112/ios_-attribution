@@ -378,13 +378,10 @@ def meanAttribution(userDf, skanDf):
             cv = item['cv']
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
-            
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600//600
             if i == N-1:
                 # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
                 item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600//600
+                min_valid_install_timestamp -= 24*3600//600
                 # print('最后一次分配，不考虑国家，且时间范围向前推一天')
                 print(item)
             else:
@@ -497,7 +494,6 @@ def main():
     # 3、获取广告信息
     minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
     maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    minValidInstallTimestamp -= 48*3600
     print('minValidInstallTimestamp:',minValidInstallTimestamp)
     print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
     campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)

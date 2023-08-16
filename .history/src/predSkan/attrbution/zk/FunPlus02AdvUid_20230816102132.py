@@ -364,8 +364,7 @@ def meanAttribution(userDf, skanDf):
     # 待分配的skan条目的索引
     pending_skan_indices = skanDf.index.tolist()
 
-    N = 3 # 最多进行3次分配
-    for i in range(N):  
+    for i in range(3):  # 最多进行3次分配
         print(f"开始第 {i + 1} 次分配")
 
         new_pending_skan_indices = []
@@ -378,28 +377,17 @@ def meanAttribution(userDf, skanDf):
             cv = item['cv']
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
-            
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600//600
-            if i == N-1:
-                # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
-                item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600//600
-                # print('最后一次分配，不考虑国家，且时间范围向前推一天')
-                print(item)
-            else:
-                item_country_code_list = item['country_code_list']
 
             if cv < 0:
                 # print('cv is null')
-                if item_country_code_list == '':
+                if item['country_code_list'] == '':
                     condition = (
                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
                     )
                 else:
-                    country_code_list = item_country_code_list.split('|')
+                    country_code_list = item['country_code_list'].split('|')
                     condition = (
                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
@@ -407,8 +395,8 @@ def meanAttribution(userDf, skanDf):
                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
                     )
             else:
-                # 先检查item_country_code_list是否为空
-                if item_country_code_list == '':
+                # 先检查item['country_code_list']是否为空
+                if item['country_code_list'] == '':
                     condition = (
                         (userDf['cv'] == cv) &
                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
@@ -416,7 +404,7 @@ def meanAttribution(userDf, skanDf):
                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
                     )
                 else:
-                    country_code_list = item_country_code_list.split('|')
+                    country_code_list = item['country_code_list'].split('|')
                     condition = (
                         (userDf['cv'] == cv) &
                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
@@ -434,43 +422,35 @@ def meanAttribution(userDf, skanDf):
             else:
                 new_pending_skan_indices.append(index)
 
-        if i < N-1:
-            # 这部分是将过分配的部分重新分配
-            # 最后一次分配不需要重新分配，否则会有一定的低估
+        # 找出需要重新分配的行
+        rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
 
-            # 找出需要重新分配的行
-            rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
-            print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
-            # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
-            for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
-                attribute_list = row['attribute']
-                total_rate = sum([item['rate'] for item in attribute_list])
-                max_rate_to_remove = total_rate - 1
+        # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
+        for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
+            attribute_list = row['attribute']
+            total_rate = sum([item['rate'] for item in attribute_list])
+            max_rate_to_remove = total_rate - 1
 
-                attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'])
-                removed_items = []
-                removed_rate = 0
+            attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'])
+            removed_items = []
+            removed_rate = 0
 
-                for item in attribute_list_sorted:
-                    if removed_rate + item['rate'] <= max_rate_to_remove:
-                        removed_rate += item['rate']
-                        removed_items.append(item)
-                    else:
-                        break
+            for item in attribute_list_sorted:
+                if removed_rate + item['rate'] <= max_rate_to_remove:
+                    removed_rate += item['rate']
+                    removed_items.append(item)
+                else:
+                    break
 
-                for item in removed_items:
-                    attribute_list.remove(item)
-                    new_pending_skan_indices.append(item['skan index'])
+            for item in removed_items:
+                attribute_list.remove(item)
+                new_pending_skan_indices.append(item['skan index'])
 
-            pending_skan_indices = new_pending_skan_indices
-            # pending_skan_indices 要进行排重
-            pending_skan_indices = list(set(pending_skan_indices))
+        pending_skan_indices = new_pending_skan_indices
+        # pending_skan_indices 要进行排重
+        pending_skan_indices = list(set(pending_skan_indices))
 
         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
-        pendingDf = skanDf.loc[pending_skan_indices]
-        
-        print('待分配的skan数量：')
-        print(pendingDf.groupby('media').size())
 
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
@@ -497,7 +477,6 @@ def main():
     # 3、获取广告信息
     minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
     maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    minValidInstallTimestamp -= 48*3600
     print('minValidInstallTimestamp:',minValidInstallTimestamp)
     print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
     campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
