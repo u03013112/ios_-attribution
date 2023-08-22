@@ -261,41 +261,93 @@ def ewmAndDraw():
 
 def getSql1():
     sql = '''
-        select * from topwar_ios_funplus02_adv where day > 0;
+        select * from topwar_ios_funplus02_adv_uid where day > 0;
     '''
     print(sql)
     df = execSql(sql)
     return df
 
 def getSql2():
-    sql = '''
+    sql = f'''
         SELECT
-            appsflyer_id,
+            sub.customer_user_id,
             SUM(
                 CASE
-                    WHEN event_timestamp BETWEEN install_timestamp
-                    AND install_timestamp + 1 * 24 * 3600 THEN event_revenue_usd
+                    WHEN e.event_timestamp <= sub.install_timestamp + 24 * 3600 THEN e.event_revenue_usd
                     ELSE 0
                 END
-            ) AS revenue_1_days,
+            ) as r1usd,
             SUM(
                 CASE
-                    WHEN event_timestamp BETWEEN install_timestamp
-                    AND install_timestamp + 7 * 24 * 3600 THEN event_revenue_usd
+                    WHEN e.event_timestamp <= sub.install_timestamp + 48 * 3600 THEN e.event_revenue_usd
                     ELSE 0
                 END
-            ) AS revenue_7_days
+            ) as r2usd,
+            SUM(
+                CASE
+                    WHEN e.event_timestamp <= sub.install_timestamp + 168 * 3600 THEN e.event_revenue_usd
+                    ELSE 0
+                END
+            ) as r7usd,
+            to_char(
+                to_date(sub.install_time, "yyyy-mm-dd hh:mi:ss"),
+                "yyyy-mm-dd"
+            ) as install_date
         FROM
-            ods_platform_appsflyer_events
-        where
-            app_id = 'id1479198816'
-            AND zone = 0
-            AND day > '20230401'
-            AND install_time > '2023-04-01'
-        group by
-            appsflyer_id
-        ;
+            (
+                SELECT
+                    customer_user_id,
+                    MIN(install_timestamp) as install_timestamp,
+                    MIN(install_time) as install_time
+                FROM
+                    ods_platform_appsflyer_events
+                WHERE
+                    app_id = 'id1479198816'
+                    AND zone = 0
+                    AND day > '20230401'
+                    AND customer_user_id IS NOT NULL
+                GROUP BY
+                    customer_user_id,
+                    install_timestamp,
+                    install_time
+            ) AS sub
+            JOIN ods_platform_appsflyer_events e ON sub.customer_user_id = e.customer_user_id
+        WHERE
+            day > '20230401'
+        GROUP BY
+            sub.customer_user_id,
+            sub.install_time;
     '''
+    
+    # sql = '''
+    #     SELECT
+    #         appsflyer_id,
+    #         SUM(
+    #             CASE
+    #                 WHEN event_timestamp BETWEEN install_timestamp
+    #                 AND install_timestamp + 1 * 24 * 3600 THEN event_revenue_usd
+    #                 ELSE 0
+    #             END
+    #         ) AS revenue_1_days,
+    #         SUM(
+    #             CASE
+    #                 WHEN event_timestamp BETWEEN install_timestamp
+    #                 AND install_timestamp + 7 * 24 * 3600 THEN event_revenue_usd
+    #                 ELSE 0
+    #             END
+    #         ) AS revenue_7_days
+    #     FROM
+    #         ods_platform_appsflyer_events
+    #     where
+    #         app_id = 'id1479198816'
+    #         AND zone = 0
+    #         AND day > '20230401'
+    #         AND install_time > '2023-04-01'
+    #     group by
+    #         appsflyer_id
+    #     ;
+    # '''
+    
     print(sql)
     df = execSql(sql)
     return df
@@ -305,15 +357,15 @@ def main2():
     df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
 
     df2 = getSql2()
-    df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+    df2.to_csv(getFilename('getDataFromMC2Adv_2'), index=False)
 
     df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
     df1 = df1.drop(columns=['day'])
 
-    df2 = pd.read_csv(getFilename('getDataFromMC2_2'))
+    df2 = pd.read_csv(getFilename('getDataFromMC2Adv_2'))
     df2 = df2[df2['revenue_7_days'] > 0]
 
-    df = df1.merge(df2, on='appsflyer_id',how='inner')
+    df = df1.merge(df2, on='customer_user_id',how='inner')
 
     df['facebook_7_days_revenue'] = df['revenue_7_days'] * df['facebook ads rate']
     df['googleadwords_7_days_revenue'] = df['revenue_7_days'] * df['googleadwords_int rate']
@@ -323,7 +375,7 @@ def main2():
     print(df.head())
 
     def preprocess_df1(df):
-        df = df.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='7_days_revenue')
+        df = df.melt(id_vars=['install_date','customer_user_id'], var_name='media', value_name='7_days_revenue')
         df['media'] = df['media'].map({
             'facebook_7_days_revenue': 'Facebook Ads',
             'googleadwords_7_days_revenue': 'googleadwords_int',
@@ -350,49 +402,43 @@ def main2():
 
 
 def main3():
-    df1 = getSql1()
-    df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
+    # df1 = getSql1()
+    # df1.to_csv(getFilename('getDataFromMC2AdvUid_1'), index=False)
 
-    df2 = getSql2()
-    df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+    # df2 = getSql2()
+    # df2.to_csv(getFilename('getDataFromMC2AdvUid_2'), index=False)
 
-    df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
-    df1 = df1.drop(columns=['day'])
-    df1 = df1.groupby(['install_date','appsflyer_id']).sum().reset_index()
+    df1 = pd.read_csv(getFilename('getDataFromMC2AdvUid_1'))
+    df1 = df1.drop(columns=['day','install_date'])
+    df1 = df1.groupby(['customer_user_id']).sum().reset_index()
 
-    df2 = pd.read_csv(getFilename('getDataFromMC2_2'))
+    df2 = pd.read_csv(getFilename('getDataFromMC2AdvUid_2'))
+    # df2 列改名，r1usd,r2usd,r7usd 改为 revenue_1_days,revenue_2_days,revenue_7_days
+    df2.rename(columns={'r1usd':'revenue_1_days','r2usd':'revenue_2_days','r7usd':'revenue_7_days'}, inplace=True)
+    df2 = df2.drop(columns=['revenue_2_days'])
     df2 = df2[df2['revenue_7_days'] > 0]
 
-    df = df1.merge(df2, on='appsflyer_id',how='inner')
+    df = df1.merge(df2, on='customer_user_id',how='inner')
 
-    df['bytedanceglobal_1_days_revenue'] = df['revenue_1_days'] * df['bytedanceglobal_int rate']
-    df['googleadwords_1_days_revenue'] = df['revenue_1_days'] * df['googleadwords_int rate']
-    df['facebook_1_days_revenue'] = df['revenue_1_days'] * df['facebook ads rate']
+    df['bytedanceglobal_1_days_revenue'] = df['revenue_1_days'] * df['bytedanceglobal_int_rate']
+    df['googleadwords_1_days_revenue'] = df['revenue_1_days'] * df['googleadwords_int_rate']
+    df['facebook_1_days_revenue'] = df['revenue_1_days'] * df['facebook_ads_rate']
 
-    df['facebook_7_days_revenue'] = df['revenue_7_days'] * df['facebook ads rate']
-    df['googleadwords_7_days_revenue'] = df['revenue_7_days'] * df['googleadwords_int rate']
-    df['bytedanceglobal_7_days_revenue'] = df['revenue_7_days'] * df['bytedanceglobal_int rate']
+    df['facebook_7_days_revenue'] = df['revenue_7_days'] * df['facebook_ads_rate']
+    df['googleadwords_7_days_revenue'] = df['revenue_7_days'] * df['googleadwords_int_rate']
+    df['bytedanceglobal_7_days_revenue'] = df['revenue_7_days'] * df['bytedanceglobal_int_rate']
 
-    df.drop(columns=['revenue_1_days','revenue_7_days','facebook ads rate','googleadwords_int rate','bytedanceglobal_int rate'], inplace=True)
+    df.drop(columns=['revenue_1_days','revenue_7_days','facebook_ads_rate','googleadwords_int_rate','bytedanceglobal_int_rate'], inplace=True)
 
     print(df.head())
-
-    # def preprocess_df1(df):
-    #     df = df.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='7_days_revenue')
-    #     df['media'] = df['media'].map({
-    #         'facebook_7_days_revenue': 'Facebook Ads',
-    #         'googleadwords_7_days_revenue': 'googleadwords_int',
-    #         'bytedanceglobal_7_days_revenue': 'bytedanceglobal_int'
-    #     })
-    #     return df
     
     def preprocess_df(df):
-        df_7_days = df[['install_date', 'appsflyer_id', 'facebook_7_days_revenue', 'googleadwords_7_days_revenue', 'bytedanceglobal_7_days_revenue']]
-        df_1_days = df[['install_date', 'appsflyer_id', 'facebook_1_days_revenue', 'googleadwords_1_days_revenue', 'bytedanceglobal_1_days_revenue']]
+        df_7_days = df[['install_date', 'customer_user_id', 'facebook_7_days_revenue', 'googleadwords_7_days_revenue', 'bytedanceglobal_7_days_revenue']]
+        df_1_days = df[['install_date', 'customer_user_id', 'facebook_1_days_revenue', 'googleadwords_1_days_revenue', 'bytedanceglobal_1_days_revenue']]
         # df_7_days.to_csv(getFilename('funplus02tAdvMain1_0'), index=False)
 
-        df_7_days = df_7_days.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='7_days_revenue')
-        df_1_days = df_1_days.melt(id_vars=['install_date','appsflyer_id'], var_name='media', value_name='1_days_revenue')
+        df_7_days = df_7_days.melt(id_vars=['install_date','customer_user_id'], var_name='media', value_name='7_days_revenue')
+        df_1_days = df_1_days.melt(id_vars=['install_date','customer_user_id'], var_name='media', value_name='1_days_revenue')
 
         # df_7_days.to_csv(getFilename('funplus02tAdvMain1_1'), index=False)
 
@@ -408,7 +454,7 @@ def main3():
         df_7_days['media'] = df_7_days['media'].map(media_mapping)
         df_1_days['media'] = df_1_days['media'].map(media_mapping)
         
-        df = pd.merge(df_1_days, df_7_days, on=['install_date', 'appsflyer_id', 'media'])
+        df = pd.merge(df_1_days, df_7_days, on=['install_date', 'customer_user_id', 'media'])
         # df.to_csv(getFilename('funplus02tAdvMain1'), index=False)
         return df
     # 预处理数据
@@ -433,10 +479,10 @@ def main3():
     merge_df['roi'] = merge_df['7_days_revenue'] / merge_df['cost']
 
     merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
-    merge_df.to_csv(getFilename('funplus02t3Adv'), index=False)
+    merge_df.to_csv(getFilename('funplus02t3AdvUid'), index=False)
 
 def debug():
-    df = pd.read_csv(getFilename('funplus02t3Adv'))
+    df = pd.read_csv(getFilename('funplus02t3AdvUid'))
     df = df[df['media'] == 'googleadwords_int']
     df = df[
         (df['install_date'] >= '2023-06-01') &

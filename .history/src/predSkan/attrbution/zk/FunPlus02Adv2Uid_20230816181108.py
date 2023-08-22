@@ -1,24 +1,8 @@
-# FunPlus02改进版
-# 主要针对归因时的过分配问题
-# 当一个用户被分配到多个媒体的概率超过1的时候代表这个用户被过分配了
-# 这时需要针对这个用户进行重分配
-
-# 步骤如下
-# 1、给userDf添加列，列名为attribute,默认值是[]。里面用于存储归因的媒体名，skan index，和对应的count。
-# 格式是{'media': 'media1', 'skan index': 1, 'count': 0.5},attribute列存储的是这种结构的列表。
-# 2、遍历skanDf，每行做如下处理：获取media，cv，min_valid_install_timestamp和max_valid_install_timestamp。
-# 在userDf中找到userDf.cv == skanDf.cv，并且 skanDf.max_valid_install_timestamp >= userDf.install_timestamp >= skanDf.min_valid_install_timestamp 的行。
-# 该行的attribute列的列表添加一个字典，media，skan index都取自skanDf这一行。
-# count的值是1/N，N是符合上面条件的行数。比如通过cv与时间戳过滤找到符合的行是2，则'count'值就是1/2。
-# 3、找到userDf中attribute列中count的和大于1的行，对这些行做如下处理：
-# 找到attribute列中count最小的M个元素。使得剩下的元素的count的和小于等于1。
-# 从attribute列中删除这M个元素。
-# 找到usdDf所有attribute列中包含此skan index的行。重新计算count，count为1/N，N为剩余usdDf所有attribute列中包含此skan index的行数。
-# 4、检查userDf中是否还有行的attribute列中count的和大于1，如果有重复步骤3。
-# 5、汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果。
-# 格式采用之前归因方案1的格式，即 给userDf添加列，按照mediaList中的媒体顺序，添加列，列名为mediaList中的媒体名+' count'
-# count值是从attribute列中的按照media汇总count的值。
-# 6、返回userDf
+# FunPlus02Adv uid版 不再使用af id，而是使用uid
+# 但是由于使用归因方式sql获得的数据有较大偏差，又没有时间去研究，所以暂时不用这个版本
+# 还是先采用af id的方式，然后再用af id与uid的映射表，将af id转换为uid
+# 映射部分单独做，本质上这个映射是多对多的，但是为了简化，简化成一对一的，即一个af id只对应一个uid，一个uid只对应一个af id
+# 本任务要在FunPlus02Adv2完成后调用
 
 import io
 

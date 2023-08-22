@@ -14,13 +14,6 @@ def execSql(sql):
         pd_df = reader.to_pandas()
         return pd_df
 
-# 不读取内容
-def execSql2(sql):
-    o = ODPS(accessId, secretAccessKey, defaultProject,
-            endpoint=endPoint)
-    o.execute_sql(sql)
-    return
-
 def execSqlBj(sql):
     o = ODPS(accessId, secretAccessKey, bjProject,
             endpoint=bjEndPoint)

@@ -350,11 +350,11 @@ def main2():
 
 
 def main3():
-    df1 = getSql1()
-    df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
+    # df1 = getSql1()
+    # df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
 
-    df2 = getSql2()
-    df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+    # df2 = getSql2()
+    # df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
 
     df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
     df1 = df1.drop(columns=['day'])
@@ -456,7 +456,7 @@ if __name__ == '__main__':
 
     # rollAndDraw2()
 
-    main3()
+    # main3()
 
     debug()
 

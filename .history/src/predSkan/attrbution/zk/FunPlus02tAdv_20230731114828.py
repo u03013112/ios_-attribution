@@ -350,11 +350,11 @@ def main2():
 
 
 def main3():
-    df1 = getSql1()
-    df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
+    # df1 = getSql1()
+    # df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
 
-    df2 = getSql2()
-    df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+    # df2 = getSql2()
+    # df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
 
     df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
     df1 = df1.drop(columns=['day'])
@@ -435,16 +435,6 @@ def main3():
     merge_df = merge_df.sort_values(by=['media','install_date']).reset_index(drop=True)
     merge_df.to_csv(getFilename('funplus02t3Adv'), index=False)
 
-def debug():
-    df = pd.read_csv(getFilename('funplus02t3Adv'))
-    df = df[df['media'] == 'googleadwords_int']
-    df = df[
-        (df['install_date'] >= '2023-06-01') &
-        (df['install_date'] <= '2023-06-30')
-    ]
-    print(df.head())
-    print(df['1_days_revenue'].sum()/df['cost'].sum())
-
 if __name__ == '__main__':
     
     # df = getAllRevenue()
@@ -457,7 +447,5 @@ if __name__ == '__main__':
     # rollAndDraw2()
 
     main3()
-
-    debug()
 
 

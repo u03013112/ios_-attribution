@@ -261,7 +261,7 @@ def ewmAndDraw():
 
 def getSql1():
     sql = '''
-        select * from topwar_ios_funplus02_adv where day > 0;
+        select * from topwar_ios_funplus02_adv_uid where day > 0;
     '''
     print(sql)
     df = execSql(sql)
@@ -351,12 +351,12 @@ def main2():
 
 def main3():
     df1 = getSql1()
-    df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
+    df1.to_csv(getFilename('getDataFromMC2AdvUid_1'), index=False)
 
-    df2 = getSql2()
-    df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
+    # df2 = getSql2()
+    # df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
 
-    df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
+    df1 = pd.read_csv(getFilename('getDataFromMC2AdvUid_1'))
     df1 = df1.drop(columns=['day'])
     df1 = df1.groupby(['install_date','appsflyer_id']).sum().reset_index()
 
@@ -456,7 +456,7 @@ if __name__ == '__main__':
 
     # rollAndDraw2()
 
-    main3()
+    # main3()
 
     debug()
 

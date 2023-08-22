@@ -456,7 +456,7 @@ if __name__ == '__main__':
 
     # rollAndDraw2()
 
-    main3()
+    # main3()
 
     debug()
 

@@ -261,41 +261,93 @@ def ewmAndDraw():
 
 def getSql1():
     sql = '''
-        select * from topwar_ios_funplus02_adv where day > 0;
+        select * from topwar_ios_funplus02_adv_uid where day > 0;
     '''
     print(sql)
     df = execSql(sql)
     return df
 
 def getSql2():
-    sql = '''
+    sql = f'''
         SELECT
-            appsflyer_id,
+            sub.customer_user_id,
             SUM(
                 CASE
-                    WHEN event_timestamp BETWEEN install_timestamp
-                    AND install_timestamp + 1 * 24 * 3600 THEN event_revenue_usd
+                    WHEN e.event_timestamp <= sub.install_timestamp + 24 * 3600 THEN e.event_revenue_usd
                     ELSE 0
                 END
-            ) AS revenue_1_days,
+            ) as r1usd,
             SUM(
                 CASE
-                    WHEN event_timestamp BETWEEN install_timestamp
-                    AND install_timestamp + 7 * 24 * 3600 THEN event_revenue_usd
+                    WHEN e.event_timestamp <= sub.install_timestamp + 48 * 3600 THEN e.event_revenue_usd
                     ELSE 0
                 END
-            ) AS revenue_7_days
+            ) as r2usd,
+            SUM(
+                CASE
+                    WHEN e.event_timestamp <= sub.install_timestamp + 168 * 3600 THEN e.event_revenue_usd
+                    ELSE 0
+                END
+            ) as r7usd,
+            to_char(
+                to_date(sub.install_time, "yyyy-mm-dd hh:mi:ss"),
+                "yyyy-mm-dd"
+            ) as install_date
         FROM
-            ods_platform_appsflyer_events
-        where
-            app_id = 'id1479198816'
-            AND zone = 0
+            (
+                SELECT
+                    customer_user_id,
+                    MIN(install_timestamp) as install_timestamp,
+                    MIN(install_time) as install_time
+                FROM
+                    ods_platform_appsflyer_events
+                WHERE
+                    app_id = 'id1479198816'
+                    AND zone = 0
+                    AND day > '20230401'
+                    AND customer_user_id IS NOT NULL
+                GROUP BY
+                    customer_user_id,
+                    install_timestamp,
+                    install_time
+            ) AS sub
+            JOIN ods_platform_appsflyer_events e ON sub.customer_user_id = e.customer_user_id
+        WHERE
             AND day > '20230401'
-            AND install_time > '2023-04-01'
-        group by
-            appsflyer_id
-        ;
+        GROUP BY
+            sub.customer_user_id,
+            sub.install_time;
     '''
+    
+    # sql = '''
+    #     SELECT
+    #         appsflyer_id,
+    #         SUM(
+    #             CASE
+    #                 WHEN event_timestamp BETWEEN install_timestamp
+    #                 AND install_timestamp + 1 * 24 * 3600 THEN event_revenue_usd
+    #                 ELSE 0
+    #             END
+    #         ) AS revenue_1_days,
+    #         SUM(
+    #             CASE
+    #                 WHEN event_timestamp BETWEEN install_timestamp
+    #                 AND install_timestamp + 7 * 24 * 3600 THEN event_revenue_usd
+    #                 ELSE 0
+    #             END
+    #         ) AS revenue_7_days
+    #     FROM
+    #         ods_platform_appsflyer_events
+    #     where
+    #         app_id = 'id1479198816'
+    #         AND zone = 0
+    #         AND day > '20230401'
+    #         AND install_time > '2023-04-01'
+    #     group by
+    #         appsflyer_id
+    #     ;
+    # '''
+    
     print(sql)
     df = execSql(sql)
     return df
@@ -351,12 +403,12 @@ def main2():
 
 def main3():
     df1 = getSql1()
-    df1.to_csv(getFilename('getDataFromMC2Adv_1'), index=False)
+    df1.to_csv(getFilename('getDataFromMC2AdvUid_1'), index=False)
 
     df2 = getSql2()
     df2.to_csv(getFilename('getDataFromMC2_2'), index=False)
 
-    df1 = pd.read_csv(getFilename('getDataFromMC2Adv_1'))
+    df1 = pd.read_csv(getFilename('getDataFromMC2AdvUid_1'))
     df1 = df1.drop(columns=['day'])
     df1 = df1.groupby(['install_date','appsflyer_id']).sum().reset_index()
 
@@ -456,7 +508,7 @@ if __name__ == '__main__':
 
     # rollAndDraw2()
 
-    main3()
+    # main3()
 
     debug()
 

@@ -1,4 +1,4 @@
-# FunPlus02改进版
+# FunPlus02Adv uid版 不再使用af id，而是使用uid
 # 主要针对归因时的过分配问题
 # 当一个用户被分配到多个媒体的概率超过1的时候代表这个用户被过分配了
 # 这时需要针对这个用户进行重分配
@@ -206,44 +206,59 @@ def skanAddGeo(skanDf,campaignGeo2Df):
     return skanDf
     
 def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
-    # 将minValidInstallTimestamp和maxValidInstallTimestamp转换为字符串
-    minValidInstallTimestampStr = datetime.fromtimestamp(minValidInstallTimestamp).strftime('%Y-%m-%d %H:%M:%S')
-    maxValidInstallTimestampStr = datetime.fromtimestamp(maxValidInstallTimestamp).strftime('%Y-%m-%d %H:%M:%S')
-    
     # 放宽条件，将minValidInstallTimestampStr和maxValidInstallTimestampStr分别向前向后推一天
     minValidInstallTimestamp -= 24 * 3600
     maxValidInstallTimestamp += 24 * 3600
-    # 另外minValidInstallTimestamp和maxValidInstallTimestamp转化成格式为'20230301'
-    minValidInstallTimestampDayStr = datetime.fromtimestamp(minValidInstallTimestamp).strftime('%Y%m%d')
-    maxValidInstallTimestampDayStr = datetime.fromtimestamp(maxValidInstallTimestamp).strftime('%Y%m%d')
-
+    
     # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
     sql = f'''
         SELECT
-            appsflyer_id,
+            game_uid as customer_user_id,
             install_timestamp,
-            SUM(CASE WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN event_revenue_usd ELSE 0 END) as r1usd,
-            SUM(CASE WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN event_revenue_usd ELSE 0 END) as r2usd,
-            SUM(CASE WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN event_revenue_usd ELSE 0 END) as r7usd,
-            to_char(
-                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r1usd,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r2usd,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r7usd,
+            TO_CHAR(
+                TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
                 "yyyy-mm-dd"
             ) as install_date,
-            country_code
+            country as country_code
         FROM
-            ods_platform_appsflyer_events
+            rg_bi.ads_topwar_ios_purchase_adv
         WHERE
-            app_id = 'id1479198816'
-            AND zone = 0
-            AND day BETWEEN '{minValidInstallTimestampDayStr}' AND '{maxValidInstallTimestampDayStr}'
-            AND install_time BETWEEN '{minValidInstallTimestampStr}' AND '{maxValidInstallTimestampStr}'
+            install_timestamp BETWEEN '{minValidInstallTimestamp}'
+            AND '{maxValidInstallTimestamp}'
+            AND game_uid IS NOT NULL
         GROUP BY
-            appsflyer_id,
+            game_uid,
             install_timestamp,
-            install_date,
-            country_code
-        ;
+            country;
     '''
+
     print(sql)
     df = execSql(sql)
     return df
@@ -312,22 +327,31 @@ def meanAttribution(userDf, skanDf):
     # 将country_code_list列的空值填充为空字符串
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
 
+    # userDf['install_timestamp'] 原本是string类型，转换为int类型
+    userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
+
     # 对userDf进行汇总
     userDf['install_timestamp'] = userDf['install_timestamp'] // 600
     userDf['count'] = 1
-    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'appsflyer_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
+    # userDf install_date列的空值填充为空字符串
+    userDf['install_date'] = userDf['install_date'].fillna('')
+    print('before:',userDf.head(10))
+    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date'], as_index=False).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index(drop = False)
+    print('after:',userDf.head(10))
+
     userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
 
     skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'] // 600
     skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'] // 600
     skanDf['count'] = 1
-    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index()
+    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index(drop = False)
+    
 
     # 待分配的skan条目的索引
     pending_skan_indices = skanDf.index.tolist()
 
     N = 3 # 最多进行3次分配
-    for i in range(N):
+    for i in range(N):  
         print(f"开始第 {i + 1} 次分配")
 
         new_pending_skan_indices = []
@@ -340,19 +364,18 @@ def meanAttribution(userDf, skanDf):
             cv = item['cv']
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
-
+            
             if i == N-2:
                 min_valid_install_timestamp -= 24*3600//600
-
             if i == N-1:
                 # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
                 item_country_code_list = ''
                 min_valid_install_timestamp -= 48*3600//600
                 # print('最后一次分配，不考虑国家，且时间范围向前推一天')
-                print(item)
+                # print(item)
             else:
                 item_country_code_list = item['country_code_list']
-                
+
             if cv < 0:
                 # print('cv is null')
                 if item_country_code_list == '':
@@ -403,7 +426,7 @@ def meanAttribution(userDf, skanDf):
 
             # 找出需要重新分配的行
             rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
-
+            print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
             # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
             for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
                 attribute_list = row['attribute']
@@ -435,9 +458,9 @@ def meanAttribution(userDf, skanDf):
         print('待分配的skan数量：')
         print(pendingDf.groupby('media').size())
 
-    # 拆分appsflyer_id
-    userDf['appsflyer_id'] = userDf['appsflyer_id'].apply(lambda x: x.split('|'))
-    userDf = userDf.explode('appsflyer_id')
+    # 拆分customer_user_id
+    userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
+    userDf = userDf.explode('customer_user_id')
 
     for media in mediaList:
         userDf[media + ' rate'] = userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x if item['media'] == media]))
@@ -450,6 +473,7 @@ def main():
     init()
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr)
+    skanDf = skanDf[skanDf['media'].isin(mediaList)]
     # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
     skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
     skanDf['cv'] = skanDf['cv'].fillna(-1)
@@ -472,7 +496,6 @@ def main():
     afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
     userDf = addCv(afDf,getCvMap())
     # 进行归因
-    skanDf = skanDf[skanDf['media'].isin(mediaList)]
     attDf = meanAttribution(userDf,skanDf)
     print('attDf (head 5):')
     print(attDf.head(5))
@@ -483,17 +506,19 @@ from odps.models import Schema, Column, Partition
 def createTable():
     if 'o' in globals():
         columns = [
-            Column(name='appsflyer_id', type='string', comment='AF ID'),
+            Column(name='customer_user_id', type='string', comment='from ods_platform_appsflyer_events.customer_user_id'),
             Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
         ]
         for media in mediaList:
+            # media里面有空格，将空格替换为下划线
+            media = media.replace(' ','_')
             columns.append(Column(name='%s rate'%(media), type='double', comment='%s媒体归因值概率'%(media)))
 
         partitions = [
             Partition(name='day', type='string', comment='postback time,like 20221018')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_adv', schema, if_not_exists=True)
+        table = o.create_table('topwar_ios_funplus02_adv_uid', schema, if_not_exists=True)
         return table
     else:
         print('createTable failed, o is not defined')
@@ -502,7 +527,7 @@ def writeTable(df,dayStr):
     print('try to write table:')
     print(df.head(5))
     if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv')
+        t = o.get_table('topwar_ios_funplus02_adv_uid')
         t.delete_partition('day=%s'%(dayStr), if_exists=True)
         with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
             writer.write(df)
@@ -526,10 +551,15 @@ attDf = attDf[attDf['total rate'] > 0]
 # # 打印修改后的行（前5行）
 # print(attDf.loc[attDf['total count'] > 1,['%s count'%(media) for media in mediaList]].head(5))
 
-attDf = attDf[['appsflyer_id','install_date'] + ['%s rate'%(media) for media in mediaList]]
+attDf = attDf[['customer_user_id','install_date'] + ['%s rate'%(media) for media in mediaList]]
 
 # attDf 列改名 所有列名改为 小写
 attDf.columns = [col.lower() for col in attDf.columns]
+# attDf 列改名 
+# 'facebook ads rate' -> 'facebook_ads_rate'	
+# 'googleadwords_int rate' -> 'googleadwords_int_rate'	
+# 'bytedanceglobal_int rate' - > 'bytedanceglobal_int_rate'
+attDf.columns = [col.replace(' ','_') for col in attDf.columns]
 
 createTable()
 writeTable(attDf,dayStr)
