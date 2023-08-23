@@ -443,9 +443,9 @@ def meanAttribution(userDf, skanDf):
                 attribute_list.remove(item)
                 new_pending_skan_indices.append(item['skan index'])
 
-            pending_skan_indices = new_pending_skan_indices
-            # pending_skan_indices 要进行排重
-            pending_skan_indices = list(set(pending_skan_indices))
+        pending_skan_indices = new_pending_skan_indices
+        # pending_skan_indices 要进行排重
+        pending_skan_indices = list(set(pending_skan_indices))
 
         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
         pendingDf = skanDf.loc[pending_skan_indices]
