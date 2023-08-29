@@ -1,24 +1,8 @@
-# FunPlus02Adv uid版 不再使用af id，而是使用uid
-# 主要针对归因时的过分配问题
-# 当一个用户被分配到多个媒体的概率超过1的时候代表这个用户被过分配了
-# 这时需要针对这个用户进行重分配
-
-# 步骤如下
-# 1、给userDf添加列，列名为attribute,默认值是[]。里面用于存储归因的媒体名，skan index，和对应的count。
-# 格式是{'media': 'media1', 'skan index': 1, 'count': 0.5},attribute列存储的是这种结构的列表。
-# 2、遍历skanDf，每行做如下处理：获取media，cv，min_valid_install_timestamp和max_valid_install_timestamp。
-# 在userDf中找到userDf.cv == skanDf.cv，并且 skanDf.max_valid_install_timestamp >= userDf.install_timestamp >= skanDf.min_valid_install_timestamp 的行。
-# 该行的attribute列的列表添加一个字典，media，skan index都取自skanDf这一行。
-# count的值是1/N，N是符合上面条件的行数。比如通过cv与时间戳过滤找到符合的行是2，则'count'值就是1/2。
-# 3、找到userDf中attribute列中count的和大于1的行，对这些行做如下处理：
-# 找到attribute列中count最小的M个元素。使得剩下的元素的count的和小于等于1。
-# 从attribute列中删除这M个元素。
-# 找到usdDf所有attribute列中包含此skan index的行。重新计算count，count为1/N，N为剩余usdDf所有attribute列中包含此skan index的行数。
-# 4、检查userDf中是否还有行的attribute列中count的和大于1，如果有重复步骤3。
-# 5、汇总userDf中attribute列中的media，计算每个media的count的和，作为最终的归因结果。
-# 格式采用之前归因方案1的格式，即 给userDf添加列，按照mediaList中的媒体顺序，添加列，列名为mediaList中的媒体名+' count'
-# count值是从attribute列中的按照media汇总count的值。
-# 6、返回userDf
+# FunPlus02Adv uid版修改，尝试一次处理多天
+# 处理多天的目的是解决跨天的过分配问题
+# 与之前一次处理1天的区别是除了给出dayStr作为参数，还要给出days作为参数，days是一个整数，表示要处理多少天的数据
+# 代码同目前至少要一次获取5天的数据，因为skan的评估窗口是3天，再放宽2天的时间，共计5天。
+# 为了解决跨天的数据库写入，用安装日期作为分区，这样就可以算完一天整个覆盖写入更新。
 
 import io
 
@@ -28,13 +12,15 @@ from tqdm import tqdm
 
 from datetime import datetime, timedelta
 
-# 参数dayStr，是当前的日期，即${yyyymmdd-1}，格式为'20230301'
-# 生成安装日期是dayStr - 7的各媒体7日回收金额
+# 参数dayStr，是业务日期，格式为'20210404'
+# 参数days，是要处理多少天的数据，是一个整数，至少要大于等于5
 
 # 为了兼容本地调试，要在所有代码钱调用此方法
 def init():
     global execSql
     global dayStr
+    global days
+
     if 'o' in globals():
         print('this is online version')
 
@@ -48,7 +34,7 @@ def init():
 
         # 线上版本是有args这个全局变量的，无需再判断
         dayStr = args['dayStr']
-
+        days = args['days']
     else:
         print('this is local version')
         import sys
@@ -57,9 +43,13 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20230404'
-    
+        dayStr = '20230504'
+        days = '10'
+
+    # 如果days不是整数，转成整数
+    days = int(days)
     print('dayStr:', dayStr)
+    print('days:', days)
 
 # 只针对下面媒体进行归因，其他媒体不管
 mediaList = [
@@ -69,7 +59,9 @@ mediaList = [
     'other'
 ]
 
-def getSKANDataFromMC(dayStr):
+def getSKANDataFromMC(dayStr, days):
+    dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days)).strftime('%Y%m%d')
+
     sql = f'''
         SELECT
             ad_network_campaign_id as campaign_id,
@@ -79,7 +71,7 @@ def getSKANDataFromMC(dayStr):
         FROM 
             ods_platform_appsflyer_skad_details
         WHERE
-            day = '{dayStr}'
+            day between '{dayBeforeStr}' and '{dayStr}'
             AND app_id = 'id1479198816'
             AND event_name in (
                 'af_skad_install',
@@ -92,33 +84,6 @@ def getSKANDataFromMC(dayStr):
     return df
 
 # 计算合法的激活时间范围
-# def skanAddValidInstallDate(skanDf):
-#     # 为时间字符串添加UTC时区标识
-#     skanDf['postback_timestamp'] = skanDf['postback_timestamp'] + '+00:00'
-#     # 将带有UTC时区标识的时间字符串转换为datetime
-#     skanDf['postback_timestamp'] = pd.to_datetime(skanDf['postback_timestamp'], utc=True)
-
-#     # 将cv转换为整数类型
-#     skanDf['cv'] = skanDf['cv'].astype(int)
-
-#     # 计算min_valid_install_timestamp和max_valid_install_timestamp
-#     # cv 小于 0 的 是 null 值，当做付费用户匹配，范围稍微大一点
-#     skanDf.loc[skanDf['cv'] < 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=72)
-#     skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=48)
-#     skanDf.loc[skanDf['cv'] > 0, 'min_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=72)
-
-#     skanDf.loc[:, 'max_valid_install_timestamp'] = skanDf['postback_timestamp'] - pd.Timedelta(hours=24)
-#     print(skanDf.head())
-#     # 打印skanDf所有列的数据类型
-#     print(skanDf.dtypes)
-#     # 将时间戳转换为秒
-#     # skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].view(np.int64) // 10 ** 9
-#     # skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'].view(np.int64) // 10 ** 9
-    
-#     skanDf['min_valid_install_timestamp'] = skanDf['min_valid_install_timestamp'].astype('int64') // 10 ** 9
-#     skanDf['max_valid_install_timestamp'] = skanDf['max_valid_install_timestamp'].astype('int64') // 10 ** 9
-#     return skanDf
-
 def skanAddValidInstallDate(skanDf):
     # 为时间字符串添加UTC时区标识
     skanDf['postback_timestamp'] = skanDf['postback_timestamp'] + '+00:00'
@@ -241,10 +206,6 @@ def skanAddGeo(skanDf,campaignGeo2Df):
     return skanDf
     
 def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
-    # 放宽条件，将minValidInstallTimestampStr和maxValidInstallTimestampStr分别向前向后推一天
-    # minValidInstallTimestamp -= 24 * 3600
-    # maxValidInstallTimestamp += 24 * 3600
-    
     # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
     sql = f'''
         SELECT
@@ -365,7 +326,10 @@ def meanAttribution(userDf, skanDf):
     # userDf['install_timestamp'] 原本是string类型，转换为int类型
     userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
 
-    S = 3600
+    # 将时间戳进行近似，每隔S秒为一个区间
+    # S = 600
+    # 10分钟运行还是太慢了
+    S = 60 * 60
 
     # 对userDf进行汇总
     userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
@@ -452,8 +416,6 @@ def meanAttribution(userDf, skanDf):
 
             if total_matching_count > 0:
                 rate = item['count'] / total_matching_count
-                if '7537985194798' in matching_rows['customer_user_id'].values:
-                    print(f"匹配到的行里拥有customer_user_id == ‘7537985194798’的行，rate = {rate}")
                 userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'media': media, 'skan index': index, 'rate': rate}])
             else:
                 new_pending_skan_indices.append(index)
@@ -485,6 +447,7 @@ def meanAttribution(userDf, skanDf):
                 if accumulated_rate > 1:
                     removed_skan_indices.add(item['skan index'])
 
+        print(f"需要移除的skan index数量：{len(removed_skan_indices)}")
         # 在userDf中删除涉及到需要移除的skan index的归因
         userDf['attribute'] = userDf['attribute'].apply(lambda x: [item for item in x if item['skan index'] not in removed_skan_indices])
 
@@ -614,22 +577,26 @@ def meanAttributionFast(userDf, skanDf):
         grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
         rows_to_redistribute = userDf[userDf.index.isin(grouped_attributeDf[grouped_attributeDf > 1].index)]
 
-        sorted_rows_to_redistribute = attributeDf[attributeDf['user index'].isin(rows_to_redistribute.index)].sort_values(['user index', 'rate'], ascending=[True, False])
-        sorted_rows_to_redistribute['cumulative_rate'] = sorted_rows_to_redistribute.groupby('user index')['rate'].cumsum()
-
-        # 找出需要移除的行
-        rows_to_remove = sorted_rows_to_redistribute[sorted_rows_to_redistribute['cumulative_rate'] > 1]
-
         # 记录需要移除的skan index
-        removed_skan_indices = set(rows_to_remove['skan index'])
+        removed_skan_indices = set()
 
-        # 从attributeDf中移除这些行
+        # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
+        for index, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
+            attribute_list = attributeDf[attributeDf['user index'] == index]
+            attribute_list_sorted = attribute_list.sort_values('rate', ascending=False)
+
+            accumulated_rate = 0
+
+            for _, item in attribute_list_sorted.iterrows():
+                accumulated_rate += item['rate']
+                if accumulated_rate > 1:
+                    removed_skan_indices.add(item['skan index'])
+
+        # 打印attributeDf中的行数中不同skan index的数量
         attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
-        print('移除过分配的skan：', len(removed_skan_indices),'条')
-
+        
         # 更新待分配的skan索引列表
         pending_skan_indices = list(set(new_pending_skan_indices).union(removed_skan_indices))
-
         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
         
         # 更新media rate
@@ -659,44 +626,41 @@ def meanAttributionFast(userDf, skanDf):
 
     return userDf
 
+
+
 def main():
     init()
-
-    # # 1、获取skan数据
-    # skanDf = getSKANDataFromMC(dayStr)
-    # # 将skanDf中media不属于mediaList的media改为other
-    # skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
-    # # skanDf = skanDf[skanDf['media'].isin(mediaList)]
-    # # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
-    # skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
-    # skanDf['cv'] = skanDf['cv'].fillna(-1)
-    # skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
-    # # 2、计算合法的激活时间范围
-    # skanDf = skanAddValidInstallDate(skanDf)
-    # # 3、获取广告信息
-    # minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
-    # maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    # minValidInstallTimestamp -= 72*3600
-    # print('minValidInstallTimestamp:',minValidInstallTimestamp)
-    # print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
-    # campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
-    # campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
-    # # 4、将skan数据和广告信息合并，获得skan中的国家信息
-    # skanDf = skanAddGeo(skanDf,campaignGeo2Df)
-    # print('skanDf (head 5):')
-    # print(skanDf.head(5))
-    # # 5、获取af数据
-    # afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
-    # userDf = addCv(afDf,getCvMap())
-
-    userDf = pd.read_csv('/src/data/zk/userDf.csv',dtype={'customer_user_id':str})
-    skanDf = pd.read_csv('/src/data/zk/skanDf.csv')
+    # 1、获取skan数据
+    skanDf = getSKANDataFromMC(dayStr,days)
+    # 将skanDf中media不属于mediaList的media改为other
+    skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
+    # skanDf = skanDf[skanDf['media'].isin(mediaList)]
+    # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
+    skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
+    skanDf['cv'] = skanDf['cv'].fillna(-1)
+    skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+    # 2、计算合法的激活时间范围
+    skanDf = skanAddValidInstallDate(skanDf)
+    # 3、获取广告信息
+    minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
+    maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
+    minValidInstallTimestamp -= 72*3600
+    print('minValidInstallTimestamp:',minValidInstallTimestamp)
+    print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
+    campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
+    campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
+    # 4、将skan数据和广告信息合并，获得skan中的国家信息
+    skanDf = skanAddGeo(skanDf,campaignGeo2Df)
+    print('skanDf (head 5):')
+    print(skanDf.head(5))
+    # 5、获取af数据
+    afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    userDf = addCv(afDf,getCvMap())
 
     # 进行归因
-    # attDf = meanAttribution(userDf,skanDf)
     attDf = meanAttributionFast(userDf,skanDf)
-    print('attDf (head 5):')
-    print(attDf.head(5))
+    # print('attDf (head 5):')
+    # print(attDf.head(5))
     return attDf
 
 # 下面部分就只有线上环境可以用了
@@ -710,13 +674,13 @@ def createTable():
         for media in mediaList:
             # media里面有空格，将空格替换为下划线
             media = media.replace(' ','_')
-            columns.append(Column(name='%s rate'%(media), type='double', comment='%s媒体归因值概率'%(media)))
+            columns.append(Column(name='%s_rate'%(media), type='double', comment='%s媒体归因值概率'%(media)))
 
         partitions = [
             Partition(name='day', type='string', comment='postback time,like 20221018')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_adv_uid', schema, if_not_exists=True)
+        table = o.create_table('topwar_ios_funplus02_adv_uid_mutidays', schema, if_not_exists=True)
         return table
     else:
         print('createTable failed, o is not defined')
@@ -725,7 +689,7 @@ def writeTable(df,dayStr):
     print('try to write table:')
     print(df.head(5))
     if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv_uid')
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays')
         t.delete_partition('day=%s'%(dayStr), if_exists=True)
         with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
             writer.write(df)
@@ -738,9 +702,10 @@ attDf['total rate'] = attDf[['%s rate'%(media) for media in mediaList]].sum(axis
 attDf = attDf[attDf['total rate'] > 0]
 
 # install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
-# attDf['install_date'] = attDf['install_timestamp'].apply(lambda x: datetime.fromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
 attDf['install_date'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
-attDf = attDf[['customer_user_id','install_date'] + ['%s rate'%(media) for media in mediaList]]
+# day是将install_timestamp转换为日期，格式为20230531
+attDf['day'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
+attDf = attDf[['customer_user_id','install_date'] + ['%s rate'%(media) for media in mediaList] + ['day']]
 
 # attDf 列改名 所有列名改为 小写
 attDf.columns = [col.lower() for col in attDf.columns]
@@ -750,5 +715,23 @@ attDf.columns = [col.lower() for col in attDf.columns]
 # 'bytedanceglobal_int rate' - > 'bytedanceglobal_int_rate'
 attDf.columns = [col.replace(' ','_') for col in attDf.columns]
 
+# print('try to write table:')
+# print(attDf.head(5))
+
 createTable()
-writeTable(attDf,dayStr)
+
+# 这里计算所有可以更新的安装日期，简单的说就是获取最小skan的前一天，在至少获取5天的前提下，这一天是完整的
+dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days+1)).strftime('%Y%m%d')
+print('写入开始日期:',dayBeforeStr)
+attDf = attDf[attDf['day'] >= dayBeforeStr]
+# 要按照day分区，所以要先按照day分组，然后再写入表
+# 先找到所有的day，升序排列
+days = attDf['day'].unique()
+days.sort()
+for dayStr in days:
+    # 找到dayStr对应的数据
+    dayDf = attDf[attDf['day'] == dayStr]
+    # 将day列丢掉
+    dayDf = dayDf.drop(columns=['day'])
+    # 写入表
+    writeTable(dayDf,dayStr)

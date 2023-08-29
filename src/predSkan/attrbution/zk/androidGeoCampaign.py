@@ -444,130 +444,186 @@ def userGroupby(userDf):
     return userGroupbyDf
 
 from tqdm import tqdm
+# def meanAttribution(userDf, skanDf):
+#     campaignList = getChooseCampaignList()
+#     for campaignId in campaignList:
+#         userDf['%s rate'%(campaignId)] = 0
+
+#     # 将country_code_list列的空值填充为空字符串
+#     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+#     userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
+
+#     # 待分配的skan条目的索引
+#     pending_skan_indices = skanDf.index.tolist()
+
+#     N = 3 # 最多进行3次分配
+#     for i in range(N):  
+#         print(f"开始第 {i + 1} 次分配")
+
+#         new_pending_skan_indices = []
+
+#         # 使用过滤条件选择要处理的skanDf行
+#         skanDf_to_process = skanDf.loc[pending_skan_indices]
+#         print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
+#         for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
+#             campaignId = item['campaign_id']
+#             cv = item['cv']
+#             min_valid_install_timestamp = item['min_valid_install_timestamp']
+#             max_valid_install_timestamp = item['max_valid_install_timestamp']
+#             # print('min_valid_install_timestamp',min_valid_install_timestamp)
+#             # print('max_valid_install_timestamp',max_valid_install_timestamp)
+
+#             if i == N-2:
+#                 min_valid_install_timestamp -= 24*3600
+#             if i == N-1:
+#                 # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
+#                 item_country_code_list = ''
+#                 min_valid_install_timestamp -= 48*3600
+#                 # print('最后一次分配，不考虑国家，且时间范围向前推一天')
+#                 # print(item)
+#             else:
+#                 item_country_code_list = item['country_code_list']
+
+#             if cv < 0:
+#                 # print('cv is null')
+#                 if item_country_code_list == '':
+#                     condition = (
+#                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+#                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+#                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+#                     )
+#                 else:
+#                     country_code_list = item_country_code_list.split('|')
+#                     condition = (
+#                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+#                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+#                         (userDf['country_code'].isin(country_code_list)) &
+#                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+#                     )
+#             else:
+#                 # 先检查item_country_code_list是否为空
+#                 if item_country_code_list == '':
+#                     condition = (
+#                         (userDf['cv'] == cv) &
+#                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+#                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+#                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+#                     )
+#                 else:
+#                     country_code_list = item_country_code_list.split('|')
+#                     condition = (
+#                         (userDf['cv'] == cv) &
+#                         (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+#                         (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+#                         (userDf['country_code'].isin(country_code_list)) &
+#                         (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
+#                     )
+
+#             matching_rows = userDf[condition]
+#             total_matching_count = matching_rows['user_count'].sum()
+
+#             if total_matching_count > 0:
+#                 rate = item['user_count'] / total_matching_count
+#                 userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'campaignId': campaignId, 'skan index': index, 'rate': rate}])
+#             else:
+#                 new_pending_skan_indices.append(index)
+#                 print(f"没有匹配到用户",item)
+
+#         # 找出需要重新分配的行
+#         rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
+#         print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
+#         # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
+#         for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
+#             attribute_list = row['attribute']
+#             total_rate = sum([item['rate'] for item in attribute_list])
+#             max_rate_to_remove = total_rate - 1
+
+#             attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'])
+#             removed_items = []
+#             removed_rate = 0
+
+#             for item in attribute_list_sorted:
+#                 if removed_rate + item['rate'] <= max_rate_to_remove:
+#                     removed_rate += item['rate']
+#                     removed_items.append(item)
+#                 else:
+#                     break
+
+#             for item in removed_items:
+#                 attribute_list.remove(item)
+#                 new_pending_skan_indices.append(item['skan index'])
+
+#         pending_skan_indices = new_pending_skan_indices
+#         # pending_skan_indices 要进行排重
+#         pending_skan_indices = list(set(pending_skan_indices))
+
+#         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
+#         pendingDf = skanDf.loc[pending_skan_indices]
+        
+#         print('待分配的skan数量：')
+#         print(pendingDf.groupby('campaign_id').size())
+
+#     for campaignId in campaignList:
+#         userDf[campaignId + ' rate'] = userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x if item['campaignId'] == campaignId]))
+
+#     userDf = userDf.drop(columns=['attribute'])
+#     return userDf
+
 def meanAttribution(userDf, skanDf):
     campaignList = getChooseCampaignList()
     for campaignId in campaignList:
-        userDf['%s rate'%(campaignId)] = 0
+        userDf['%s count'%(campaignId)] = 0
+
+    unmatched_rows = 0
+    unmatched_user_count = 0
 
     # 将country_code_list列的空值填充为空字符串
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
-    userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
 
-    # 待分配的skan条目的索引
-    pending_skan_indices = skanDf.index.tolist()
-
-    N = 3 # 最多进行3次分配
-    for i in range(N):  
-        print(f"开始第 {i + 1} 次分配")
-
-        new_pending_skan_indices = []
-
-        # 使用过滤条件选择要处理的skanDf行
-        skanDf_to_process = skanDf.loc[pending_skan_indices]
-        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
-        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
-            campaignId = item['campaign_id']
-            cv = item['cv']
-            min_valid_install_timestamp = item['min_valid_install_timestamp']
-            max_valid_install_timestamp = item['max_valid_install_timestamp']
-            # print('min_valid_install_timestamp',min_valid_install_timestamp)
-            # print('max_valid_install_timestamp',max_valid_install_timestamp)
-
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600
-            if i == N-1:
-                # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
-                item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600
-                # print('最后一次分配，不考虑国家，且时间范围向前推一天')
-                # print(item)
-            else:
-                item_country_code_list = item['country_code_list']
-
-            if cv < 0:
-                # print('cv is null')
-                if item_country_code_list == '':
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-                else:
-                    country_code_list = item_country_code_list.split('|')
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-            else:
-                # 先检查item_country_code_list是否为空
-                if item_country_code_list == '':
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-                else:
-                    country_code_list = item_country_code_list.split('|')
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) &
-                        (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 1))
-                    )
-
-            matching_rows = userDf[condition]
-            total_matching_count = matching_rows['user_count'].sum()
-
-            if total_matching_count > 0:
-                rate = item['user_count'] / total_matching_count
-                userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'campaignId': campaignId, 'skan index': index, 'rate': rate}])
-            else:
-                new_pending_skan_indices.append(index)
-                print(f"没有匹配到用户",item)
-
-        # 找出需要重新分配的行
-        rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
-        print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
-        # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
-        for _, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
-            attribute_list = row['attribute']
-            total_rate = sum([item['rate'] for item in attribute_list])
-            max_rate_to_remove = total_rate - 1
-
-            attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'])
-            removed_items = []
-            removed_rate = 0
-
-            for item in attribute_list_sorted:
-                if removed_rate + item['rate'] <= max_rate_to_remove:
-                    removed_rate += item['rate']
-                    removed_items.append(item)
-                else:
-                    break
-
-            for item in removed_items:
-                attribute_list.remove(item)
-                new_pending_skan_indices.append(item['skan index'])
-
-        pending_skan_indices = new_pending_skan_indices
-        # pending_skan_indices 要进行排重
-        pending_skan_indices = list(set(pending_skan_indices))
-
-        print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
-        pendingDf = skanDf.loc[pending_skan_indices]
+    for index, row in tqdm(skanDf.iterrows(), total=len(skanDf)):
+        campaignId = row['campaign_id']
+        cv = row['cv']
+        min_valid_install_timestamp = row['min_valid_install_timestamp']
+        max_valid_install_timestamp = row['max_valid_install_timestamp']
         
-        print('待分配的skan数量：')
-        print(pendingDf.groupby('campaign_id').size())
+        # 先检查row['country_code_list']是否为空
+        if row['country_code_list'] == '':
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            )
+        else:
+            country_code_list = row['country_code_list'].split('|')
+            condition = (
+                (userDf['cv'] == cv) &
+                (userDf['install_timestamp'] >= min_valid_install_timestamp) &
+                (userDf['install_timestamp'] <= max_valid_install_timestamp) &
+                (userDf['country_code'].isin(country_code_list))
+            )
 
-    for campaignId in campaignList:
-        userDf[campaignId + ' rate'] = userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x if item['campaignId'] == campaignId]))
+        matching_rows = userDf[condition]
+        num_matching_rows = len(matching_rows)
 
-    userDf = userDf.drop(columns=['attribute'])
+        if num_matching_rows > 0:
+            z = row['user_count']
+            m = matching_rows['user_count'].sum()
+            count = z / m
+
+            userDf.loc[condition, '%s count'%(campaignId)] += count
+        else:
+            print(f"Unmatched row: {row}")
+            unmatched_rows += 1
+            unmatched_user_count += row['user_count']
+
+    unmatched_ratio = unmatched_rows / len(skanDf)
+    unmatched_user_count_ratio = unmatched_user_count / skanDf['user_count'].sum()
+    print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
+    print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
+
     return userDf
+
+
 
 def meanAttributionResult(userDf, mediaList=mediaList):
     userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
@@ -856,5 +912,5 @@ def main48(fast = False,onlyCheck = False):
 
 if __name__ == '__main__':
     # chooseCampaign()
-    main24(fast = False,onlyCheck = False)
+    main24(fast = True,onlyCheck = False)
     # main48(fast = False,onlyCheck = False)
