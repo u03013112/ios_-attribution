@@ -539,7 +539,7 @@ def meanAttributionFast(userDf, skanDf):
             # 将所有的匹配条件都单独写出来
             # condition_rate = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]) < 0.95, axis=1)
             # 使用预先计算的media rate总和进行匹配
-            condition_rate = userDf['total media rate'] < 0.99
+            condition_rate = userDf['total media rate'] < 0.95
             condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
             condition_country = userDf['country_code'].isin(item_country_code_list.split('|')) if item_country_code_list != '' else pd.Series([True] * len(userDf))
             condition_cv = userDf['cv'] == cv if cv >= 0 else pd.Series([True] * len(userDf))
@@ -626,6 +626,142 @@ def meanAttributionFast(userDf, skanDf):
 
     return userDf
 
+def meanAttributionFastv2(userDf, skanDf):
+    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+    userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
+    S = 60 * 60
+    # S = 600
+    userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
+    userDf['count'] = 1
+    userDf['install_date'] = userDf['install_date'].fillna('')
+    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
+    skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
+    skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
+    skanDf['count'] = 1
+    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index(drop = False)
+    pending_skan_indices = skanDf.index.tolist()
+    N = 3
+    attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
+
+    # 初始化userDf中的media rate列
+    mediaList = skanDf['media'].unique()
+    for media in mediaList:
+        userDf[media + ' rate'] = 0
+
+    for i in range(N):  
+        user_indices = []
+        medias = []
+        skan_indices = []
+        rates = []
+        print(f"开始第 {i + 1} 次分配")
+        new_pending_skan_indices = []
+        skanDf_to_process = skanDf.loc[pending_skan_indices]
+        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
+        
+        # 在每次循环开始时，预先计算每一行的media rate的总和
+        userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
+        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
+            media = item['media']
+            cv = item['cv']
+            min_valid_install_timestamp = item['min_valid_install_timestamp']
+            max_valid_install_timestamp = item['max_valid_install_timestamp']
+            
+            if i == N-2:
+                min_valid_install_timestamp -= 24*3600
+            if i == N-1:
+                item_country_code_list = ''
+                min_valid_install_timestamp -= 48*3600
+            else:
+                item_country_code_list = item['country_code_list']
+
+            # 将所有的匹配条件都单独写出来
+            # condition_rate = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]) < 0.95, axis=1)
+            # 使用预先计算的media rate总和进行匹配
+            condition_rate = userDf['total media rate'] < 0.95
+            condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            condition_country = userDf['country_code'].isin(item_country_code_list.split('|')) if item_country_code_list != '' else pd.Series([True] * len(userDf))
+            condition_cv = userDf['cv'] == cv if cv >= 0 else pd.Series([True] * len(userDf))
+
+            if cv < 0:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time
+                else:
+                    condition = condition_rate & condition_time & condition_country
+            else:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time & condition_cv
+                else:
+                    condition = condition_rate & condition_time & condition_cv & condition_country
+
+            matching_rows = userDf[condition]
+            total_matching_count = matching_rows['count'].sum()
+
+            if total_matching_count > 0:
+                rate = item['count'] / total_matching_count
+
+                userDf.loc[condition, 'total media rate'] += rate
+                user_indices.extend(matching_rows.index)
+                medias.extend([media] * len(matching_rows))
+                skan_indices.extend([index] * len(matching_rows))
+                rates.extend([rate] * len(matching_rows))
+            else:
+                new_pending_skan_indices.append(index)
+
+        print('未分配成功：', len(new_pending_skan_indices))
+        attributeDf2 = pd.DataFrame({'user index': user_indices, 'media': medias, 'skan index': skan_indices, 'rate': rates})
+        attributeDf = attributeDf.append(attributeDf2, ignore_index=True)
+
+        # 找出需要重新分配的行
+        grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
+
+        index_to_redistribute = grouped_attributeDf[grouped_attributeDf > 1].index
+
+        sorted_rows_to_redistribute = attributeDf[attributeDf['user index'].isin(index_to_redistribute)].sort_values(
+            ['user index', 'rate'], ascending=[True, False])
+        sorted_rows_to_redistribute['cumulative_rate'] = sorted_rows_to_redistribute.groupby('user index')['rate'].cumsum()
+
+        # 找出需要移除的行
+        rows_to_remove = sorted_rows_to_redistribute[sorted_rows_to_redistribute['cumulative_rate'] > 1]
+
+        # 记录需要移除的skan index
+        removed_skan_indices = set(rows_to_remove['skan index'])
+
+        # 从attributeDf中移除这些行
+        attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
+        print('移除过分配的skan：', len(removed_skan_indices),'条')
+
+        # 更新待分配的skan索引列表
+        pending_skan_indices = list(set(new_pending_skan_indices).union(removed_skan_indices))
+
+        print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
+        
+        # 更新media rate
+        for media in mediaList:
+            userDf[media + ' rate'] = 0
+            userDf[media + ' rate'] = attributeDf[attributeDf['media'] == media].groupby('user index')['rate'].sum()
+            userDf[media + ' rate'] = userDf[media + ' rate'].fillna(0)
+
+        # 计算每个媒体的未分配的用户数
+        pending_counts = skanDf.loc[pending_skan_indices].groupby('media')['count'].sum()
+        print("每个媒体的未分配的用户数：")
+        print(pending_counts)
+        
+        # 计算每个媒体的总的skan用户数
+        total_counts = skanDf.groupby('media')['count'].sum()
+        print("每个媒体的总的skan用户数：")
+        print(total_counts)
+        
+        # 计算每个媒体的未分配占比
+        pending_ratios = pending_counts / total_counts
+        print("每个媒体的未分配占比：")
+        print(pending_ratios)
+
+    # 拆分customer_user_id
+    userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
+    userDf = userDf.explode('customer_user_id')
+
+    return userDf
+
 
 
 def main():
@@ -657,8 +793,11 @@ def main():
     afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
     userDf = addCv(afDf,getCvMap())
 
+    # userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
+    # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
+
     # 进行归因
-    attDf = meanAttributionFast(userDf,skanDf)
+    attDf = meanAttributionFastv2(userDf,skanDf)
     # print('attDf (head 5):')
     # print(attDf.head(5))
     return attDf
