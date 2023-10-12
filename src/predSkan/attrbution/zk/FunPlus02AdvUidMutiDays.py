@@ -43,8 +43,8 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20230504'
-        days = '10'
+        dayStr = '20231011'
+        days = '15'
 
     # 如果days不是整数，转成整数
     days = int(days)
@@ -81,6 +81,44 @@ def getSKANDataFromMC(dayStr, days):
     '''
     print(sql)
     df = execSql(sql)
+    # 在这里做一些过滤处理
+    # 其中postback_timestamp应该最大值小于dayStr的23:59:59，但是目前发现有个别的大于这个值
+    # 所以将大于这个值的postback_timestamp改为dayStr的23:59:59
+    # 这里原来认为postback_timestamp是unix时间戳，其实是类似'2023-09-01 15:54:22'这样的字符串，另外他的时区不是utc0
+    # 需要先将他转成utc0的unix时间戳，然后最大值过滤，然后再转回原来的字符串格式
+    # 为时间字符串添加UTC时区标识
+    # 在新列中进行操作
+    df['temp_timestamp'] = df['postback_timestamp'] + '+00:00'
+    df['temp_timestamp'] = pd.to_datetime(df['temp_timestamp'], utc=True)
+    df['temp_timestamp'] = df['temp_timestamp'].view(np.int64) // 10 ** 9
+
+    max_timestamp_str = dayStr + '235959' + '+00:00'
+    max_timestamp = pd.to_datetime(max_timestamp_str, utc=True)
+    print('max_timestamp:', max_timestamp)
+    max_timestamp = max_timestamp.to_pydatetime().timestamp()
+    print('max_timestamp:', max_timestamp)
+
+    affected_rows = df[df['temp_timestamp'] > max_timestamp]
+    print('尝试纠正postback_timestamp，影响到的行数：', len(affected_rows))
+
+    # 显示修改前的示例数据
+    print('\n修改前的示例数据:')
+    print(affected_rows.head(5))
+
+    df.loc[df['temp_timestamp'] > max_timestamp, 'temp_timestamp'] = max_timestamp
+
+    # 将修改后的值赋回到 'postback_timestamp' 列
+    # df['postback_timestamp'] = pd.to_datetime(df['temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
+    # 只对影响到的行做 'postback_timestamp' 的覆盖
+    df.loc[affected_rows.index, 'postback_timestamp'] = pd.to_datetime(df.loc[affected_rows.index, 'temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # 显示修改后的示例数据
+    print('\n修改后的示例数据:')
+    print(df.loc[affected_rows.index].head(5))
+
+    # 删除临时列
+    df.drop(columns=['temp_timestamp'], inplace=True)
+
     return df
 
 # 计算合法的激活时间范围
@@ -762,10 +800,31 @@ def meanAttributionFastv2(userDf, skanDf):
 
     return userDf
 
-
+# 检查是否已经获得了af数据
+def check(dayStr):
+    sql = f'''
+        select
+            *
+        from 
+            ods_platform_appsflyer_skad_details
+        where
+            day = '{dayStr}'
+            AND app_id = 'id1479198816'
+            AND event_name in (
+                'af_skad_install',
+                'af_skad_redownload'
+            )
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    if len(df) <= 0:
+        raise Exception('没有有效的获得af skan数据，请稍后重试')
+    return
 
 def main():
     init()
+    check(dayStr)
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr,days)
     # 将skanDf中media不属于mediaList的media改为other
@@ -824,6 +883,12 @@ def createTable():
     else:
         print('createTable failed, o is not defined')
 
+def deleteTable(dayStr):
+    print('try to delete table:',dayStr)
+    if 'o' in globals():
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays')
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+
 def writeTable(df,dayStr):
     print('try to write table:')
     print(df.head(5))
@@ -834,6 +899,8 @@ def writeTable(df,dayStr):
             writer.write(df)
     else:
         print('writeTable failed, o is not defined')
+        print('try to write csv file')
+        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDays_%s.csv'%(dayStr),index=False)
 
 attDf = main()
 # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
@@ -867,10 +934,13 @@ attDf = attDf[attDf['day'] >= dayBeforeStr]
 # 先找到所有的day，升序排列
 days = attDf['day'].unique()
 days.sort()
-for dayStr in days:
+for dayStr0 in days:
     # 找到dayStr对应的数据
-    dayDf = attDf[attDf['day'] == dayStr]
+    dayDf = attDf[attDf['day'] == dayStr0]
     # 将day列丢掉
     dayDf = dayDf.drop(columns=['day'])
     # 写入表
-    writeTable(dayDf,dayStr)
+    writeTable(dayDf,dayStr0)
+
+# 删除额外的分区，为了确保AF修改postback时间不会导致任何提前数据，双保险，与上面的postback时间戳过滤一起使用
+deleteTable(dayStr)

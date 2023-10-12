@@ -47,7 +47,7 @@ def getDataFromMC():
             FROM
                 ods_platform_appsflyer_events
             WHERE
-                event_name = 'af_purchase'
+                event_name in ('af_purchase_oldusers','af_purchase')
                 AND zone = 0
                 AND day BETWEEN '20230101'
                 AND '20230730'
@@ -85,6 +85,20 @@ def getDataFromMC():
                 ),
                 0
             ) AS r7usd,
+            COALESCE(
+                sum(purchases.event_revenue_usd) FILTER (
+                    WHERE
+                        purchases.event_timestamp <= installs.install_timestamp + 14 * 86400
+                ),
+                0
+            ) AS r14usd,
+            COALESCE(
+                sum(purchases.event_revenue_usd) FILTER (
+                    WHERE
+                        purchases.event_timestamp <= installs.install_timestamp + 28 * 86400
+                ),
+                0
+            ) AS r28usd,
             installs.install_timestamp,
             COALESCE(
                 max(purchases.event_timestamp) FILTER (
@@ -108,13 +122,14 @@ def getDataFromMC():
             installs.campaign_id
         ;
     '''
+    print(sql)
     df = execSql(sql)
-    df.to_csv(getFilename('androidFp07'), index=False)
+    df.to_csv(getFilename('androidFp07_28'), index=False)
     return df
 
 def loadData():
     # 加载数据
-    df = pd.read_csv(getFilename('androidFp07'))
+    df = pd.read_csv(getFilename('androidFp07_28'))
     # 列 media_source 改名 media
     df = df.rename(columns={'media_source':'media'})
     # 列 media 中 'restricted' 改为 'Facebook Ads'
@@ -238,18 +253,18 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     return userDfCopy
 
 def dataStep1():
-    df = pd.read_csv(getFilename('androidFp07'))
+    df = pd.read_csv(getFilename('androidFp07_28'))
     df['media_source'] = df['media_source'].replace('restricted','Facebook Ads')
     # r1usd
-    levels = makeLevels1(df,usd='r2usd',N=32)
+    levels = makeLevels1(df,usd='r1usd',N=32)
     cvMapDf = makeCvMap(levels)
-    df = addCv(df,cvMapDf,usd='r2usd',cv='cv')
+    df = addCv(df,cvMapDf,usd='r1usd',cv='cv')
     
-    df.to_csv(getFilename('androidFpMergeDataStep1g2'), index=False)
+    df.to_csv(getFilename('androidFpMergeDataStep1g24h'), index=False)
     print('dataStep1 done')    
 
 def dataStep2():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep1g2'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep1g24h'))
     df.rename(columns={'media_source':'media'},inplace=True)
     df = df [[
         'uid',
@@ -258,6 +273,8 @@ def dataStep2():
         'r2usd',
         'r3usd',
         'r7usd',
+        'r14usd',
+        'r28usd',
         'install_timestamp',
         'last_timestamp',
         'media',
@@ -265,7 +282,7 @@ def dataStep2():
         'country_code',
         'campaign_id',
     ]]
-    df.to_csv(getFilename('androidFpMergeDataStep2g2'), index=False)
+    df.to_csv(getFilename('androidFpMergeDataStep2g24h'), index=False)
     print('dataStep2 done')
 
 # 暂时就只关心这4个媒体
@@ -278,7 +295,7 @@ mediaList = [
 
 # 制作一个模拟的SKAN报告
 def makeSKAN():
-    df = pd.read_csv(getFilename('androidFpMergeDataStep2g2'))
+    df = pd.read_csv(getFilename('androidFpMergeDataStep2g24h'))
     # 过滤，只要媒体属于mediaList的条目
     df = df.loc[df['media'].isin(mediaList)]
     # 重排索引
@@ -404,9 +421,9 @@ def skanAddGeo():
 
 # 制作待归因用户Df
 def makeUserDf():
-    userDf = pd.read_csv(getFilename('androidFpMergeDataStep2g2'))
+    userDf = pd.read_csv(getFilename('androidFpMergeDataStep2g24h'))
 
-    userDf = userDf[['uid','install_timestamp','r1usd','r2usd','r3usd','r7usd','cv','country_code','campaign_id','media']]
+    userDf = userDf[['uid','install_timestamp','r1usd','r2usd','r3usd','r7usd','r14usd','r28usd','cv','country_code','campaign_id','media']]
     userDf['cv'] = userDf['cv'].astype(int)
     return userDf
 
@@ -421,7 +438,7 @@ def userGroupby(userDf):
     # userGroupbyDf的列名为install_timestamp,cv,user_count和r7usd
     # user_count是每组的用户数
     # r7usd是每组的r7usd汇总
-    userGroupbyDf = userDf.groupby(['install_timestamp','cv','country_code']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r3usd':'sum','r7usd':'sum'}).reset_index()
+    userGroupbyDf = userDf.groupby(['install_timestamp','cv','country_code']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r3usd':'sum','r7usd':'sum','r14usd':'sum','r28usd':'sum'}).reset_index()
     userGroupbyDf.rename(columns={'uid':'user_count'}, inplace=True)
     return userGroupbyDf
 
@@ -477,9 +494,141 @@ def meanAttribution(userDf, skanDf):
     print(f"Unmatched rows ratio: {unmatched_ratio:.2%}")
     print(f"Unmatched user count ratio: {unmatched_user_count_ratio:.2%}")
 
-    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
-    # userDf.to_parquet(getFilename('attribution1ReStep48hoursGeo','parquet'), index=False)
+    # userDf.to_csv(getFilename('attribution1ReStep24hoursGeo'), index=False)
+    # userDf.to_parquet(getFilename('attribution1ReStep24hoursGeo','parquet'), index=False)
     return userDf
+import gc
+def meanAttributionFastv2(userDf, skanDf):
+    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+    
+    pending_skan_indices = skanDf.index.tolist()
+    N = 3
+    attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
+
+    # 初始化userDf中的media rate列
+    mediaList = skanDf['media'].unique()
+    for media in mediaList:
+        userDf[media + ' rate'] = 0
+
+    for i in range(N):  
+        user_indices = []
+        medias = []
+        skan_indices = []
+        rates = []
+        print(f"开始第 {i + 1} 次分配")
+        new_pending_skan_indices = []
+        skanDf_to_process = skanDf.loc[pending_skan_indices]
+        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
+        
+        # 在每次循环开始时，预先计算每一行的media rate的总和
+        userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
+        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
+            media = item['media']
+            cv = item['cv']
+            min_valid_install_timestamp = item['min_valid_install_timestamp']
+            max_valid_install_timestamp = item['max_valid_install_timestamp']
+            
+            if i == N-2:
+                min_valid_install_timestamp -= 24*3600
+            if i == N-1:
+                item_country_code_list = ''
+                min_valid_install_timestamp -= 48*3600
+            else:
+                item_country_code_list = item['country_code_list']
+
+            # 将所有的匹配条件都单独写出来
+            # condition_rate = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]) < 0.95, axis=1)
+            # 使用预先计算的media rate总和进行匹配
+            condition_rate = userDf['total media rate'] < 0.95
+            condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            condition_country = userDf['country_code'].isin(item_country_code_list.split('|')) if item_country_code_list != '' else pd.Series([True] * len(userDf))
+            condition_cv = userDf['cv'] == cv if cv >= 0 else pd.Series([True] * len(userDf))
+
+            if cv < 0:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time
+                else:
+                    condition = condition_rate & condition_time & condition_country
+            else:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time & condition_cv
+                else:
+                    condition = condition_rate & condition_time & condition_cv & condition_country
+
+            matching_rows = userDf[condition]
+            total_matching_count = matching_rows['user_count'].sum()
+
+            if total_matching_count > 0:
+                rate = item['user_count'] / total_matching_count
+
+                userDf.loc[condition, 'total media rate'] += rate
+                user_indices.extend(matching_rows.index)
+                medias.extend([media] * len(matching_rows))
+                skan_indices.extend([index] * len(matching_rows))
+                rates.extend([rate] * len(matching_rows))
+            else:
+                new_pending_skan_indices.append(index)
+
+        print('未分配成功：', len(new_pending_skan_indices))
+        attributeDf2 = pd.DataFrame({'user index': user_indices, 'media': medias, 'skan index': skan_indices, 'rate': rates})
+        print('0')
+        attributeDf = attributeDf.append(attributeDf2, ignore_index=True)
+        print('1')
+        # 找出需要重新分配的行
+        grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
+        print('2')
+        index_to_redistribute = grouped_attributeDf[grouped_attributeDf > 1].index
+        print('3')
+        sorted_rows_to_redistribute = attributeDf[attributeDf['user index'].isin(index_to_redistribute)].sort_values(
+            ['user index', 'rate'], ascending=[True, False])
+        print('4')
+        sorted_rows_to_redistribute['cumulative_rate'] = sorted_rows_to_redistribute.groupby('user index')['rate'].cumsum()
+        print('5')
+        # 找出需要移除的行
+        rows_to_remove = sorted_rows_to_redistribute[sorted_rows_to_redistribute['cumulative_rate'] > 1]
+        print('6')
+        # 记录需要移除的skan index
+        removed_skan_indices = set(rows_to_remove['skan index'])
+        print('7')
+        # 从attributeDf中移除这些行
+        attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
+        print('移除过分配的skan：', len(removed_skan_indices),'条')
+
+        # 更新待分配的skan索引列表
+        pending_skan_indices = list(set(new_pending_skan_indices).union(removed_skan_indices))
+
+        print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
+        
+        # 更新media rate
+        for media in mediaList:
+            userDf[media + ' rate'] = 0
+            userDf[media + ' rate'] = attributeDf[attributeDf['media'] == media].groupby('user index')['rate'].sum()
+            userDf[media + ' rate'] = userDf[media + ' rate'].fillna(0)
+
+        # 计算每个媒体的未分配的用户数
+        pending_counts = skanDf.loc[pending_skan_indices].groupby('media')['user_count'].sum()
+        print("每个媒体的未分配的用户数：")
+        print(pending_counts)
+        
+        # 计算每个媒体的总的skan用户数
+        total_counts = skanDf.groupby('media')['user_count'].sum()
+        print("每个媒体的总的skan用户数：")
+        print(total_counts)
+        
+        # 计算每个媒体的未分配占比
+        pending_ratios = pending_counts / total_counts
+        print("每个媒体的未分配占比：")
+        print(pending_ratios)
+        
+        gc.collect()
+
+    # 拆分customer_user_id
+    # userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
+    # userDf = userDf.explode('customer_user_id')
+
+    return userDf
+
+
 
 def meanAttributionResult(userDf, mediaList=mediaList):
     userDf['install_date'] = pd.to_datetime(userDf['install_timestamp'], unit='s').dt.date
@@ -488,25 +637,38 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     for media in mediaList:
         media_count_col = media + ' count'
         userDf[media + ' r1usd'] = userDf['r1usd'] * userDf[media_count_col]
+        userDf[media + ' r3usd'] = userDf['r3usd'] * userDf[media_count_col]
         userDf[media + ' r7usd'] = userDf['r7usd'] * userDf[media_count_col]
+        userDf[media + ' r14usd'] = userDf['r14usd'] * userDf[media_count_col]
+        userDf[media + ' r28usd'] = userDf['r28usd'] * userDf[media_count_col]
         userDf[media + ' user_count'] = userDf['user_count'] * userDf[media_count_col]
 
     # 分割userDf为两个子数据框，一个包含r1usd，另一个包含r7usd
     userDf_r1usd = userDf[['install_date'] + [media + ' r1usd' for media in mediaList]]
+    userDf_r3usd = userDf[['install_date'] + [media + ' r3usd' for media in mediaList]]
     userDf_r7usd = userDf[['install_date'] + [media + ' r7usd' for media in mediaList]]
+    userDf_r14usd = userDf[['install_date'] + [media + ' r14usd' for media in mediaList]]
+    userDf_r28usd = userDf[['install_date'] + [media + ' r28usd' for media in mediaList]]
 
-    # 对两个子数据框分别进行melt操作
     userDf_r1usd = userDf_r1usd.melt(id_vars=['install_date'], var_name='media', value_name='r1usd')
     userDf_r1usd['media'] = userDf_r1usd['media'].str.replace(' r1usd', '')
     userDf_r1usd = userDf_r1usd.groupby(['install_date', 'media']).sum().reset_index()
-    # userDf_r1usd.to_csv(getFilename('userDf_r1usd'), index=False )
-    # print(userDf_r1usd.head())
+
+    userDf_r3usd = userDf_r3usd.melt(id_vars=['install_date'], var_name='media', value_name='r3usd')
+    userDf_r3usd['media'] = userDf_r3usd['media'].str.replace(' r3usd', '')
+    userDf_r3usd = userDf_r3usd.groupby(['install_date', 'media']).sum().reset_index()
     
     userDf_r7usd = userDf_r7usd.melt(id_vars=['install_date'], var_name='media', value_name='r7usd')
     userDf_r7usd['media'] = userDf_r7usd['media'].str.replace(' r7usd', '')
     userDf_r7usd = userDf_r7usd.groupby(['install_date', 'media']).sum().reset_index()
-    # userDf_r7usd.to_csv(getFilename('userDf_r7usd'), index=False )
-    # print(userDf_r7usd.head())
+
+    userDf_r14usd = userDf_r14usd.melt(id_vars=['install_date'], var_name='media', value_name='r14usd')
+    userDf_r14usd['media'] = userDf_r14usd['media'].str.replace(' r14usd', '')
+    userDf_r14usd = userDf_r14usd.groupby(['install_date', 'media']).sum().reset_index()
+
+    userDf_r28usd = userDf_r28usd.melt(id_vars=['install_date'], var_name='media', value_name='r28usd')
+    userDf_r28usd['media'] = userDf_r28usd['media'].str.replace(' r28usd', '')
+    userDf_r28usd = userDf_r28usd.groupby(['install_date', 'media']).sum().reset_index()
 
     # 还需要统计每个媒体的首日用户数
     userDf_count = userDf[['install_date'] + [media + ' user_count' for media in mediaList]]
@@ -524,7 +686,10 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     # print(userDf_payCount.head())
 
     # 将两个子数据框连接在一起
-    userDf = userDf_r1usd.merge(userDf_r7usd, on=['install_date', 'media'])
+    userDf = userDf_r1usd.merge(userDf_r3usd, on=['install_date', 'media'])
+    userDf = userDf.merge(userDf_r7usd, on=['install_date', 'media'])
+    userDf = userDf.merge(userDf_r14usd, on=['install_date', 'media'])
+    userDf = userDf.merge(userDf_r28usd, on=['install_date', 'media'])
     # print('merge1')
     userDf = userDf.merge(userDf_count, on=['install_date', 'media'])
     # print('merge2')
@@ -545,7 +710,7 @@ def checkRet(retDf):
     rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
     rawDf['user_count'] = 1
     # 按照media和install_date分组，计算r7usd的和
-    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r1usd':'sum','r7usd': 'sum','user_count':'sum'}).reset_index()
+    rawDf = rawDf.groupby(['media', 'install_date']).agg({'r1usd':'sum','r3usd':'sum','r7usd': 'sum','r14usd':'sum','r28usd':'sum','user_count':'sum'}).reset_index()
 
     # rawDf 和 retDf 进行合并
     # retDf.rename(columns={'r7usd':'r7usdp'}, inplace=True)
@@ -554,25 +719,30 @@ def checkRet(retDf):
     retDf['install_date'] = retDf['install_date'].astype(str)
     rawDf = rawDf.merge(retDf, on=['media', 'install_date'], how='left',suffixes=('', 'p'))
     # 计算MAPE
-    rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
-    rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
+    rawDf['MAPE1'] = abs(rawDf['r1usd'] - rawDf['r1usdp']) / rawDf['r1usd']
+    rawDf['MAPE3'] = abs(rawDf['r3usd'] - rawDf['r3usdp']) / rawDf['r3usd']
+    rawDf['MAPE7'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
+    rawDf['MAPE14'] = abs(rawDf['r14usd'] - rawDf['r14usdp']) / rawDf['r14usd']
+    rawDf['MAPE28'] = abs(rawDf['r28usd'] - rawDf['r28usdp']) / rawDf['r28usd']
+
+    rawDf.loc[rawDf['r7usd'] == 0,'MAPE7'] = 0
     # rawDf = rawDf.loc[rawDf['install_date']<'2023-02-01']
-    rawDf = rawDf.loc[rawDf['MAPE']>0]
-    rawDf.to_csv(getFilename('attribution1RetCheck'), index=False)
+    rawDf = rawDf.loc[rawDf['MAPE7']>0]
+    rawDf.to_csv(getFilename('attributionRetCheckGeo24V2'), index=False)
     # 计算整体的MAPE和R2
-    MAPE = rawDf['MAPE'].mean()
+    MAPE = rawDf['MAPE7'].mean()
     # R2 = r2_score(rawDf['r7usd'], rawDf['r7usdp'])
     print('MAPE:', MAPE)
     # print('R2:', R2)
     # 分媒体计算MAPE和R2
     for media in mediaList:
         mediaDf = rawDf[rawDf['media'] == media]
-        MAPE = mediaDf['MAPE'].mean()
+        MAPE = mediaDf['MAPE7'].mean()
         # R2 = r2_score(mediaDf['r7usd'], mediaDf['r7usdp'])
         # print(f"Media: {media}, MAPE: {MAPE}, R2: {R2}")
         print(f"Media: {media}, MAPE: {MAPE}")
 
-    df = pd.read_csv(getFilename('attribution1RetCheck'))
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24V2'))
     r7PR1 = df['r7usd'] / df['r1usd']
     print(r7PR1.mean())
     r7pPR1 = df['r7usdp'] / df['r1usd']
@@ -803,8 +973,8 @@ def d1():
     checkRet(userDf)
 
 def d2():
-    userDf = pd.read_csv(getFilename('userAOS6G48'))
-    skanDf = pd.read_csv(getFilename('skanAOS6G48'))
+    userDf = pd.read_csv(getFilename('userAOS6G24'))
+    skanDf = pd.read_csv(getFilename('skanAOS6G24'))
     
     # 这里过滤一下，加快速度
     timestamp = datetime.datetime(2023, 1, 1, 0, 0, 0).timestamp()
@@ -816,7 +986,7 @@ def d2():
     skanDf = skanDf[skanDf['min_valid_install_timestamp'] >= timestamp]
 
     userDf = meanAttribution(userDf, skanDf)
-    userDf.to_csv(getFilename('attribution1ReStep48hoursGeoFast'), index=False)
+    userDf.to_csv(getFilename('attribution1ReStep24hoursGeoFast'), index=False)
     userDf = meanAttributionResult(userDf)
     userDf.to_csv(getFilename('attribution1Ret48Fast'), index=False)
     userDf = pd.read_csv(getFilename('attribution1Ret48Fast'))
@@ -945,6 +1115,115 @@ def debug4():
     print(groupDf[['media','r1ROI','r1ROIp','r7ROI','r7ROIp']])
 
 
+def debug5():
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24'))
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        for i in [1,3,7,14,28]:
+            mapeIndex = f'MAPE{i}'
+            print(media,mapeIndex,':', mediaDf[mapeIndex].mean())
+
+def debug6():
+    pd.set_option('display.width', None)
+    pd.set_option('display.max_columns', None) 
+
+
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24V2'))
+    df = df[['media','install_date','r1usd','r3usd','r7usd','r14usd','r28usd','r1usdp','r3usdp','r7usdp','r14usdp','r28usdp']]
+    print(df.corr())
+    print('')
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        print(media)
+        print(mediaDf.corr())
+        print('')
+
+def debug7():
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24'))
+    df = df[['media','install_date','r1usd','r3usd','r7usd','r14usd','r28usd','r1usdp','r3usdp','r7usdp','r14usdp','r28usdp']]
+    df['r7usd/r3usdp'] = df['r7usd'] / df['r3usdp']
+    df['r14usd/r3usdp'] = df['r14usd'] / df['r3usdp']
+    print('total r7usd/r3usdp:',df['r7usd/r3usdp'].mean())
+    print('total r14usd/r3usdp:',df['r14usd/r3usdp'].mean())
+    print('')
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        print(media)
+        print('r7usd/r3usdp:',mediaDf['r7usd/r3usdp'].mean())
+        print('r14usd/r3usdp:',mediaDf['r14usd/r3usdp'].mean())
+        print('')
+
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+def debug8():
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24V2'))
+    df = df[['media','install_date','r1usd','r3usd','r7usd','r14usd','r28usd','r1usdp','r3usdp','r7usdp','r14usdp','r28usdp']]
+    df['r7usd/r3usdp'] = df['r7usd'] / df['r3usdp']
+    df['r14usd/r3usdp'] = df['r14usd'] / df['r3usdp']
+
+    for media in mediaList:
+        mediaDf = df[df['media'] == media].copy()
+        mediaDf = mediaDf.sort_values(by=['install_date'])
+
+        mediaDf['r3usdp rolling7'] = mediaDf['r3usdp'].rolling(7).mean()
+        mediaDf['r7usd rolling7'] = mediaDf['r7usd'].rolling(7).mean()
+        mediaDf['r14usd rolling7'] = mediaDf['r14usd'].rolling(7).mean()
+        mediaDf['r7usd/r3usdp rolling7'] = mediaDf['r7usd rolling7'] / mediaDf['r3usdp rolling7']
+        mediaDf['r14usd/r3usdp rolling7'] = mediaDf['r14usd rolling7'] / mediaDf['r3usdp rolling7']
+
+        mediaDf['r3usdp ewm7'] = mediaDf['r3usdp'].ewm(span=7).mean()
+        mediaDf['r7usd ewm7'] = mediaDf['r7usd'].ewm(span=7).mean()
+        mediaDf['r14usd ewm7'] = mediaDf['r14usd'].ewm(span=7).mean()
+        mediaDf['r7usd/r3usdp ewm7'] = mediaDf['r7usd ewm7'] / mediaDf['r3usdp ewm7']
+        mediaDf['r14usd/r3usdp ewm7'] = mediaDf['r14usd ewm7'] / mediaDf['r3usdp ewm7']
+
+        m7p3 = mediaDf['r7usd/r3usdp'].mean()
+        m14p3 = mediaDf['r14usd/r3usdp'].mean()
+        mediaDf['r7usdp2'] = mediaDf['r3usdp'] * m7p3
+        mediaDf['r14usdp2'] = mediaDf['r3usdp'] * m14p3
+        mediaDf['MAPE7'] = abs(mediaDf['r7usd'] - mediaDf['r7usdp2']) / mediaDf['r7usd']
+        mediaDf['MAPE14'] = abs(mediaDf['r14usd'] - mediaDf['r14usdp2']) / mediaDf['r14usd']
+        print(media)
+        print('MAPE7:',mediaDf['MAPE7'].mean())
+        print('MAPE14:',mediaDf['MAPE14'].mean())
+        # r7usd/r3usdp 和 r14usd/r3usdp 画图，画在一张图上
+        # 用install_date做x，是类似2023-01-01的字符串，每隔7天画一个点
+        # 保存到 /src/data/zk2/attGeo24_{media}.jpg
+        # 图片宽一点
+        
+        # 画图部分
+        mediaDf['install_date'] = pd.to_datetime(mediaDf['install_date'])
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(mediaDf['install_date'], mediaDf['r7usd/r3usdp'], label='r7usd/r3usdp',alpha=0.5)
+        ax.plot(mediaDf['install_date'], mediaDf['r14usd/r3usdp'], label='r14usd/r3usdp',alpha=0.5)
+        # ax.plot(mediaDf['install_date'], mediaDf['r7usd/r3usdp rolling7'], label='r7usd/r3usdp rolling7')
+        # ax.plot(mediaDf['install_date'], mediaDf['r14usd/r3usdp rolling7'], label='r14usd/r3usdp rolling7')
+        ax.plot(mediaDf['install_date'], mediaDf['r7usd/r3usdp ewm7'], label='r7usd/r3usdp ewm7')
+        ax.plot(mediaDf['install_date'], mediaDf['r14usd/r3usdp ewm7'], label='r14usd/r3usdp ewm7')
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=7))  # 设置每7天显示一个日期
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.xticks(rotation=45)
+        plt.xlabel('Install Date')
+        plt.ylabel('Values')
+        plt.title(f'{media} - r7usd/r3usdp and r14usd/r3usdp')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f'/src/data/zk2/attGeo24_{media}.jpg')
+        plt.close()
+
+        for lag in [1]:
+            # print(f'r7usd/r3usdp lag={lag} autocorr',mediaDf['r7usd/r3usdp'].autocorr(lag=lag))
+            # print(f'r14usd/r3usdp lag={lag} autocorr',mediaDf['r14usd/r3usdp'].autocorr(lag=lag))
+            # print('')
+            # print(f'r7usd/r3usdp rolling7 lag={lag} autocorr',mediaDf['r7usd/r3usdp rolling7'].autocorr(lag=lag))
+            # print(f'r14usd/r3usdp rolling7 lag={lag} autocorr',mediaDf['r14usd/r3usdp rolling7'].autocorr(lag=lag))
+            # print('')
+            print(f'r7usd/r3usdp ewm7 lag={lag} autocorr',mediaDf['r7usd/r3usdp ewm7'].autocorr(lag=lag))
+            print(f'r14usd/r3usdp ewm7 lag={lag} autocorr',mediaDf['r14usd/r3usdp ewm7'].autocorr(lag=lag))
+
+
+
+
 
 if __name__ == '__main__':
     # getDataFromMC()
@@ -954,40 +1233,55 @@ if __name__ == '__main__':
     # dataStep1()
     # dataStep2()
 
-    # skanDf = makeSKAN()
-    # skanDf = skanAddValidInstallDate(skanDf)
+    skanDf = makeSKAN()
+    skanDf = skanAddValidInstallDate(skanDf)
 
-    # print('skan data len:',len(skanDf))
-    # skanDf.to_csv(getFilename('skanAOS6'),index=False)
-    # skanDf = pd.read_csv(getFilename('skanAOS6'), converters={'campaign_id': str})
-    # skanDf = skanValidInstallDate2Min(skanDf,N = 600)
-    # skanDf = skanGroupby(skanDf)
-    # skanDf.to_csv(getFilename('skanAOS6G'),index=False)
-    # print('skan data group len:',len(skanDf))
+    print('skan data len:',len(skanDf))
+    skanDf.to_csv(getFilename('skanAOS6'),index=False)
+    skanDf = pd.read_csv(getFilename('skanAOS6'), converters={'campaign_id': str})
+    skanDf = skanValidInstallDate2Min(skanDf,N = 3600)
+    skanDf = skanGroupby(skanDf)
+    skanDf.to_csv(getFilename('skanAOS6G'),index=False)
+    print('skan data group len:',len(skanDf))
 
-    # skanDf = skanAddGeo()
-    # skanDf.to_csv(getFilename('skanAOS6G48'), index=False)
+    skanDf = skanAddGeo()
+    skanDf.to_csv(getFilename('skanAOS6G24_3600'), index=False)
 
-    # userDf = makeUserDf()
-    # print('user data len:',len(userDf))
-    # userDf.to_csv(getFilename('userAOS6'),index=False)
-    # # userDf = pd.read_csv(getFilename('userAOS6'))
-    # userDf = userInstallDate2Min(userDf,N = 600)
-    # userDf = userGroupby(userDf)
-    # userDf.to_csv(getFilename('userAOS6G48'),index=False)
-    # print('user data group len:',len(userDf))
+    userDf = makeUserDf()
+    print('user data len:',len(userDf))
+    userDf.to_csv(getFilename('userAOS6'),index=False)
+    # userDf = pd.read_csv(getFilename('userAOS6'))
+    userDf = userInstallDate2Min(userDf,N = 3600)
+    userDf = userGroupby(userDf)
+    userDf.to_csv(getFilename('userAOS6G24_3600'),index=False)
+    print('user data group len:',len(userDf))
 
-    # # userDf = pd.read_csv(getFilename('userAOS6G48'))
-    # # skanDf = pd.read_csv(getFilename('skanAOS6G48'))
+    # userDf = pd.read_csv(getFilename('userAOS6G24_3600'))
+    # skanDf = pd.read_csv(getFilename('skanAOS6G24_3600'))
     
-    # userDf = meanAttribution(userDf, skanDf)
-    # userDf.to_csv(getFilename('attribution1ReStep48hoursGeo'), index=False)
-    # # userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeo'))
-    # userDf = meanAttributionResult(userDf)
-    # userDf.to_csv(getFilename('attribution1Ret48Geo'), index=False)
-    userDf = pd.read_csv(getFilename('attribution1Ret48Geo'))
+    # # userDf = meanAttribution(userDf, skanDf)
+    # # skanDf = skanDf.head(100)
+    userDf = meanAttributionFastv2(userDf, skanDf)
+    # # print(userDf)
+    userDf.to_csv(getFilename('attribution1ReStep24hoursGeoV2'), index=False)
+    # userDf = pd.read_csv(getFilename('attribution1ReStep24hoursGeoV2'))
+    userDf.rename(columns={
+        'Facebook Ads rate':'Facebook Ads count',
+        'googleadwords_int rate':'googleadwords_int count',
+        'bytedanceglobal_int rate':'bytedanceglobal_int count',
+        'snapchat_int rate':'snapchat_int count'
+    },inplace=True)
+    userDf = meanAttributionResult(userDf)
+    userDf.to_csv(getFilename('attribution1Ret24GeoV2'), index=False)
+    # userDf = pd.read_csv(getFilename('attribution1Ret24GeoV2'))
     checkRet(userDf)
 
-    debug2()
-    debug3()
-    debug4()
+
+    # debug2()
+    # debug3()
+    # debug4()
+    # debug5()
+    # debug6()
+    # debug7()
+    # debug8()
+    

@@ -623,6 +623,160 @@ def meanAttribution(userDf, skanDf):
 
     return userDf
 
+import gc
+def meanAttributionFastv2(userDf, skanDf):
+    campaignList = getChooseCampaignList()
+    for campaignId in campaignList:
+        userDf['%s rate'%(campaignId)] = 0
+
+    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
+    
+    pending_skan_indices = skanDf.index.tolist()
+    N = 4
+    attributeDf = pd.DataFrame(columns=['user index', 'campaignId', 'skan index', 'rate'])
+
+    for i in range(N):  
+        user_indices = []
+        campaignIds = []
+        skan_indices = []
+        rates = []
+        print(f"开始第 {i + 1} 次分配")
+        new_pending_skan_indices = []
+        skanDf_to_process = skanDf.loc[pending_skan_indices]
+        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
+        
+        # 在每次循环开始时，预先计算每一行的media rate的总和
+        userDf['total media rate'] = userDf.apply(lambda x: sum([x[campaignId + ' rate'] for campaignId in campaignList]), axis=1)
+        if i == 1:
+            print('第%d次分配，时间范围向前推一天'%(i+1))
+        if i >= 2:
+            print('第%d次分配，不考虑国家，且时间范围向前推两天'%(i+1))
+        
+        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
+            campaignId = str(item['campaign_id'])
+            cv = item['cv']
+            min_valid_install_timestamp = item['min_valid_install_timestamp']
+            max_valid_install_timestamp = item['max_valid_install_timestamp']
+            
+            if i == 1:
+                min_valid_install_timestamp -= 24*3600
+            if i >= 2:
+                item_country_code_list = ''
+                min_valid_install_timestamp -= 48*3600
+            else:
+                item_country_code_list = item['country_code_list']
+
+            # 将所有的匹配条件都单独写出来
+            # condition_rate = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]) < 0.95, axis=1)
+            # 使用预先计算的media rate总和进行匹配
+            condition_rate = userDf['total media rate'] < 0.95
+            condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
+            condition_country = userDf['country_code'].isin(item_country_code_list.split('|')) if item_country_code_list != '' else pd.Series([True] * len(userDf))
+            condition_cv = userDf['cv'] == cv if cv >= 0 else pd.Series([True] * len(userDf))
+
+            if cv < 0:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time
+                else:
+                    condition = condition_rate & condition_time & condition_country
+            else:
+                if item_country_code_list == '':
+                    condition = condition_rate & condition_time & condition_cv
+                else:
+                    condition = condition_rate & condition_time & condition_cv & condition_country
+
+            matching_rows = userDf[condition]
+            total_matching_count = matching_rows['user_count'].sum()
+
+            if total_matching_count > 0:
+                rate = item['user_count'] / total_matching_count
+
+                userDf.loc[condition, 'total media rate'] += rate
+                user_indices.extend(matching_rows.index)
+                campaignIds.extend([campaignId] * len(matching_rows))
+                skan_indices.extend([index] * len(matching_rows))
+                rates.extend([rate] * len(matching_rows))
+                # print(user_indices)
+            else:
+                new_pending_skan_indices.append(index)
+
+        print('未分配成功：', len(new_pending_skan_indices))
+        attributeDf2 = pd.DataFrame({'user index': user_indices, 'campaignId': campaignIds, 'skan index': skan_indices, 'rate': rates})
+        # print('len user_indices:',len(user_indices))
+        # print('attributeDf2:',attributeDf2)
+        print('0')
+        attributeDf = attributeDf.append(attributeDf2, ignore_index=True)
+        # print('attributeDf:',attributeDf)
+        print('1')
+        # 找出需要重新分配的行
+        grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
+        print('2')
+        index_to_redistribute = grouped_attributeDf[grouped_attributeDf > 1].index
+        print('3')
+        sorted_rows_to_redistribute = attributeDf[attributeDf['user index'].isin(index_to_redistribute)].sort_values(
+            ['user index', 'rate'], ascending=[True, False])
+        print('4')
+        sorted_rows_to_redistribute['cumulative_rate'] = sorted_rows_to_redistribute.groupby('user index')['rate'].cumsum()
+        print('5')
+        # 找出需要移除的行
+        rows_to_remove = sorted_rows_to_redistribute[sorted_rows_to_redistribute['cumulative_rate'] > 1]
+        print('6')
+        # 记录需要移除的skan index
+        removed_skan_indices = set(rows_to_remove['skan index'])
+        print('7')
+        # 从attributeDf中移除这些行
+        attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
+        # print('attributeDf:',attributeDf)
+        print('移除过分配的skan：', len(removed_skan_indices),'条')
+
+        # 更新待分配的skan索引列表
+        pending_skan_indices = list(set(new_pending_skan_indices).union(removed_skan_indices))
+
+        print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
+        
+        # 更新media rate
+        for campaignId in campaignList:
+            userDf[campaignId + ' rate'] = 0
+            userDf[campaignId + ' rate'] = attributeDf[attributeDf['campaignId'] == campaignId].groupby('user index')['rate'].sum()
+            userDf[campaignId + ' rate'] = userDf[campaignId + ' rate'].fillna(0)
+        
+        # 计算每个媒体的未分配的用户数
+        pending_counts = skanDf.loc[pending_skan_indices].groupby('campaign_id')['user_count'].sum()
+
+        # 计算每个媒体的总的skan用户数
+        total_counts = skanDf.groupby('campaign_id')['user_count'].sum()
+
+        # 计算每个媒体的未分配占比
+        pending_ratios = pending_counts / total_counts
+
+        # 将三个计算结果合并为一个DataFrame
+        result_df = pd.concat([total_counts, pending_counts, pending_ratios], axis=1)
+
+        # 设置列名和索引
+        result_df.columns = ['总skan用户数', '未分配用户数', '未分配比例']
+        result_df.index.name = 'campaign_id'
+
+        # 将未分配比例转换为2位小数的百分比
+        result_df['未分配比例'] = result_df['未分配比例'].apply(lambda x: f"{x*100:.2f}%")
+
+        # 打印结果
+        print(result_df)
+
+        # 计算所有的未分配用户占比
+        total_pending_ratio = pending_counts.sum() / total_counts.sum()
+        print("所有的未分配用户占比：")
+        print(total_pending_ratio)
+
+        gc.collect()
+
+    columnsDict = {}
+    for campaignId in campaignList:
+        columnsDict[campaignId + ' rate'] = campaignId + ' count'
+
+    userDf.rename(columns=columnsDict,inplace=True)
+
+    return userDf
+
 
 
 def meanAttributionResult(userDf, mediaList=mediaList):
@@ -630,7 +784,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     campaignList = getChooseCampaignList()
     # Calculate campaignId r7usd
     for campaignId in campaignList:
-        campaignId_count_col = campaignId + ' rate'
+        campaignId_count_col = campaignId + ' count'
         userDf[campaignId + ' r1usd'] = userDf['r1usd'] * userDf[campaignId_count_col]
         userDf[campaignId + ' r7usd'] = userDf['r7usd'] * userDf[campaignId_count_col]
         userDf[campaignId + ' user_count'] = userDf['user_count'] * userDf[campaignId_count_col]
@@ -657,7 +811,7 @@ def meanAttributionResult(userDf, mediaList=mediaList):
     return userDf
 
 from sklearn.metrics import r2_score
-def checkRet(retDf):
+def checkRet(retDf,prefix='attCampaign24_'):
     # 读取原始数据
     rawDf = loadData()
     
@@ -667,7 +821,13 @@ def checkRet(retDf):
     rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
     rawDf['user_count'] = 1
     # 按照media和install_date分组，计算r7usd的和
-    rawDf = rawDf.groupby(['campaign_id', 'install_date']).agg({'r7usd': 'sum','user_count':'sum'}).reset_index()
+    rawDf = rawDf.groupby(['campaign_id', 'install_date']).agg(
+        {
+            'r1usd': 'sum',
+            'r2usd': 'sum',
+            'r7usd': 'sum',
+            'user_count':'sum'
+        }).reset_index()
 
     # rawDf 和 retDf 进行合并
     # retDf.rename(columns={'r7usd':'r7usdp'}, inplace=True)
@@ -680,9 +840,12 @@ def checkRet(retDf):
     rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
     # rawDf = rawDf.loc[rawDf['install_date']<'2023-02-01']
     rawDf = rawDf.loc[rawDf['MAPE']>0]
-    rawDf.to_csv(getFilename('attribution24RetCheck'), index=False)
+    rawDf.to_csv(getFilename(prefix+'attribution24RetCheck'), index=False)
+
     # 计算整体的MAPE和R2
-    MAPE = rawDf['MAPE'].mean()
+    totalDf = rawDf.groupby('install_date').agg({'r7usd': 'sum','r7usdp': 'sum'}).reset_index()
+    totalDf['MAPE'] = abs(totalDf['r7usd'] - totalDf['r7usdp']) / totalDf['r7usd']
+    MAPE = totalDf['MAPE'].mean()
     # r2 = r2_score(rawDf['r7usd'], rawDf['r7usdp'])
     print('MAPE:', MAPE)
     # print('R2:', r2)
@@ -698,7 +861,7 @@ def checkRet(retDf):
         MAPE7 = mediaDf['MAPE7'].mean()
         print(f"campaignId: {campaignId}, MAPE7: {MAPE7}")
 
-    df = pd.read_csv(getFilename('attribution24RetCheck'))
+    df = pd.read_csv(getFilename(prefix+'attribution24RetCheck'))
     r7PR1 = df['r7usd'] / df['r1usd']
     print(r7PR1.mean())
     r7pPR1 = df['r7usdp'] / df['r1usd']
@@ -737,6 +900,7 @@ def draw24(df,prefix='attCampaign24_'):
         # Plot r7usd and r7usdp on the left y-axis
         ax1.plot(media_df['install_date'], media_df['r7usd'], label='r7usd')
         ax1.plot(media_df['install_date'], media_df['r7usdp'], label='r7usdp')
+        ax1.plot(media_df['install_date'], media_df['r2usd'], label='r2usd')
         ax1.set_ylabel('r7usd and r7usdp')
         ax1.set_xlabel('Install Date')
 
@@ -763,6 +927,7 @@ def draw24(df,prefix='attCampaign24_'):
         fig, ax3 = plt.subplots(figsize=(24, 6))
 
         mediaDf = media_df.copy()
+        mediaDf['r2usd7'] = mediaDf['r2usd'].rolling(7).mean()
         mediaDf['r7usd7'] = mediaDf['r7usd'].rolling(7).mean()
         mediaDf['r7usdp7'] = mediaDf['r7usdp'].rolling(7).mean()
         mediaDf['MAPE7'] = abs(mediaDf['r7usd7'] - mediaDf['r7usdp7']) / mediaDf['r7usd7']
@@ -771,6 +936,7 @@ def draw24(df,prefix='attCampaign24_'):
 
         ax3.plot(mediaDf['install_date'], mediaDf['r7usd7'], label='r7usd7')
         ax3.plot(mediaDf['install_date'], mediaDf['r7usdp7'], label='r7usdp7')
+        ax3.plot(mediaDf['install_date'], mediaDf['r2usd7'], label='r2usd7')
         ax3.set_ylabel('r7usd7 and r7usdp7')
         ax3.set_xlabel('Install Date')
 
@@ -807,7 +973,7 @@ def getChooseCampaignList():
     # campaignDf['campaign_id'] 改为str类型
     campaignDf['campaign_id'] = campaignDf['campaign_id'].astype(str)
     campaignList = campaignDf['campaign_id'].tolist()
-    print('getChooseCampaignList:',campaignList)
+    # print('getChooseCampaignList:',campaignList)
     return campaignList
 
 def main24(fast = False,onlyCheck = False):
@@ -829,7 +995,7 @@ def main24(fast = False,onlyCheck = False):
 
             print('skan data len:',len(skanDf))
             
-            skanDf = skanValidInstallDate2Min(skanDf,N = 600)
+            skanDf = skanValidInstallDate2Min(skanDf,N = 3600)
             skanDf = skanGroupby(skanDf)
             skanDf.to_csv(getFilename('skanAOSCampaignG24'),index=False)
             print('skan data group len:',len(skanDf))
@@ -840,7 +1006,7 @@ def main24(fast = False,onlyCheck = False):
             userDf = makeUserDf(df2.copy())
             print('user data len:',len(userDf))
             
-            userDf = userInstallDate2Min(userDf,N = 600)
+            userDf = userInstallDate2Min(userDf,N = 3600)
             userDf = userGroupby(userDf)
             userDf.to_csv(getFilename('userAOSCampaignG24'),index=False)
             print('user data group len:',len(userDf))
@@ -851,7 +1017,8 @@ def main24(fast = False,onlyCheck = False):
         # just for test
         # skanDf = skanDf.head(100)
 
-        userDf = meanAttribution(userDf, skanDf)
+        # userDf = meanAttribution(userDf, skanDf)
+        userDf = meanAttributionFastv2(userDf, skanDf)
         userDf.to_csv(getFilename('meanAttribution24'), index=False)
         userDf = pd.read_csv(getFilename('meanAttribution24'))
         userDf = meanAttributionResult(userDf)
@@ -867,7 +1034,7 @@ def main48(fast = False,onlyCheck = False):
             # 48小时版本归因
             # getDataFromMC()
             # getCountryFromCampaign()
-            getCountryFromCampaign2()
+            # getCountryFromCampaign2()
 
             df = dataStep1_48()
             df2 = dataStep2(df)
@@ -880,7 +1047,7 @@ def main48(fast = False,onlyCheck = False):
 
             print('skan data len:',len(skanDf))
             
-            skanDf = skanValidInstallDate2Min(skanDf,N = 600)
+            skanDf = skanValidInstallDate2Min(skanDf,N = 3600)
             skanDf = skanGroupby(skanDf)
             skanDf.to_csv(getFilename('skanAOSCampaignG48'),index=False)
             print('skan data group len:',len(skanDf))
@@ -891,26 +1058,68 @@ def main48(fast = False,onlyCheck = False):
             userDf = makeUserDf(df2.copy())
             print('user data len:',len(userDf))
             
-            userDf = userInstallDate2Min(userDf,N = 600)
+            userDf = userInstallDate2Min(userDf,N = 3600)
             userDf = userGroupby(userDf)
             userDf.to_csv(getFilename('userAOSCampaignG48'),index=False)
             print('user data group len:',len(userDf))
 
         else:
             userDf = pd.read_csv(getFilename('userAOSCampaignG48'))
-            skanDf = pd.read_csv(getFilename('skanAOSCampaignG48Geo'))
+            skanDf = pd.read_csv(getFilename('skanAOSCampaignG48Geo'), converters={'campaign_id':str})
         
-        userDf = meanAttribution(userDf, skanDf)
+        # userDf = meanAttribution(userDf, skanDf)
+        # skanDf = skanDf.head(100)
+        userDf = meanAttributionFastv2(userDf, skanDf)
         userDf.to_csv(getFilename('meanAttribution48'), index=False)
         userDf = pd.read_csv(getFilename('meanAttribution48'))
         userDf = meanAttributionResult(userDf)
         userDf.to_csv(getFilename('meanAttributionResult48'), index=False)
 
     userDf = pd.read_csv(getFilename('meanAttributionResult48'), converters={'campaign_id':str})
-    df = checkRet(userDf)
+    df = checkRet(userDf,prefix='attCampaign48_')
     draw24(df,prefix='attCampaign48_')
+
+def debug():
+    # campaign_id,install_date,r1usd,r2usd,r7usd,user_count,r1usdp,r7usdp,MAPE
+    df24 = pd.read_csv(getFilename('attCampaign24_attribution24RetCheck'))
+    df48 = pd.read_csv(getFilename('attCampaign48_attribution48RetCheck'))
+
+    df24 = [['campaign_id','install_date','user_count','r1usd','r7usd','r7usdp']]
+    df48 = [['campaign_id','install_date','r7usdp']]
+
+    df = df24.merge(df48,on=['campaign_id','install_date'],how='left',sum_suffixes=('', '48'))
+    df = df.sort_values(by=['campaign_id','install_date'],ascending=True)
+
+    campaignIdList = []
+    mapeList = []
+    mape48List = []
+
+    for campaignId in df['campaign_id'].unique():
+        campaignDf = df[df['campaign_id'] == campaignId]
+        campaignDf['r7usd rolling7'] = campaignDf['r7usd'].rolling(7).mean()
+        campaignDf['r7usdp rolling7'] = campaignDf['r7usdp'].rolling(7).mean()
+        campaignDf['r7usdp48 rolling7'] = campaignDf['r7usdp48'].rolling(7).mean()
+        campaignDf['MAPE rolling7'] = abs(campaignDf['r7usd rolling7'] - campaignDf['r7usdp rolling7']) / campaignDf['r7usd rolling7']
+        campaignDf['MAPE48 rolling7'] = abs(campaignDf['r7usd rolling7'] - campaignDf['r7usdp48 rolling7']) / campaignDf['r7usd rolling7']
+        mape = campaignDf['MAPE rolling7'].mean()
+        mape48 = campaignDf['MAPE48 rolling7'].mean()
+
+        print(f"campaignId: {campaignId}, MAPE: {mape}, MAPE48: {mape48}")
+        campaignIdList.append(campaignId)
+        mapeList.append(mape)
+        mape48List.append(mape48)
+
+    retDf = pd.DataFrame({'campaign_id':campaignIdList,'MAPE':mapeList,'MAPE48':mape48List})
+    retDf = retDf.sort_values(by=['MAPE'],ascending=False)
+
+    retDf.to_csv(getFilename('debug'),index=False)
+
 
 if __name__ == '__main__':
     # chooseCampaign()
-    main24(fast = True,onlyCheck = False)
-    # main48(fast = False,onlyCheck = False)
+    print('main24')
+    main24(fast = False,onlyCheck = False)
+    # print('main48')
+    # main48(fast = True,onlyCheck = True)
+
+    # debug()

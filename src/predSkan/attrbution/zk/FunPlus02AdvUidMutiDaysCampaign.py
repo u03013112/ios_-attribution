@@ -1,6 +1,4 @@
-# 与FunPlus02AdvUidMutiDays.py的区别
-# 这个版本会在北京时间12点~13点，额外获得postback copy数据，来补充T-1日数据
-# 其他逻辑都是相同的，额外添加逻辑获得业务日期 + 1日的数据，然后合并到之前的detail数据中
+# FunPlus02AdvUidMutiDays Campaign版本
 
 
 import io
@@ -23,6 +21,10 @@ def init():
     if 'o' in globals():
         print('this is online version')
 
+        from odps import options
+        # UTC+0
+        options.sql.settings = {'odps.sql.timezone':'Africa/Accra'}
+
         def execSql_online(sql):
             with o.execute_sql(sql).open_reader(tunnel=True, limit=False) as reader:
                 pd_df = reader.to_pandas()
@@ -42,7 +44,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20230912'
+        dayStr = '20230913'
         days = '15'
 
     # 如果days不是整数，转成整数
@@ -80,47 +82,45 @@ def getSKANDataFromMC(dayStr, days):
     '''
     print(sql)
     df = execSql(sql)
+    # 在这里做一些过滤处理
+    # 其中postback_timestamp应该最大值小于dayStr的23:59:59，但是目前发现有个别的大于这个值
+    # 所以将大于这个值的postback_timestamp改为dayStr的23:59:59
+    # 这里原来认为postback_timestamp是unix时间戳，其实是类似'2023-09-01 15:54:22'这样的字符串，另外他的时区不是utc0
+    # 需要先将他转成utc0的unix时间戳，然后最大值过滤，然后再转回原来的字符串格式
+    # 为时间字符串添加UTC时区标识
+    # 在新列中进行操作
+    df['temp_timestamp'] = df['postback_timestamp'] + '+00:00'
+    df['temp_timestamp'] = pd.to_datetime(df['temp_timestamp'], utc=True)
+    df['temp_timestamp'] = df['temp_timestamp'].view(np.int64) // 10 ** 9
+
+    max_timestamp_str = dayStr + '235959' + '+00:00'
+    max_timestamp = pd.to_datetime(max_timestamp_str, utc=True)
+    print('max_timestamp:', max_timestamp)
+    max_timestamp = max_timestamp.to_pydatetime().timestamp()
+    print('max_timestamp:', max_timestamp)
+
+    affected_rows = df[df['temp_timestamp'] > max_timestamp]
+    print('尝试纠正postback_timestamp，影响到的行数：', len(affected_rows))
+
+    # 显示修改前的示例数据
+    print('\n修改前的示例数据:')
+    print(affected_rows.head(5))
+
+    df.loc[df['temp_timestamp'] > max_timestamp, 'temp_timestamp'] = max_timestamp
+
+    # 将修改后的值赋回到 'postback_timestamp' 列
+    # df['postback_timestamp'] = pd.to_datetime(df['temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
+    # 只对影响到的行做 'postback_timestamp' 的覆盖
+    df.loc[affected_rows.index, 'postback_timestamp'] = pd.to_datetime(df.loc[affected_rows.index, 'temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # 显示修改后的示例数据
+    print('\n修改后的示例数据:')
+    print(df.loc[affected_rows.index].head(5))
+
+    # 删除临时列
+    df.drop(columns=['temp_timestamp'], inplace=True)
+
     return df
-
-
-# 映射参照 https://support.appsflyer.com/hc/en-us/articles/360012640377
-def getSKANPostbackCopyDataFromMC(dayStr):
-    dayAdd1Str = (datetime.strptime(dayStr, '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d')
-
-    sql = f'''
-        SELECT
-            'unknown' as campaign_id,
-            CASE
-                WHEN skad_ad_network_id IN (
-                    'v9wttpbfk9.skadnetwork',
-                    'n38lu8286q.skadnetwork'
-                ) THEN 'Facebook Ads'
-                WHEN skad_ad_network_id IN (
-                    'cstr6suwn9.skadnetwork',
-                    'eqhxz8m8av.skadnetwork'
-                ) THEN 'googleadwords_int'
-                WHEN skad_ad_network_id IN (
-                    '238da6jt44.skadnetwork',
-                    '899vrgt9g8.skadnetwork',
-                    'mj797d8u6f.skadnetwork',
-                    '22mmun2rn5.skadnetwork'
-                ) THEN 'bytedanceglobal_int'
-                ELSE 'other'
-            END as media,
-            skad_conversion_value as cv,
-            timestamp as postback_timestamp
-        FROM
-            ods_platform_appsflyer_skad_postbacks_copy
-        WHERE
-            day = '{dayAdd1Str}'
-            AND app_id = 'id1479198816'
-            AND did_win = 'true'
-        ;
-    '''
-    print(sql)
-    df = execSql(sql)
-    return df
-
 
 # 计算合法的激活时间范围
 def skanAddValidInstallDate(skanDf):
@@ -357,339 +357,33 @@ def addCv(df, cvMapDf):
     df.loc[df['r1usd'] > cvMapDf['max_event_revenue'].max(), 'cv'] = cvMapDf['conversion_value'].max()
     return df# 暂时就只关心这3个媒体
 
-# 优化效率，但是还是慢
-def meanAttribution(userDf, skanDf):
-    # 将country_code_list列的空值填充为空字符串
-    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
-
-    # userDf['install_timestamp'] 原本是string类型，转换为int类型
-    userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
-
-    # 将时间戳进行近似，每隔S秒为一个区间
-    # S = 600
-    # 10分钟运行还是太慢了
-    S = 60 * 60
-
-    # 对userDf进行汇总
-    userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
-    userDf['count'] = 1
-    # userDf install_date列的空值填充为空字符串
-    userDf['install_date'] = userDf['install_date'].fillna('')
-    
-    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
-    
-    userDf['attribute'] = userDf.apply(lambda x: [], axis=1)
-
-    skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
-    skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
-    skanDf['count'] = 1
-    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index(drop = False)
-    
-
-    # 待分配的skan条目的索引
-    pending_skan_indices = skanDf.index.tolist()
-
-    N = 3 # 最多进行3次分配
-    for i in range(N):  
-        print(f"开始第 {i + 1} 次分配")
-
-        new_pending_skan_indices = []
-
-        # 使用过滤条件选择要处理的skanDf行
-        skanDf_to_process = skanDf.loc[pending_skan_indices]
-        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
-        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
-            media = item['media']
-            cv = item['cv']
-            min_valid_install_timestamp = item['min_valid_install_timestamp']
-            max_valid_install_timestamp = item['max_valid_install_timestamp']
-            
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600
-            if i == N-1:
-                # 由于经常有分不出去的情况，所以最后一次分配，不考虑国家
-                item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600
-                # print('最后一次分配，不考虑国家，且时间范围向前推一天')
-                # print(item)
-            else:
-                item_country_code_list = item['country_code_list']
-
-            if cv < 0:
-                # print('cv is null')
-                if item_country_code_list == '':
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) 
-                        & (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 0.95))
-                    )
-                else:
-                    country_code_list = item_country_code_list.split('|')
-                    condition = (
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) 
-                        & (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 0.95))
-                    )
-            else:
-                # 先检查item_country_code_list是否为空
-                if item_country_code_list == '':
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) 
-                        & (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 0.95))
-                    )
-                else:
-                    country_code_list = item_country_code_list.split('|')
-                    condition = (
-                        (userDf['cv'] == cv) &
-                        (userDf['install_timestamp'] >= min_valid_install_timestamp) &
-                        (userDf['install_timestamp'] <= max_valid_install_timestamp) &
-                        (userDf['country_code'].isin(country_code_list)) 
-                        & (userDf['attribute'].apply(lambda x: sum([elem['rate'] for elem in x]) < 0.95))
-                    )
-
-            matching_rows = userDf[condition]
-            total_matching_count = matching_rows['count'].sum()
-
-            if total_matching_count > 0:
-                rate = item['count'] / total_matching_count
-                userDf.loc[condition, 'attribute'] = userDf.loc[condition, 'attribute'].apply(lambda x: x + [{'media': media, 'skan index': index, 'rate': rate}])
-            else:
-                new_pending_skan_indices.append(index)
-
-        new_pending_skan_indices = list(set(new_pending_skan_indices))
-
-        print(f"第 {i + 1} 次分配结束，还有 {len(new_pending_skan_indices)} 个待分配条目")
-        pendingDf = skanDf.loc[new_pending_skan_indices]
-        
-        print('待分配的skan数量：')
-        print(pendingDf.groupby('media').size())
-
-        # 找出需要重新分配的行
-        rows_to_redistribute = userDf[userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x]) > 1)]
-        print(f"需要重新分配的行数：{len(rows_to_redistribute)}")
-
-        # 记录需要移除的skan index
-        removed_skan_indices = set()
-
-        # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
-        for index, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
-            attribute_list = row['attribute']
-
-            attribute_list_sorted = sorted(attribute_list, key=lambda x: x['rate'], reverse=True)
-            accumulated_rate = 0
-
-            for item in attribute_list_sorted:
-                accumulated_rate += item['rate']
-                if accumulated_rate > 1:
-                    removed_skan_indices.add(item['skan index'])
-
-        print(f"需要移除的skan index数量：{len(removed_skan_indices)}")
-        # 在userDf中删除涉及到需要移除的skan index的归因
-        userDf['attribute'] = userDf['attribute'].apply(lambda x: [item for item in x if item['skan index'] not in removed_skan_indices])
-
-        pending_skan_indices = new_pending_skan_indices
-        # 更新待分配的skan索引列表
-        pending_skan_indices = list(set(pending_skan_indices).union(removed_skan_indices))
-
-        print(f"第 {i + 1} 次分配结束 2，将过分配skan排除掉，还有 {len(pending_skan_indices)} 个待分配条目")
-        pendingDf = skanDf.loc[pending_skan_indices]
-        
-        # print('待分配的skan数量2：')
-        # print(pendingDf.groupby('media').size())
-        
-        # 计算每个媒体的未分配的用户数
-        pending_counts = pendingDf.groupby('media')['count'].sum()
-        print("每个媒体的未分配的用户数：")
-        print(pending_counts)
-        
-        # 计算每个媒体的总的skan用户数
-        total_counts = skanDf.groupby('media')['count'].sum()
-        print("每个媒体的总的skan用户数：")
-        print(total_counts)
-        
-        # 计算每个媒体的未分配占比
-        pending_ratios = pending_counts / total_counts
-        print("每个媒体的未分配占比：")
-        print(pending_ratios)
-
-    # 拆分customer_user_id
-    userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
-    userDf = userDf.explode('customer_user_id')
-
-    for media in mediaList:
-        userDf[media + ' rate'] = userDf['attribute'].apply(lambda x: sum([item['rate'] for item in x if item['media'] == media]))
-
-    userDf = userDf.drop(columns=['count','attribute'])
-
-    return userDf
-
-# 加速版本，目前看起来效果还不错
-def meanAttributionFast(userDf, skanDf):
-    skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
-    userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
-    S = 60 * 60
-    # S = 600
-    userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
-    userDf['count'] = 1
-    userDf['install_date'] = userDf['install_date'].fillna('')
-    userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
-    skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
-    skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
-    skanDf['count'] = 1
-    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index(drop = False)
-    pending_skan_indices = skanDf.index.tolist()
-    N = 3
-    attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
-
-    # 初始化userDf中的media rate列
-    mediaList = skanDf['media'].unique()
-    for media in mediaList:
-        userDf[media + ' rate'] = 0
-
-    for i in range(N):  
-        user_indices = []
-        medias = []
-        skan_indices = []
-        rates = []
-        print(f"开始第 {i + 1} 次分配")
-        new_pending_skan_indices = []
-        skanDf_to_process = skanDf.loc[pending_skan_indices]
-        print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
-        
-        # 在每次循环开始时，预先计算每一行的media rate的总和
-        userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
-        for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
-            media = item['media']
-            cv = item['cv']
-            min_valid_install_timestamp = item['min_valid_install_timestamp']
-            max_valid_install_timestamp = item['max_valid_install_timestamp']
-            
-            if i == N-2:
-                min_valid_install_timestamp -= 24*3600
-            if i == N-1:
-                item_country_code_list = ''
-                min_valid_install_timestamp -= 48*3600
-            else:
-                item_country_code_list = item['country_code_list']
-
-            # 将所有的匹配条件都单独写出来
-            # condition_rate = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]) < 0.95, axis=1)
-            # 使用预先计算的media rate总和进行匹配
-            condition_rate = userDf['total media rate'] < 0.95
-            condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
-            condition_country = userDf['country_code'].isin(item_country_code_list.split('|')) if item_country_code_list != '' else pd.Series([True] * len(userDf))
-            condition_cv = userDf['cv'] == cv if cv >= 0 else pd.Series([True] * len(userDf))
-
-            if cv < 0:
-                if item_country_code_list == '':
-                    condition = condition_rate & condition_time
-                else:
-                    condition = condition_rate & condition_time & condition_country
-            else:
-                if item_country_code_list == '':
-                    condition = condition_rate & condition_time & condition_cv
-                else:
-                    condition = condition_rate & condition_time & condition_cv & condition_country
-
-            matching_rows = userDf[condition]
-            total_matching_count = matching_rows['count'].sum()
-
-            if total_matching_count > 0:
-                rate = item['count'] / total_matching_count
-
-                userDf.loc[condition, 'total media rate'] += rate
-                user_indices.extend(matching_rows.index)
-                medias.extend([media] * len(matching_rows))
-                skan_indices.extend([index] * len(matching_rows))
-                rates.extend([rate] * len(matching_rows))
-            else:
-                new_pending_skan_indices.append(index)
-
-        print('未分配成功：', len(new_pending_skan_indices))
-        attributeDf2 = pd.DataFrame({'user index': user_indices, 'media': medias, 'skan index': skan_indices, 'rate': rates})
-        attributeDf = attributeDf.append(attributeDf2, ignore_index=True)
-
-        # 找出需要重新分配的行
-        grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
-        rows_to_redistribute = userDf[userDf.index.isin(grouped_attributeDf[grouped_attributeDf > 1].index)]
-
-        # 记录需要移除的skan index
-        removed_skan_indices = set()
-
-        # 对每一行，找出需要重新分配的skan条目，并将它们添加到new_pending_skan_indices列表中
-        for index, row in tqdm(rows_to_redistribute.iterrows(), total=len(rows_to_redistribute)):
-            attribute_list = attributeDf[attributeDf['user index'] == index]
-            attribute_list_sorted = attribute_list.sort_values('rate', ascending=False)
-
-            accumulated_rate = 0
-
-            for _, item in attribute_list_sorted.iterrows():
-                accumulated_rate += item['rate']
-                if accumulated_rate > 1:
-                    removed_skan_indices.add(item['skan index'])
-
-        # 打印attributeDf中的行数中不同skan index的数量
-        attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
-        
-        # 更新待分配的skan索引列表
-        pending_skan_indices = list(set(new_pending_skan_indices).union(removed_skan_indices))
-        print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
-        
-        # 更新media rate
-        for media in mediaList:
-            userDf[media + ' rate'] = 0
-            userDf[media + ' rate'] = attributeDf[attributeDf['media'] == media].groupby('user index')['rate'].sum()
-            userDf[media + ' rate'] = userDf[media + ' rate'].fillna(0)
-
-        # 计算每个媒体的未分配的用户数
-        pending_counts = skanDf.loc[pending_skan_indices].groupby('media')['count'].sum()
-        print("每个媒体的未分配的用户数：")
-        print(pending_counts)
-        
-        # 计算每个媒体的总的skan用户数
-        total_counts = skanDf.groupby('media')['count'].sum()
-        print("每个媒体的总的skan用户数：")
-        print(total_counts)
-        
-        # 计算每个媒体的未分配占比
-        pending_ratios = pending_counts / total_counts
-        print("每个媒体的未分配占比：")
-        print(pending_ratios)
-
-    # 拆分customer_user_id
-    userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
-    userDf = userDf.explode('customer_user_id')
-
-    return userDf
-
+import gc
 def meanAttributionFastv2(userDf, skanDf):
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
     userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
     S = 60 * 60
-    # S = 600
     userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
     userDf['count'] = 1
     userDf['install_date'] = userDf['install_date'].fillna('')
     userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
+
     skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
     skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
     skanDf['count'] = 1
     skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media']).agg({'count': 'sum'}).reset_index(drop = False)
-    pending_skan_indices = skanDf.index.tolist()
-    N = 3
-    attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
 
-    # 初始化userDf中的media rate列
-    mediaList = skanDf['media'].unique()
-    for media in mediaList:
-        userDf[media + ' rate'] = 0
+    pending_skan_indices = skanDf.index.tolist()
+    N = 4
+    attributeDf = pd.DataFrame(columns=['user index', 'campaignId', 'skan index', 'rate'])
+
+    campaignList = skanDf.loc[~skanDf['campaign_id'].isnull()]['campaign_id'].unique().tolist()
+    print('campaignList:', campaignList)
+    for campaignId in campaignList:
+        userDf['%s rate'%(campaignId)] = 0
 
     for i in range(N):  
         user_indices = []
-        medias = []
+        campaignIds = []
         skan_indices = []
         rates = []
         print(f"开始第 {i + 1} 次分配")
@@ -698,16 +392,21 @@ def meanAttributionFastv2(userDf, skanDf):
         print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
         
         # 在每次循环开始时，预先计算每一行的media rate的总和
-        userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
+        userDf['total media rate'] = userDf.apply(lambda x: sum([x[campaignId + ' rate'] for campaignId in campaignList]), axis=1)
+        if i == 1:
+            print('第%d次分配，时间范围向前推一天'%(i+1))
+        if i >= 2:
+            print('第%d次分配，不考虑国家，且时间范围向前推两天'%(i+1))
+        
         for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
-            media = item['media']
+            campaignId = str(item['campaign_id'])
             cv = item['cv']
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
             
-            if i == N-2:
+            if i == 1:
                 min_valid_install_timestamp -= 24*3600
-            if i == N-1:
+            if i >= 2:
                 item_country_code_list = ''
                 min_valid_install_timestamp -= 48*3600
             else:
@@ -740,31 +439,27 @@ def meanAttributionFastv2(userDf, skanDf):
 
                 userDf.loc[condition, 'total media rate'] += rate
                 user_indices.extend(matching_rows.index)
-                medias.extend([media] * len(matching_rows))
+                campaignIds.extend([campaignId] * len(matching_rows))
                 skan_indices.extend([index] * len(matching_rows))
                 rates.extend([rate] * len(matching_rows))
+                # print(user_indices)
             else:
                 new_pending_skan_indices.append(index)
 
         print('未分配成功：', len(new_pending_skan_indices))
-        attributeDf2 = pd.DataFrame({'user index': user_indices, 'media': medias, 'skan index': skan_indices, 'rate': rates})
+        attributeDf2 = pd.DataFrame({'user index': user_indices, 'campaignId': campaignIds, 'skan index': skan_indices, 'rate': rates})
+        
         attributeDf = attributeDf.append(attributeDf2, ignore_index=True)
-
         # 找出需要重新分配的行
         grouped_attributeDf = attributeDf.groupby('user index')['rate'].sum()
-
         index_to_redistribute = grouped_attributeDf[grouped_attributeDf > 1].index
-
         sorted_rows_to_redistribute = attributeDf[attributeDf['user index'].isin(index_to_redistribute)].sort_values(
             ['user index', 'rate'], ascending=[True, False])
         sorted_rows_to_redistribute['cumulative_rate'] = sorted_rows_to_redistribute.groupby('user index')['rate'].cumsum()
-
         # 找出需要移除的行
         rows_to_remove = sorted_rows_to_redistribute[sorted_rows_to_redistribute['cumulative_rate'] > 1]
-
         # 记录需要移除的skan index
         removed_skan_indices = set(rows_to_remove['skan index'])
-
         # 从attributeDf中移除这些行
         attributeDf = attributeDf[~attributeDf['skan index'].isin(removed_skan_indices)]
         print('移除过分配的skan：', len(removed_skan_indices),'条')
@@ -775,44 +470,72 @@ def meanAttributionFastv2(userDf, skanDf):
         print(f"第 {i + 1} 次分配结束，还有 {len(pending_skan_indices)} 个待分配条目")
         
         # 更新media rate
-        for media in mediaList:
-            userDf[media + ' rate'] = 0
-            userDf[media + ' rate'] = attributeDf[attributeDf['media'] == media].groupby('user index')['rate'].sum()
-            userDf[media + ' rate'] = userDf[media + ' rate'].fillna(0)
-
+        for campaignId in campaignList:
+            userDf[campaignId + ' rate'] = 0
+            userDf[campaignId + ' rate'] = attributeDf[attributeDf['campaignId'] == campaignId].groupby('user index')['rate'].sum()
+            userDf[campaignId + ' rate'] = userDf[campaignId + ' rate'].fillna(0)
+        
         # 计算每个媒体的未分配的用户数
-        pending_counts = skanDf.loc[pending_skan_indices].groupby('media')['count'].sum()
-        print("每个媒体的未分配的用户数：")
-        print(pending_counts)
-        
+        pending_counts = skanDf.loc[pending_skan_indices].groupby('campaign_id')['count'].sum()
+
         # 计算每个媒体的总的skan用户数
-        total_counts = skanDf.groupby('media')['count'].sum()
-        print("每个媒体的总的skan用户数：")
-        print(total_counts)
-        
+        total_counts = skanDf.groupby('campaign_id')['count'].sum()
+
         # 计算每个媒体的未分配占比
         pending_ratios = pending_counts / total_counts
-        print("每个媒体的未分配占比：")
-        print(pending_ratios)
 
+        # 将三个计算结果合并为一个DataFrame
+        result_df = pd.concat([total_counts, pending_counts, pending_ratios], axis=1)
+
+        # 设置列名和索引
+        result_df.columns = ['总skan用户数', '未分配用户数', '未分配比例']
+        result_df.index.name = 'campaign_id'
+
+        # 将未分配比例转换为2位小数的百分比
+        result_df['未分配比例'] = result_df['未分配比例'].apply(lambda x: f"{x*100:.2f}%")
+
+        # 打印结果
+        print(result_df)
+
+        # 计算所有的未分配用户占比
+        total_pending_ratio = pending_counts.sum() / total_counts.sum()
+        print("所有的未分配用户占比：")
+        print(total_pending_ratio)
+
+        gc.collect()
+    
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
     userDf = userDf.explode('customer_user_id')
 
     return userDf
 
-
+# 检查是否已经获得了af数据
+def check(dayStr):
+    sql = f'''
+        select
+            *
+        from 
+            ods_platform_appsflyer_skad_details
+        where
+            day = '{dayStr}'
+            AND app_id = 'id1479198816'
+            AND event_name in (
+                'af_skad_install',
+                'af_skad_redownload'
+            )
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    if len(df) <= 0:
+        raise Exception('没有有效的获得af skan数据，请稍后重试')
+    return
 
 def main():
-    init()
+    check(dayStr)
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr,days)
-    skanDf2 = getSKANPostbackCopyDataFromMC(dayStr)
-    if len(skanDf2) <= 0:
-        # 直接报错
-        raise Exception('没有有效的获得skan copy数据，请稍后重试')
-        
-    skanDf = skanDf.append(skanDf2,ignore_index=True)
     # 将skanDf中media不属于mediaList的media改为other
     skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
     # skanDf = skanDf[skanDf['media'].isin(mediaList)]
@@ -828,7 +551,6 @@ def main():
     minValidInstallTimestamp -= 72*3600
     print('minValidInstallTimestamp:',minValidInstallTimestamp)
     print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
-
     campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
     campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
     # 4、将skan数据和广告信息合并，获得skan中的国家信息
@@ -838,6 +560,9 @@ def main():
     # 5、获取af数据
     afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
     userDf = addCv(afDf,getCvMap())
+
+    # userDf.to_csv('/src/data/zk/userDf2.csv',index=False)
+    # skanDf.to_csv('/src/data/zk/skanDf2.csv',index=False)
 
     # userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
     # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
@@ -855,55 +580,66 @@ def createTable():
         columns = [
             Column(name='customer_user_id', type='string', comment='from ods_platform_appsflyer_events.customer_user_id'),
             Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
+            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
+            Column(name='rate', type='double', comment='rate,lile 0.1'),
         ]
-        for media in mediaList:
-            # media里面有空格，将空格替换为下划线
-            media = media.replace(' ','_')
-            columns.append(Column(name='%s_rate'%(media), type='double', comment='%s媒体归因值概率'%(media)))
-
+        
         partitions = [
             Partition(name='day', type='string', comment='postback time,like 20221018')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_adv_uid_mutidays', schema, if_not_exists=True)
+        table = o.create_table('topwar_ios_funplus02_adv_uid_mutidays_campaign', schema, if_not_exists=True)
         return table
     else:
         print('createTable failed, o is not defined')
 
+def deleteTable(dayStr):
+    print('try to delete table:',dayStr)
+    if 'o' in globals():
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign')
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+
 def writeTable(df,dayStr):
-    print('try to write table:',len(df))
+    print('try to write table:')
     print(df.head(5))
     if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays')
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign')
         t.delete_partition('day=%s'%(dayStr), if_exists=True)
         with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
             writer.write(df)
     else:
         print('writeTable failed, o is not defined')
         print('try to write csv file')
-        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDays13_%s.csv'%(dayStr),index=False)
+        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
 
+init()
 attDf = main()
-# 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
-attDf['total rate'] = attDf[['%s rate'%(media) for media in mediaList]].sum(axis=1)
-attDf = attDf[attDf['total rate'] > 0]
+# # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
+# attDf.to_csv('/src/data/zk2/attDf.csv',index=False)
 
+# attDf = pd.read_csv('/src/data/zk2/attDf.csv')
+
+attDf = attDf[attDf.filter(like='rate', axis=1).sum(axis=1) > 0]
 # install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
 attDf['install_date'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
 # day是将install_timestamp转换为日期，格式为20230531
 attDf['day'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
-attDf = attDf[['customer_user_id','install_date'] + ['%s rate'%(media) for media in mediaList] + ['day']]
+# 只保留需要的列
+campaignIdRateList = attDf.filter(like='rate', axis=1).columns.tolist()
+attDf = attDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
+attDf_melted = attDf.melt(
+        id_vars=['customer_user_id', 'install_date', 'day'],
+        var_name='campaign_id',
+        value_name='rate'
+    )
 
-# attDf 列改名 所有列名改为 小写
-attDf.columns = [col.lower() for col in attDf.columns]
-# attDf 列改名 
-# 'facebook ads rate' -> 'facebook_ads_rate'	
-# 'googleadwords_int rate' -> 'googleadwords_int_rate'	
-# 'bytedanceglobal_int rate' - > 'bytedanceglobal_int_rate'
-attDf.columns = [col.replace(' ','_') for col in attDf.columns]
+# 清理 campaign_id 列，只保留数字
+attDf_melted['campaign_id'] = attDf_melted['campaign_id'].str.extract('(.*) rate')
 
-# print('try to write table:')
-# print(attDf.head(5))
+# print('attDf_melted (head 5):')
+# print(attDf_melted.head(5))
+
+attDf = attDf_melted.loc[attDf_melted['rate'] > 0]
 
 createTable()
 
@@ -915,10 +651,13 @@ attDf = attDf[attDf['day'] >= dayBeforeStr]
 # 先找到所有的day，升序排列
 days = attDf['day'].unique()
 days.sort()
-for dayStr in days:
+for dayStr0 in days:
     # 找到dayStr对应的数据
-    dayDf = attDf[attDf['day'] == dayStr]
+    dayDf = attDf[attDf['day'] == dayStr0]
     # 将day列丢掉
     dayDf = dayDf.drop(columns=['day'])
     # 写入表
-    writeTable(dayDf,dayStr)
+    writeTable(dayDf,dayStr0)
+
+# 删除额外的分区，为了确保AF修改postback时间不会导致任何提前数据，双保险，与上面的postback时间戳过滤一起使用
+deleteTable(dayStr)
