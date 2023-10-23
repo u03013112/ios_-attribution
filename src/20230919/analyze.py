@@ -386,7 +386,7 @@ def mind3():
         print('2023年5月之后 相关系数：')
         print(df2.corr(method='spearman')['revenue_7d'])
     
-mind3()
+# mind3()
 
 # 结论：低付费金额的相关性差距较大，可见高付费用户的表现比较稳定，这里是超过8美元的用户
 #    cv  min_event_revenue  max_event_revenue        avg

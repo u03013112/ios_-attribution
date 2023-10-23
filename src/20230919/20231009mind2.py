@@ -396,7 +396,7 @@ def debug01_2():
         # plt.savefig('/src/data/zk2/20231009mind2_draw4_%s.png' % date['name'])
         # plt.clf()
 
-debug01_2()
+# debug01_2()
 
 def debug02():
     df = pd.read_csv(getFilename('20231009mind2_data'))
@@ -463,4 +463,197 @@ def debug03():
 # for r in ret:
 #     print(r)
 
+from analyze import makeLevels1,makeCvMap,addCv
+def debug04():
+    # 查看每个月的不同付费区间用户分布走势
+    # 暂时不考虑完全不付费用户（7日内）
+    df = pd.read_csv(getFilename('20230919_analyze3'))
 
+    levels = makeLevels1(df,usd='revenue_1d',N=3)
+    cvMap = makeCvMap(levels)
+    print(cvMap)
+    df = addCv(df,cvMap,usd='revenue_1d',cv='cv')
+    df = df.groupby(['install_date','cv']).agg({'game_uid':'count'}).reset_index()
+    df['install_date'] = pd.to_datetime(df['install_date'], format='%Y%m%d')
+
+    # 计算每一天的每一种cv的占比
+    df['cv_ratio'] = df.groupby('install_date')['game_uid'].apply(lambda x: x / x.sum())
+
+    # fig, axs = plt.subplots(4, 1, figsize=(24, 24), sharex=True)
+    # cv_values = df['cv'].unique()
+    # for i in range(4):
+    #     df_cv = df[df['cv'] == cv_values[i]]
+    #     axs[i].plot(df_cv['install_date'], df_cv['cv_ratio'], label=f'CV {cv_values[i]}')
+    #     axs[i].set_ylabel('CV Ratio')
+    #     axs[i].legend()
+
+    # axs[3].set_xlabel('Install Date')
+    # plt.savefig('/src/data/zk2/20231009mind2_draw4_1.png')
+    # plt.clf()
+
+    # # 计算滚动7天的game_uid
+    # df['rolling7_game_uid'] = df.groupby('cv')['game_uid'].rolling(window=7).sum().reset_index(drop=True)
+
+    # # 计算滚动7天后的cv占比
+    # df['rolling7_cv_ratio'] = df.groupby('install_date')['rolling7_game_uid'].apply(lambda x: x / x.sum())
+
+    # # 绘制滚动7天后的cv占比图表
+    # fig, axs = plt.subplots(4, 1, figsize=(24, 24), sharex=True)
+    # cv_values = df['cv'].unique()
+    # for i in range(4):
+    #     df_cv = df[df['cv'] == cv_values[i]]
+    #     axs[i].plot(df_cv['install_date'], df_cv['rolling7_cv_ratio'], label=f'CV {cv_values[i]}')
+    #     axs[i].set_ylabel('Rolling 7 Days CV Ratio')
+    #     axs[i].legend()
+
+    # axs[3].set_xlabel('Install Date')
+    # plt.savefig('/src/data/zk2/20231009mind2_draw4_2.png')
+    # plt.clf()
+
+    # 转换日期格式并添加月份列
+    df['install_date'] = pd.to_datetime(df['install_date'], format='%Y%m%d')
+    df['month'] = df['install_date'].dt.to_period('M')
+
+    # 按月份和cv分组，计算每个cv的总数
+    df_monthly = df.groupby(['month', 'cv'])['game_uid'].sum().reset_index()
+
+    # 计算每个月每个cv的占比
+    df_monthly['cv_ratio'] = df_monthly.groupby('month')['game_uid'].apply(lambda x: x / x.sum())
+
+    df_monthly = df_monthly.sort_values(by=['cv','month']).reset_index(drop=True)
+    # 打印结果
+    print(df_monthly)
+
+# debug04()
+
+def getData5():
+    sql = '''
+        WITH tmp_unique_id AS (
+            SELECT
+                CAST(install_timestamp AS BIGINT) AS install_timestamp,
+                game_uid,
+                country_code
+            FROM
+                rg_bi.tmp_unique_id
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND mediasource = 'bytedanceglobal_int'
+                AND install_timestamp >= UNIX_TIMESTAMP(datetime '2023-01-01 00:00:00')
+        ),
+        ods_platform_appsflyer_events AS (
+            SELECT
+                customer_user_id,
+                event_timestamp,
+                event_revenue_usd
+            FROM
+                rg_bi.ods_platform_appsflyer_events
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND day >= '20230101'
+                AND event_name IN ('af_purchase_oldusers', 'af_purchase')
+                AND zone = 0
+        ),
+        joined_data AS (
+            SELECT
+                t.install_timestamp,
+                t.game_uid,
+                t.country_code,
+                o.event_timestamp,
+                o.event_revenue_usd
+            FROM
+                tmp_unique_id t
+                LEFT JOIN ods_platform_appsflyer_events o ON t.game_uid = o.customer_user_id
+                AND o.event_timestamp >= t.install_timestamp
+        )
+        SELECT
+            game_uid,
+            country_code,
+            to_char(FROM_UNIXTIME(install_timestamp), 'YYYYMMDD') AS install_date,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 1 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 2 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_2d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 3 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d
+        FROM
+            joined_data
+        GROUP BY
+            install_date,
+            game_uid,
+            country_code
+        HAVING
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) > 0
+        ORDER BY
+            install_date;
+    '''
+    print(sql)
+    df = execSql(sql)
+    return df
+
+# getData5().to_csv('/src/data/zk2/20230919_analyze5.csv',index=False)
+
+def debug5():
+    df = pd.read_csv(getFilename('20230919_analyze5'))
+    df2 = df.groupby( by = ['country_code']).agg({'game_uid':'count'}).reset_index()
+    df2 = df2.sort_values(by='game_uid',ascending=False).reset_index(drop=True)
+    # print(df2)
+    # 只保留前5个国家，剩下的都改为other
+    countryList = df2['country_code'].tolist()
+    countryList = countryList[:10]
+    
+    df.loc[df['country_code'].isin(countryList) == False,'country_code'] = 'other'
+    
+    df['install_date'] = pd.to_datetime(df['install_date'], format='%Y%m%d')
+    df['month'] = df['install_date'].dt.to_period('M')
+    df = df.groupby(by = ['month','country_code']).agg({'game_uid':'count'}).reset_index()
+    df['pay rate'] = df.groupby(['month'])['game_uid'].apply(lambda x: x / x.sum())
+    df = df.sort_values(by=['month','game_uid'],ascending=False).reset_index(drop=True)
+    print(df)
+
+
+debug5()
