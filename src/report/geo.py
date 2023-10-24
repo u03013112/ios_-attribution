@@ -8,10 +8,15 @@
 def getIOSGeoGroup01():
     # 这是获得10月数据中排名比较靠前的国家
     # JP之后的国家用户数占比低于3%，统一归为Other
-    ret = {
-        'TW': ['TW'],
-        'KR': ['KR'],
-        'US': ['US'],
-        'JP': ['JP'],
-    }
+    ret = [
+        {'name':'TW','codeList':['TW']},
+        {'name':'KR','codeList':['KR']},
+        {'name':'US','codeList':['US']},
+        {'name':'JP','codeList':['JP']},
+    ]
+        
+        
+        
+        
+    
     return ret
