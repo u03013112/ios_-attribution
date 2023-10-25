@@ -10,6 +10,7 @@ sys.path.append('/src')
 from src.maxCompute import execSql
 
 from src.report.geo import getIOSGeoGroup01
+from src.report.media import getIOSMediaGroup01
 
 def getFilename(filename,ext='csv'):
     return '%s/%s.%s'%(directory,filename,ext)
@@ -407,7 +408,7 @@ def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007',
     daily_trend['trend'] = daily_trend['trend'].apply(lambda x: "\\protect\\textcolor{red}{上涨}" if x else "\\protect\\textcolor{green}{下跌}")
 
     # 从第一行遍历，记录初始趋势，每次找到趋势与初始趋势不一致的时候停止，输出需要的结果
-    reportStr += "#### 趋势分析（未完成）\n\n"
+    reportStr += "#### 趋势分析（MACD分析）\n\n"
     
     reportStr += f'最近{analysisDayCount}天的主要趋势：\n\n'
     start_date = daily_trend['install_date'].iloc[0]
@@ -694,6 +695,7 @@ def getROIReportGroupByCountry():
     df2['geoGroup'] = 'other'
     for geoGroup in geoGroupList:
         df2.loc[df2.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
+    df2 = df2.groupby(['install_date','geoGroup','media'],as_index=False).sum().reset_index(drop=True)
     df2 = df2.merge(adCostDf2,on=['geoGroup','install_date','media'],how='outer').fillna(0)
 
     totalDf = df.groupby(['install_date','geoGroup']).agg({
@@ -717,7 +719,12 @@ def getROIReportGroupByCountry():
     reportStr += '### 花费占比 分国家\n\n'
     day1StartDayStr = (today - datetime.timedelta(days=7)).strftime('%Y%m%d')
     day1EndDayStr = (today - datetime.timedelta(days=1)).strftime('%Y%m%d')
+    day1QoQStartDayStr = (today - datetime.timedelta(days=14)).strftime('%Y%m%d')
+    day1QoQEndDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
+    day1YoYStartDayStr = (today - datetime.timedelta(days=365+7)).strftime('%Y%m%d')
+    day1YoYEndDayStr = (today - datetime.timedelta(days=365+1)).strftime('%Y%m%d')
     for geoGroup in geoGroupList:
+        reportStr += '\\textbf{%s}\n\n'%geoGroup['name']
         day1Df = totalDf.loc[(totalDf.install_date >= day1StartDayStr) & (totalDf.install_date <= day1EndDayStr) & (totalDf.geoGroup == geoGroup['name'])].copy()
 
         # 计算这个国家的花费占比，即这个国家的花费 / 总花费
@@ -727,6 +734,37 @@ def getROIReportGroupByCountry():
         day1Df = day1Df.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
         day1Df['cost_rate'] = day1Df['cost'] / day1Df['cost_total']
         day1CostRate = day1Df['cost'].sum()/day1Df['cost_total'].sum()
+
+        reportStr += '%s~%s花费占比%.2f%%\n\n'%(day1StartDayStr,day1EndDayStr,day1CostRate*100)
+
+        # 环比
+        totalCostDf = totalDf.loc[(totalDf.install_date >= day1QoQStartDayStr) & (totalDf.install_date <= day1QoQEndDayStr)].copy()
+        totalCostDf = totalCostDf.groupby(['install_date']).agg({'cost':'sum'}).reset_index()
+        totalCostDf = totalCostDf[['install_date','cost']]
+        day1QoQDf = totalDf.loc[(totalDf.install_date >= day1QoQStartDayStr) & (totalDf.install_date <= day1QoQEndDayStr) & (totalDf.geoGroup == geoGroup['name'])].copy()
+        day1QoQDf = day1QoQDf.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
+        day1QoQDf['cost_rate'] = day1QoQDf['cost'] / day1QoQDf['cost_total']
+        day1QoQCostRate = day1QoQDf['cost'].sum()/day1QoQDf['cost_total'].sum()
+        QoQCostRate = (day1CostRate - day1QoQCostRate) / day1QoQCostRate
+        QoQCostColor = 'red'
+        if QoQCostRate < 0:
+            QoQCostColor = 'green'
+        reportStr += '环比%s~%s花费占比:\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1QoQStartDayStr,day1QoQEndDayStr,day1QoQCostRate*100,QoQCostColor,QoQCostRate*100)
+
+        # 同比
+        totalCostDf = totalDf2.loc[(totalDf2.install_date >= day1YoYStartDayStr) & (totalDf2.install_date <= day1YoYEndDayStr)].copy()
+        totalCostDf = totalCostDf.groupby(['install_date']).agg({'cost':'sum'}).reset_index()
+        totalCostDf = totalCostDf[['install_date','cost']]
+        day1YoYDf = totalDf2.loc[(totalDf2.install_date >= day1YoYStartDayStr) & (totalDf2.install_date <= day1YoYEndDayStr) & (totalDf2.geoGroup == geoGroup['name'])].copy()
+        day1YoYDf = day1YoYDf.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
+        day1YoYDf['cost_rate'] = day1YoYDf['cost'] / day1YoYDf['cost_total']
+        day1YoYCostRate = day1YoYDf['cost'].sum()/day1YoYDf['cost_total'].sum()
+        YoYCostRate = (day1CostRate - day1YoYCostRate) / day1YoYCostRate
+        print(geoGroup['name'],day1YoYCostRate,day1YoYDf['cost'].sum(),day1YoYDf['cost_total'].sum())
+        YoYCostColor = 'red'
+        if YoYCostRate < 0:
+            YoYCostColor = 'green'
+        reportStr += '同比%s~%s花费占比:\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1YoYStartDayStr,day1YoYEndDayStr,day1YoYCostRate*100,YoYCostColor,YoYCostRate*100)
 
         # 画cost_rate图
         day1Df = day1Df.sort_values(by=['install_date'],ascending=True).reset_index(drop=True)
@@ -746,70 +784,43 @@ def getROIReportGroupByCountry():
 \FloatBarrier
     '''
 
-
     reportStr += '\n\n### 1日ROI 国家\n\n'
+    day1StartDayStr = (today - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    day1EndDayStr = (today - datetime.timedelta(days=1)).strftime('%Y%m%d')
+    day1QoQStartDayStr = (today - datetime.timedelta(days=14)).strftime('%Y%m%d')
+    day1QoQEndDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
+    day1YoYStartDayStr = (today - datetime.timedelta(days=365+7)).strftime('%Y%m%d')
+    day1YoYEndDayStr = (today - datetime.timedelta(days=365+1)).strftime('%Y%m%d')
     for geoGroup in geoGroupList:
         reportStr += f'#### {geoGroup["name"]}\n\n'
-        day1StartDayStr = (today - datetime.timedelta(days=7)).strftime('%Y%m%d')
-        day1EndDayStr = (today - datetime.timedelta(days=1)).strftime('%Y%m%d')
         day1Df = totalDf.loc[(totalDf.install_date >= day1StartDayStr) & (totalDf.install_date <= day1EndDayStr) & (totalDf.geoGroup == geoGroup['name'])].copy()
         day1ROIMean = day1Df.revenue_1d.sum() / day1Df.cost.sum()
-        
-        # 计算这个国家的花费占比，即这个国家的花费 / 总花费
-        totalCostDf = totalDf.loc[(totalDf.install_date >= day1StartDayStr) & (totalDf.install_date <= day1EndDayStr)].copy()
-        totalCostDf = totalCostDf.groupby(['install_date']).agg({'cost':'sum'}).reset_index()
-        totalCostDf = totalCostDf[['install_date','cost']]
-        day1Df = day1Df.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
-        day1Df['cost_rate'] = day1Df['cost'] / day1Df['cost_total']
-        day1CostRate = day1Df['cost'].sum()/day1Df['cost_total'].sum()
 
-        reportStr += '%s~%s花费占比%.2f%%,ROI均值：\\textbf{%.2f\\%%}\n\n'%(day1StartDayStr,day1EndDayStr,day1CostRate*100,day1ROIMean*100)
+        reportStr += '%s~%s ROI均值：\\textbf{%.2f\\%%}\n\n'%(day1StartDayStr,day1EndDayStr,day1ROIMean*100)
 
         # 环比
-        day1QoQStartDayStr = (today - datetime.timedelta(days=14)).strftime('%Y%m%d')
-        day1QoQEndDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
         day1QoQDf = totalDf.loc[(totalDf.install_date >= day1QoQStartDayStr) & (totalDf.install_date <= day1QoQEndDayStr) & (totalDf.geoGroup == geoGroup['name'])].copy()
         day1QoQROIMean = day1QoQDf.revenue_1d.sum() / day1QoQDf.cost.sum()
-        totalCostDf = totalDf.loc[(totalDf.install_date >= day1QoQStartDayStr) & (totalDf.install_date <= day1QoQEndDayStr)].copy()
-        totalCostDf = totalCostDf.groupby(['install_date']).agg({'cost':'sum'}).reset_index()
-        totalCostDf = totalCostDf[['install_date','cost']]
-        day1QoQDf = day1QoQDf.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
-        day1QoQDf['cost_rate'] = day1QoQDf['cost'] / day1QoQDf['cost_total']
-        day1QoQCostRate = day1QoQDf['cost'].sum()/day1QoQDf['cost_total'].sum()
+        
         
         # 环比差异
         QoQRate = (day1ROIMean - day1QoQROIMean) / day1QoQROIMean
         QoQColor = 'red'
         if QoQRate < 0:
             QoQColor = 'green'
-        QoQCostRate = (day1CostRate - day1QoQCostRate) / day1QoQCostRate
-        QoQCostColor = 'red'
-        if QoQCostRate < 0:
-            QoQCostColor = 'green'
-        reportStr += '环比%s~%s花费占比:\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%}),ROI均值：\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1QoQStartDayStr,day1QoQEndDayStr,day1QoQCostRate*100,QoQCostColor,QoQCostRate*100,day1QoQROIMean*100,QoQColor,QoQRate*100)
+        reportStr += '环比%s~%s ROI均值：\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1QoQStartDayStr,day1QoQEndDayStr,day1QoQROIMean*100,QoQColor,QoQRate*100)
 
         # 同比
-        day1YoYStartDayStr = (today - datetime.timedelta(days=365+7)).strftime('%Y%m%d')
-        day1YoYEndDayStr = (today - datetime.timedelta(days=365+1)).strftime('%Y%m%d')
         day1YoYDf = totalDf2.loc[(totalDf2.install_date >= day1YoYStartDayStr) & (totalDf2.install_date <= day1YoYEndDayStr) & (totalDf2.geoGroup == geoGroup['name'])].copy()
         day1YoYROIMean = day1YoYDf.revenue_1d.sum() / day1YoYDf.cost.sum()
-        totalCostDf = totalDf2.loc[(totalDf2.install_date >= day1YoYStartDayStr) & (totalDf2.install_date <= day1YoYEndDayStr)].copy()
-        totalCostDf = totalCostDf.groupby(['install_date']).agg({'cost':'sum'}).reset_index()
-        totalCostDf = totalCostDf[['install_date','cost']]
-        day1YoYDf = day1YoYDf.merge(totalCostDf,on=['install_date'],how='left',suffixes=('','_total'))
-        day1YoYDf['cost_rate'] = day1YoYDf['cost'] / day1YoYDf['cost_total']
-        day1YoYCostRate = day1YoYDf['cost'].sum()/day1YoYDf['cost_total'].sum()
 
         # 同比差异
         YoYRate = (day1ROIMean - day1YoYROIMean) / day1YoYROIMean
         YoYColor = 'red'
         if YoYRate < 0:
             YoYColor = 'green'
-        YoYCostRate = (day1CostRate - day1YoYCostRate) / day1YoYCostRate
-        YoYCostColor = 'red'
-        if YoYCostRate < 0:
-            YoYCostColor = 'green'
-        reportStr += '同比%s~%s花费占比:\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%}),ROI均值：\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1YoYStartDayStr,day1YoYEndDayStr,day1YoYCostRate*100,YoYCostColor,YoYCostRate*100,day1YoYROIMean*100,YoYColor,YoYRate*100)
+        
+        reportStr += '同比%s~%s ROI均值：\\textbf{%.2f\\%%}(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(day1YoYStartDayStr,day1YoYEndDayStr,day1YoYROIMean*100,YoYColor,YoYRate*100)
 
         # MACD
         # 计算1日ROI
@@ -904,7 +915,43 @@ def getROIReportGroupByCountry():
 
     return reportStr
 
+def getROIReportGroupByMedia():
+    reportStr = '## 媒体ROI分析\n\n'
+    startDayStr = (today - datetime.timedelta(days=60)).strftime('%Y%m%d')
+    endDayStr = todayStr
 
+    mediaGroupList = getIOSMediaGroup01()
+
+    adCostDf = getAdCostData(startDayStr,endDayStr)
+    adCostDf.rename(columns={'day':'install_date'},inplace=True)
+    adCostDf.loc[adCostDf.media_source == 'Facebook Ads','media_source'] = 'facebook'
+    adCostDf.loc[adCostDf.media_source == 'googleadwords_int','media_source'] = 'google'
+    adCostDf.loc[adCostDf.media_source == 'bytedanceglobal_int','media_source'] = 'bytedanceglobal'
+    # 将所有media_source == 'tiktokglobal_int' 的行删掉，这个不知道是干嘛的
+    adCostDf = adCostDf.loc[adCostDf.media_source != 'tiktokglobal_int']
+
+    adCostDf.loc[~adCostDf.media_source.isin(['facebook','google','bytedanceglobal']),'media_source'] = 'other'
+    adCostDf.rename(columns={'media_source':'media'},inplace=True)
+    adCostDf = adCostDf.groupby(['install_date','media'],as_index=False).agg({'cost':'sum'})
+
+    df = getDataFromMC(startDayStr,endDayStr)
+    df = getDataFromMC2(df)
+    
+    df = df.groupby(['install_date','media'],as_index=False).sum().reset_index(drop=True)
+    df = df.merge(adCostDf,on=['install_date','media'],how='outer').fillna(0)
+
+    totalDf = df.groupby(['install_date','geoGroup']).agg({
+        'revenue_1d':'sum',
+        'revenue_3d':'sum',
+        'revenue_7d':'sum',
+        'cost':'sum'
+    }).reset_index()
+    totalDf = totalDf.sort_values(by=['install_date','geoGroup'],ascending=False).reset_index(drop=True)
+    totalDf['install_date'] = totalDf['install_date'].astype(str)
+
+
+    # iOS分媒体采用的是融合归因数据，只有2023-04-01之后的数据，所以暂时不做同比
+    reportStr += '### 花费占比 分媒体\n\n'
     
 
 

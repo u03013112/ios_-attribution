@@ -5,9 +5,9 @@
 
 def getIOSMediaGroup01():
     # 其他媒体统一归为Other
-    ret = {
-        'Facebook': ['Facebook Ads'],
-        'Google': ['googleadwords_int'],
-        'Tiktok': ['bytedanceglobal_int'],
-    }
+    ret = [
+        {'name':'Facebook','codeList': ['facebook']},
+        {'name':'Google','codeList': ['google']},
+        {'name':'Tiktok','codeList': ['bytedanceglobal']},
+    ]
     return ret
