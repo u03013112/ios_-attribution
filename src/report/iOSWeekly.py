@@ -35,8 +35,8 @@ today = datetime.datetime.utcnow()
 todayStr = today.strftime('%Y%m%d')
 
 # for test
-# todayStr = '20231019'
-# today = datetime.datetime.strptime(todayStr,'%Y%m%d')
+todayStr = '20231025'
+today = datetime.datetime.strptime(todayStr,'%Y%m%d')
 
 print('今日日期：',todayStr)
 # 获得一周前的UTC0日期，格式20231011
@@ -48,6 +48,7 @@ directory = f'/src/data/report/iOSWeekly{startDayStr}_{endDayStr}'
 # 获得广告花费，分媒体、分国家，按照安装日期汇总
 def getAdCostData(startDayStr,endDayStr):
     filename = getFilename(f'adCost{startDayStr}_{endDayStr}')
+    print('getAdCostData:',filename)
     if os.path.exists(filename):
         print('已存在%s'%filename)
         return pd.read_csv(filename)
