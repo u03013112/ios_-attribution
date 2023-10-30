@@ -207,47 +207,22 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
     
     return reportStr
 
-from iOSWeekly import getAdCostData,getDataFromMC,getDataFromMC2
-
 def debug(df):
     df = df.groupby(['install_date'],as_index=False).sum().reset_index(drop=True)
     print(df)
 
+from data.adCost import getAdCostDataIOSGroupByGeoAndMedia
+from data.revenue import getRevenueDataIOSGroupByGeoAndMedia
 if __name__ == '__main__':
     startDayStr = '20230826'
     endDayStr = '20231025'
 
     geoGroupList = getIOSGeoGroup01()
 
-    adCostDf = getAdCostData(startDayStr,endDayStr)
-    adCostDf.rename(columns={'day':'install_date'},inplace=True)
-    adCostDf.loc[adCostDf.media_source == 'Facebook Ads','media_source'] = 'facebook'
-    adCostDf.loc[adCostDf.media_source == 'googleadwords_int','media_source'] = 'google'
-    adCostDf.loc[adCostDf.media_source == 'bytedanceglobal_int','media_source'] = 'bytedanceglobal'
-    # 将所有media_source == 'tiktokglobal_int' 的行删掉，这个不知道是干嘛的
-    adCostDf = adCostDf.loc[adCostDf.media_source != 'tiktokglobal_int']
-
-    adCostDf.loc[~adCostDf.media_source.isin(['facebook','google','bytedanceglobal']),'media_source'] = 'other'
-    adCostDf.rename(columns={'media_source':'media'},inplace=True)
     
-    adCostDf['geoGroup'] = 'other'
-    for geoGroup in geoGroupList:
-        adCostDf.loc[adCostDf.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
-    adCostDf = adCostDf.groupby(['install_date','geoGroup','media'],as_index=False).agg({'cost':'sum'})
-    
-
-    df = getDataFromMC(startDayStr,endDayStr)
-    df = getDataFromMC2(df)
-    df['geoGroup'] = 'other'
-    for geoGroup in geoGroupList:
-        df.loc[df.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
-    
-    df = df.groupby(['install_date','geoGroup','media'],as_index=False).sum().reset_index(drop=True)
-    df = df.merge(adCostDf,on=['geoGroup','install_date','media'],how='outer').fillna(0)
-
-    df['install_date'] = df['install_date'].astype(str)
-    
-    # debug(df)
+    adCostDf = getAdCostDataIOSGroupByGeoAndMedia(startDayStr,endDayStr,directory)
+    revenueDf = getRevenueDataIOSGroupByGeoAndMedia(startDayStr,endDayStr,directory)
+    df = revenueDf.merge(adCostDf,on=['geoGroup','install_date','media'],how='outer').fillna(0)
 
     # 生成报告
     reportStr = headStr
