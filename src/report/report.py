@@ -3,18 +3,123 @@
 # 将数据整理成一个标准的数据结构，然后根据数据结构生成报告
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/src')
 
 from src.report.geo import getIOSGeoGroup01
 from src.report.media import getIOSMediaGroup01
+from src.report.iOSWeekly import toPdf,headStr
 
 
 directory = '/src/data/report/iOSWeekly20231018_20231025'
 
 def getFilename(filename,ext='csv'):
     return '%s/%s.%s'%(directory,filename,ext)
+
+
+# 将macdAnalysis从iOSWeekly中移动到这里
+def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007', analysisDayCount=7,picFilenamePrefix=''):
+    # print('macdAnalysis:',startDayStr,endDayStr,analysisDayCount)
+    # 画图
+    df = df.copy()
+    df.sort_values(by=['install_date'], inplace=True)
+
+    df['EMA12'] = df[target].ewm(span=12).mean()
+    df['EMA26'] = df[target].ewm(span=26).mean()
+
+    # 计算MACD值
+    df['MACD'] = df['EMA12'] - df['EMA26']
+
+    # 计算9日EMA作为信号线
+    df['Signal'] = df['MACD'].ewm(span=9).mean()
+
+    # 选择最近两周的数据（升序排序后的前14行）
+    last_draw_days = df.loc[(df['install_date']>=startDayStr) & (df['install_date']<=endDayStr)]
+
+    # 将install_date转换为datetime格式
+    df['install_date'] = pd.to_datetime(df['install_date'])
+    
+    # 创建一个画布，包含两个子图
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 6), sharex=True)
+
+    # 绘制ROI走势图
+    ax1.plot(last_draw_days['install_date'], last_draw_days[target], label='ROI', color='b')
+    ax1.legend(loc='upper left')
+    ax1.set_ylabel('ROI Value')
+    ax1.set_title(f'{target} Trend ({startDayStr}~{endDayStr})')
+    ax1.grid()
+
+    # 绘制MACD和信号线
+    ax2.plot(last_draw_days['install_date'], last_draw_days['MACD'], label='MACD', color='b')
+    ax2.plot(last_draw_days['install_date'], last_draw_days['Signal'], label='Signal', color='r')
+    ax2.legend(loc='upper left')
+    ax2.set_xlabel('Install Date')
+    ax2.set_ylabel('MACD Value')
+    ax2.set_title(f'MACD Trend for {target} ({startDayStr}~{endDayStr})')
+    ax2.grid()
+    # 设置x轴刻度标签的旋转角度
+    plt.xticks(rotation=45)
+    # 保存图像到文件
+    picFilename = getFilename(f'{picFilenamePrefix}_{startDayStr}_{endDayStr}_{target}_macd', 'png')
+    plt.savefig(picFilename, dpi=300, bbox_inches='tight')
+    print(f'生成图片：{picFilename}')
+    plt.close()
+
+    # 分析最近analysisDayCount天的MACD趋势
+    reportStr = ''
+    last_analysis_days = df.loc[(df['install_date'] >= startDayStr) & (df['install_date'] <= endDayStr)].tail(analysisDayCount)
+    macd_cross = (last_analysis_days['MACD'] - last_analysis_days['Signal'])
+
+    # 计算每天的趋势，存到安装日期，趋势这样的表中，每天一个趋势，按照安装日期升序
+    daily_trend = pd.DataFrame()
+    daily_trend['install_date'] = last_analysis_days['install_date']
+    daily_trend['trend'] = macd_cross > 0
+    daily_trend['trend'] = daily_trend['trend'].apply(lambda x: "\\protect\\textcolor{red}{上涨}" if x else "\\protect\\textcolor{green}{下跌}")
+
+    # 从第一行遍历，记录初始趋势，每次找到趋势与初始趋势不一致的时候停止，输出需要的结果
+    reportStr += "#### 趋势分析（MACD分析）\n\n"
+    
+    reportStr += f'最近{analysisDayCount}天的主要趋势：\n\n'
+    start_date = daily_trend['install_date'].iloc[0]
+    initial_trend = daily_trend['trend'].iloc[0]
+    for i in range(1, len(daily_trend)):
+        current_trend = daily_trend['trend'].iloc[i]
+        if current_trend != initial_trend:
+            end_date = daily_trend['install_date'].iloc[i - 1]
+            if start_date != end_date:
+                reportStr += f"{start_date.strftime('%Y-%m-%d')}~{end_date.strftime('%Y-%m-%d')} {initial_trend}\n\n"
+            start_date = daily_trend['install_date'].iloc[i]
+            initial_trend = current_trend
+    reportStr += f"{start_date.strftime('%Y-%m-%d')}~{daily_trend['install_date'].iloc[-1].strftime('%Y-%m-%d')} {initial_trend}\n\n\n"
+
+    reportStr += "\\textbf{针对最近趋势进行展望：}\n\n"
+    reportStr += f"({start_date.strftime('%Y-%m-%d')}~{daily_trend['install_date'].iloc[-1].strftime('%Y-%m-%d')})"
+    # 对最后一波趋势进行细化分析
+    last_trend_duration = (daily_trend['install_date'].iloc[-1] - start_date).days + 1
+    if last_trend_duration <= 1:
+        reportStr += "\n这是一个波动期。没有明显趋势。"
+    else:
+        reportStr += f"\n这是一个持续{initial_trend}趋势。"
+        macd_signal_diff = last_analysis_days['MACD'] - last_analysis_days['Signal']
+        if abs(macd_signal_diff.iloc[-1]) - abs(macd_signal_diff.iloc[-2]) < 0:
+            reportStr += "但是趋势有减弱情况，这个趋势可能即将结束。"
+        else:
+            reportStr += "趋势还在增强，这个趋势可能仍将继续。"
+        reportStr += '\n\n'
+    # 
+
+    reportStr += r'''
+\begin{figure}[!h]
+    \centering
+    \includegraphics{''' + f'./{picFilenamePrefix}_{startDayStr}_{endDayStr}_{target}_macd.png'+'''}
+\end{figure}
+\FloatBarrier
+    '''
+
+    return reportStr
+
 
 
 # 输入参数：
@@ -89,10 +194,24 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
                 ret2Str = '%.2f%%'%(ret2*100)
 
             reportStr += '%s %s~%s %s %s(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(compareNameStr,startDayStr2,endDayStr2,target['name'],ret2Str,color,rate*100)
+
+        if needMACD:
+            # 计算analysisDayCount，endDayStr1 - startDayStr1 + 1
+            analysisDayCount = (pd.to_datetime(endDayStr1) - pd.to_datetime(startDayStr1)).days + 1
+
+            groupDf[target['name']] = groupDf[target['targetList'][0]]
+            if target['op'] == '/':
+                groupDf[target['name']] = groupDf[target['targetList'][0]]/groupDf[target['targetList'][1]]
+
+            reportStr += macdAnalysis(groupDf,target=target['name'],startDayStr=startDayStr1,endDayStr=endDayStr1,analysisDayCount=analysisDayCount,picFilenamePrefix='%s_%s'%(groupName,target['name']))
     
     return reportStr
 
 from iOSWeekly import getAdCostData,getDataFromMC,getDataFromMC2
+
+def debug(df):
+    df = df.groupby(['install_date'],as_index=False).sum().reset_index(drop=True)
+    print(df)
 
 if __name__ == '__main__':
     startDayStr = '20230826'
@@ -127,8 +246,12 @@ if __name__ == '__main__':
     df = df.merge(adCostDf,on=['geoGroup','install_date','media'],how='outer').fillna(0)
 
     df['install_date'] = df['install_date'].astype(str)
+    
+    # debug(df)
+
     # 生成报告
-    reportStr = getReport(
+    reportStr = headStr
+    reportStr += getReport(
         df,
         {'name':'ROI_1d','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},
         groupBy='geoGroup',
@@ -138,6 +261,12 @@ if __name__ == '__main__':
         startDayStr2='20231011',
         endDayStr2='20231017',
         compareNameStr='环比',
-        )
+        needMACD=True
+    )
     # 输出报告
     print(reportStr)
+    with open(f'{directory}/report.md','w',encoding='utf-8') as f:
+        f.write(reportStr)
+
+    print(f'{directory}/report.md')
+    toPdf(directory)

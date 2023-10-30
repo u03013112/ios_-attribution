@@ -55,18 +55,46 @@ def getAdCostData(startDayStr,endDayStr):
     else:
         print('从MC获得数据')
     sql = f'''
-        select
-            day,
-            media_source,
-            country_code,
-            cost
-        from
-            ods_platform_appsflyer_masters
-        where
-            app_id = 'id1479198816'
-            AND day BETWEEN '{startDayStr}' AND '{endDayStr}'
-            AND app = '102'
-            AND cost >= 1;
+        SELECT
+            install_day as day,
+            mediasource as media_source,
+            country as country_code,
+            sum(cost_value_usd) as cost
+        FROM
+            (
+                SELECT
+                    install_day,
+                    mediasource,
+                    country,
+                    cost_value_usd
+                FROM
+                    rg_bi.dwd_overseas_cost_new
+                WHERE
+                    app = '102'
+                    AND zone = '0'
+                    AND app_package = 'id1479198816'
+                    AND cost_value_usd > 0
+                UNION
+                ALL
+                SELECT
+                    install_day,
+                    mediasource,
+                    country,
+                    cost_value_usd
+                FROM
+                    rg_bi.dwd_overseas_cost_history
+                WHERE
+                    app = '102'
+                    AND zone = '0'
+                    AND app_package = 'id1479198816'
+                    AND cost_value_usd > 0
+            ) AS combined_table
+        WHERE
+            install_day BETWEEN '{startDayStr}' AND '{endDayStr}'
+        group by
+            install_day,
+            mediasource,
+            country;
     '''
     print(sql)
     df = execSql(sql)
@@ -476,9 +504,11 @@ def getROIReport():
     adCostDf.loc[~adCostDf.media_source.isin(['facebook','google','bytedanceglobal']),'media_source'] = 'other'
     adCostDf.rename(columns={'media_source':'media'},inplace=True)
     adCostDf = adCostDf.groupby(['install_date','country_code','media'],as_index=False).agg({'cost':'sum'})
-
+    adCostDf['install_date'] = adCostDf['install_date'].astype(str)
+    
     df = getDataFromMC(startDayStr,endDayStr)
     df = getDataFromMC2(df)
+    df['install_date'] = df['install_date'].astype(str)
     df = df.merge(adCostDf,on=['country_code','install_date','media'],how='outer').fillna(0)
 
     # 为了获得同比，需要获得去年同期的数据
