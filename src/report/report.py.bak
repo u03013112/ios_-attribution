@@ -222,7 +222,7 @@ if __name__ == '__main__':
     
     adCostDf = getAdCostDataIOSGroupByGeoAndMedia(startDayStr,endDayStr,directory)
     revenueDf = getRevenueDataIOSGroupByGeoAndMedia(startDayStr,endDayStr,directory)
-    df = revenueDf.merge(adCostDf,on=['geoGroup','install_date','media'],how='outer').fillna(0)
+    df = revenueDf.merge(adCostDf,on=['campaign_id','campaign_name','geoGroup','install_date','media'],how='outer').fillna(0)
 
     # 生成报告
     reportStr = headStr
