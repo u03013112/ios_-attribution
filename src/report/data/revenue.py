@@ -432,6 +432,108 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
 
     df = df.groupby(['install_date','campaign_id','campaign_name','geoGroup','media'],as_index=False).sum().reset_index(drop=True)
 
+    sql = f'''
+        WITH tmp_unique_id AS (
+            SELECT
+                CAST(install_timestamp AS BIGINT) AS install_timestamp,
+                game_uid,
+                country_code
+            FROM
+                rg_bi.tmp_unique_id
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND install_timestamp between UNIX_TIMESTAMP(datetime '{startDayStr2}')
+                AND UNIX_TIMESTAMP(datetime '{endDayStr2}')
+        ),
+        ods_platform_appsflyer_events AS (
+            SELECT
+                customer_user_id,
+                event_timestamp,
+                event_revenue_usd
+            FROM
+                rg_bi.ods_platform_appsflyer_events
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND day >= '{startDayStr}'
+                AND event_name IN ('af_purchase_oldusers', 'af_purchase')
+                AND zone = 0
+        ),
+        joined_data AS (
+            SELECT
+                t.install_timestamp,
+                t.game_uid,
+                t.country_code,
+                o.event_timestamp,
+                o.event_revenue_usd
+            FROM
+                tmp_unique_id t
+                LEFT JOIN ods_platform_appsflyer_events o ON t.game_uid = o.customer_user_id
+                AND o.event_timestamp >= t.install_timestamp
+        )
+        SELECT
+            to_char(FROM_UNIXTIME(install_timestamp), 'YYYYMMDD') AS install_date,
+            jd.country_code,
+            COUNT(distinct game_uid) AS install,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 1 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 3 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d
+        FROM
+            joined_data jd
+        GROUP BY
+            install_date,
+            jd.country_code
+        ORDER BY
+            install_date;
+    '''
+    print(sql)
+    df2 = execSql(sql)
+    df2['geoGroup'] = 'other'
+    for geoGroup in geoGroupList:
+        df2.loc[df2.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
+    df2 = df2.groupby(['install_date','geoGroup'],as_index=False).sum().reset_index(drop=True)
+    dfGroup = df.groupby(['install_date','geoGroup'],as_index=False).sum().reset_index(drop=True)
+    mergeDf = pd.merge(df2,dfGroup,on=['install_date','geoGroup'],how='left',suffixes=('_total','_other'))
+    mergeDf['install'] = mergeDf['install_total'] - mergeDf['install_other']
+    mergeDf['revenue_1d'] = mergeDf['revenue_1d_total'] - mergeDf['revenue_1d_other']
+    mergeDf['revenue_3d'] = mergeDf['revenue_3d_total'] - mergeDf['revenue_3d_other']
+    mergeDf['revenue_7d'] = mergeDf['revenue_7d_total'] - mergeDf['revenue_7d_other']
+    mergeDf = mergeDf[['install_date','geoGroup','install','revenue_1d','revenue_3d','revenue_7d']]
+    mergeDf['media'] = 'organic'
+    mergeDf['campaign_id'] = 'organic'
+    mergeDf['campaign_name'] = 'organic'
+    # 将mergeDf中，revenue_7d 为 空的行，删除
+    mergeDf = mergeDf.loc[mergeDf.revenue_7d.notnull()]
+    df = pd.concat([df,mergeDf],ignore_index=True)
+
     df.to_csv(filename,index=False)
     print('已获得%d条数据'%len(df))
     print('存储在%s'%filename)

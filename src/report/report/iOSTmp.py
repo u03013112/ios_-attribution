@@ -1,6 +1,5 @@
-# iOS 海外，用融合归因结论作为归因结论的周报
-# 与上一级目录中的同名文件相比，这个版本利用data中的api
-# 增加了更多的数据，并且不仅局限于分媒体和分国家，而且进一步细分到campaign
+# iOS 海外，用融合归因结论作为归因结论的报告
+# 临时分析
 
 import os
 import datetime
@@ -24,12 +23,12 @@ today = datetime.datetime.utcnow()
 todayStr = today.strftime('%Y%m%d')
 
 # for test
-todayStr = '20231107'
-today = datetime.datetime.strptime(todayStr,'%Y%m%d')
+# todayStr = '20231107'
+# today = datetime.datetime.strptime(todayStr,'%Y%m%d')
 
 print('今日日期：',todayStr)
 # 获得N天的数据
-N = 30
+N = 7
 # 获得一周前的UTC0日期，格式20231011，往前一天，不获取今天的不完整数据。
 startDayStr = (today - datetime.timedelta(days=N+1)).strftime('%Y%m%d')
 endDayStr = (today - datetime.timedelta(days=1)).strftime('%Y%m%d')
@@ -87,8 +86,8 @@ def main():
 
 
     # 大盘部分开始 ##########################################################################################
-    if True:
-    # if False:
+    # if True:
+    if False:
         reportStr = '' + headStr
         reportStr += f'# {startDayStr}~{endDayStr} iOS 海外周报 之 大盘汇总\n\n'
 
@@ -116,6 +115,7 @@ def main():
         reportStr += '## CPI\n\n'
         reportStr += getReport(df,{'name':'CPI','op':'/','targetList':['cost','install_ad'],'format':'.2f'},startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
+
         filename = getFilename('reportAll','md')
         with open(filename,'w') as f:
             f.write(reportStr)
@@ -139,12 +139,6 @@ def main():
         reportStr += '## ROI7\n\n'
         reportStr += getReport(df,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI7,endDayStr1=endDayStr1ROI7,df2=df,startDayStr2=startDayStr2ROI7,endDayStr2=endDayStr2ROI7,compareNameStr='环比',needMACD=False,path=directory)
 
-        reportStr += '## Cost\n\n'
-        reportStr += getReport(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
-
-        reportStr += '## CostRate\n\n'
-        reportStr += getReport(df,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
-
         reportStr += '## revenue_1d\n\n'
         reportStr += getReport(df,{'name':'revenue_1d','op':'','targetList':['revenue_1d'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1,compareNameStr='环比',needMACD=False,path=directory)
 
@@ -154,14 +148,11 @@ def main():
         reportStr += '## revenue_7d\n\n'
         reportStr += getReport(df,{'name':'revenue_7d','op':'','targetList':['revenue_7d'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI7,endDayStr1=endDayStr1ROI7,df2=df,startDayStr2=startDayStr2ROI7,endDayStr2=endDayStr2ROI7,compareNameStr='环比',needMACD=False,path=directory)
 
-        reportStr += '## revenue_1d rate\n\n'
-        reportStr += getReport(df,{'name':'revenue_1d rate','op':'rate','targetList':['revenue_1d'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1,compareNameStr='环比',needMACD=False,path=directory)
+        reportStr += '## Cost\n\n'
+        reportStr += getReport(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
-        reportStr += '## revenue_3d rate\n\n'
-        reportStr += getReport(df,{'name':'revenue_3d rate','op':'rate','targetList':['revenue_3d'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI3,endDayStr1=endDayStr1ROI3,df2=df,startDayStr2=startDayStr2ROI3,endDayStr2=endDayStr2ROI3,compareNameStr='环比',needMACD=False,path=directory)
-
-        reportStr += '## revenue_7d rate\n\n'
-        reportStr += getReport(df,{'name':'revenue_7d rate','op':'rate','targetList':['revenue_7d'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI7,endDayStr1=endDayStr1ROI7,df2=df,startDayStr2=startDayStr2ROI7,endDayStr2=endDayStr2ROI7,compareNameStr='环比',needMACD=False,path=directory)
+        reportStr += '## CostRate\n\n'
+        reportStr += getReport(df,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
         reportStr += '## CPM\n\n'
         reportStr += getReport(df,{'name':'CPM','op':'/*1000','targetList':['cost','impression'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
@@ -220,8 +211,8 @@ def main():
     # 分国家部分结束 ##########################################################################################
 
     # 分媒体之后分国家部分 ##########################################################################################
-    if True:
-    # if False:
+    # if True:
+    if False:
         mediaList = df['media'].unique().tolist()
         for media in mediaList:
             print('media:',media)
@@ -266,8 +257,8 @@ def main():
     # 分媒体之后分国家部分结束 ##########################################################################################
 
     # 分campaign部分 ##########################################################################################
-    if True:
-    # if False:
+    # if True:
+    if False:
         mediaList = df['media'].unique().tolist()
         for media in mediaList:
             print('media:',media)
@@ -277,21 +268,6 @@ def main():
 
             mediaDf = df[df['media'] == media].copy()
             
-            reportStr += '## ROI1\n\n'
-            reportStr += getReport(mediaDf,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1,compareNameStr='环比',needMACD=False,path=directory)
-
-            reportStr += '## ROI3\n\n'
-            reportStr += getReport(mediaDf,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI3,endDayStr1=endDayStr1ROI3,df2=mediaDf,startDayStr2=startDayStr2ROI3,endDayStr2=endDayStr2ROI3,compareNameStr='环比',needMACD=False,path=directory)
-
-            reportStr += '## ROI7\n\n'
-            reportStr += getReport(mediaDf,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI7,endDayStr1=endDayStr1ROI7,df2=mediaDf,startDayStr2=startDayStr2ROI7,endDayStr2=endDayStr2ROI7,compareNameStr='环比',needMACD=False,path=directory)
-
-            reportStr += '## Cost\n\n'
-            reportStr += getReport(mediaDf,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
-
-            reportStr += '## CostRate\n\n'
-            reportStr += getReport(mediaDf,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
-
             reportStr += '## CPM\n\n'
             reportStr += getReport(mediaDf,{'name':'CPM','op':'/*1000','targetList':['cost','impression'],'format':'.2f'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
@@ -303,6 +279,21 @@ def main():
 
             reportStr += '## CPI\n\n'
             reportStr += getReport(mediaDf,{'name':'CPI','op':'/','targetList':['cost','install_ad'],'format':'.2f'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
+
+            reportStr += '## Cost\n\n'
+            reportStr += getReport(mediaDf,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
+
+            reportStr += '## CostRate\n\n'
+            reportStr += getReport(mediaDf,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
+
+            reportStr += '## ROI1\n\n'
+            reportStr += getReport(mediaDf,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1,compareNameStr='环比',needMACD=False,path=directory)
+
+            reportStr += '## ROI3\n\n'
+            reportStr += getReport(mediaDf,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI3,endDayStr1=endDayStr1ROI3,df2=mediaDf,startDayStr2=startDayStr2ROI3,endDayStr2=endDayStr2ROI3,compareNameStr='环比',needMACD=False,path=directory)
+
+            reportStr += '## ROI7\n\n'
+            reportStr += getReport(mediaDf,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='campaign_name',startDayStr1=startDayStr1ROI7,endDayStr1=endDayStr1ROI7,df2=mediaDf,startDayStr2=startDayStr2ROI7,endDayStr2=endDayStr2ROI7,compareNameStr='环比',needMACD=False,path=directory)
 
             filename = getFilename(f'reportMedia_{media}_campaign','md')
             with open(filename,'w') as f:

@@ -10,11 +10,6 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append('/src')
 
-directory = '/src/data/report/iOSWeekly20231018_20231025'
-
-def getFilename(filename,ext='csv'):
-    return '%s/%s.%s'%(directory,filename,ext)
-
 headStr = '''
 ---
 CJKmainfont: WenQuanYi Zen Hei
@@ -29,22 +24,30 @@ header-includes:
 
 '''
 
-def toPdf(path):
+def toPdf(path,filename):
     # 切换到指定目录
     os.chdir(path)
 
-    mdFilename = 'report.md'
-    pdfFilename = 'report.pdf'
+    # mdFilename = 'report.md'
+    # pdfFilename = 'report.pdf'
+    mdFilename = filename+'.md'
+    pdfFilename = filename+'.pdf'
+
     # 调用 pandoc 将 md 转换为 pdf
     # pandoc report.md -o report.pdf --pdf-engine=xelatex
-    subprocess.run(['pandoc', mdFilename, '-o', pdfFilename, '--pdf-engine=xelatex'])
+    subprocess.run(['pandoc', mdFilename, '-o', pdfFilename, '--latex-engine=xelatex'])
     print('转化为pdf成功！')
     print('保存路径：',path+'/'+pdfFilename)
 
+    # print('转化成pdf的命令')
+    # print(f'cd {path};pandoc {mdFilename} -o {pdfFilename} --latex-engine=xelatex;cd -')
+
 
 # 将macdAnalysis从iOSWeekly中移动到这里
-def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007', analysisDayCount=7,picFilenamePrefix=''):
-    # print('macdAnalysis:',startDayStr,endDayStr,analysisDayCount)
+def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007', analysisDayCount=7,picFilenamePrefix='',path = './'):
+    if df[target].sum() < 0.0001:
+        return '数据不足，暂不分析趋势\n\n'
+        
     # 画图
     df = df.copy()
     df.sort_values(by=['install_date'], inplace=True)
@@ -60,6 +63,11 @@ def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007',
 
     # 选择最近两周的数据（升序排序后的前14行）
     last_draw_days = df.loc[(df['install_date']>=startDayStr) & (df['install_date']<=endDayStr)]
+
+    # 如果MACD所有的值都是0，那么不绘制MACD图
+    # if sum(abs(x) for x in last_draw_days['MACD']) < 0.0001:
+    #     return '数据不足，暂不分析趋势\n\n'
+
 
     # 将install_date转换为datetime格式
     df['install_date'] = pd.to_datetime(df['install_date'])
@@ -85,10 +93,13 @@ def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007',
     # 设置x轴刻度标签的旋转角度
     plt.xticks(rotation=45)
     # 保存图像到文件
-    picFilename = getFilename(f'{picFilenamePrefix}_{startDayStr}_{endDayStr}_{target}_macd', 'png')
+    picFilenamePrefix = picFilenamePrefix.replace('/','_')
+    picFilenamePrefix = picFilenamePrefix.replace('.','_')
+    picFilename = f'{path}/{picFilenamePrefix}_{startDayStr}_{endDayStr}_{target}_macd.png'
     plt.savefig(picFilename, dpi=300, bbox_inches='tight')
     print(f'生成图片：{picFilename}')
     plt.close()
+    last_draw_days.to_csv(f'{path}/{picFilenamePrefix}_{startDayStr}_{endDayStr}_{target}_macd.csv',index=False)
 
     # 分析最近analysisDayCount天的MACD趋势
     reportStr = ''
@@ -161,9 +172,8 @@ def macdAnalysis(df,target='ROI_1d',startDayStr='20231001',endDayStr='20231007',
 # needMACD:是否需要计算MACD，bool类型，如果需要计算MACD
 # 返回值：reportStr string，报告的内容，markdown格式
 # 对于此函数的调用，如果希望针对过滤后的数据做出报告，可以在调用之前先对df进行过滤
-def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='20231007',df2=None,startDayStr2='',endDayStr2='',compareNameStr='',needMACD=False):
+def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='20231007',df2=None,startDayStr2='',endDayStr2='',compareNameStr='',needMACD=False,path='./'):
     reportStr = ''
-
     df1 = df[(df['install_date'] >= startDayStr1) & (df['install_date'] <= endDayStr1)].copy()
 
     aggDict = {}
@@ -182,7 +192,9 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
         df2 = df2.groupby(groupByList).agg(aggDict).reset_index()
     
     for groupName in groupNameList:
-        reportStr += '\\textbf{%s}\n\n'%groupName
+        groupName2 = groupName.replace('_','\_')
+        groupName2 = groupName2.replace('&','\&')
+        reportStr0 = '\\textbf{%s}\n\n'%groupName2
         if len(groupBy) > 0:
             groupDf = df1[df1[groupBy] == groupName].copy()
         else:
@@ -190,10 +202,27 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
 
         ret1 = groupDf[target['targetList'][0]].sum()
         if target['op'] == '/':
-            ret1 = groupDf[target['targetList'][0]].sum()/groupDf[target['targetList'][1]].sum()
+            p1 = groupDf[target['targetList'][0]].sum()
+            p2 = groupDf[target['targetList'][1]].sum()
+            if p2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = p1/p2
         elif target['op'] == '/*1000':
             # 转为CPM准备
-            ret1 = groupDf[target['targetList'][0]].sum()/groupDf[target['targetList'][1]].sum()*1000
+            p1 = groupDf[target['targetList'][0]].sum()
+            p2 = groupDf[target['targetList'][1]].sum()
+            if p2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = p1/p2*1000
+        elif target['op'] == 'rate':
+            sumAll = df1[target['targetList'][0]].sum()
+            sumGroup = groupDf[target['targetList'][0]].sum()
+            if sumAll < 0.0001:
+                reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = sumGroup/sumAll
 
         ret1Str = '%f'%ret1
         if target['format'] == '.2f%':
@@ -201,22 +230,41 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
         elif target['format'] == '.2f':
             ret1Str = '%.2f'%(ret1)
 
-        reportStr += '%s~%s %s %s\n\n'%(startDayStr1,endDayStr1,target['name'],ret1Str)
+        reportStr1 = '%s~%s %s %s\n\n'%(startDayStr1,endDayStr1,target['name'],ret1Str)
 
+        reportStr2 = ''
         if isinstance(df2, pd.DataFrame):
             if len(groupBy) > 0:
                 groupDf2 = df2[df2[groupBy] == groupName].copy()
             else:
                 groupDf2 = df2.copy()
+            groupDf2 = groupDf2.fillna(0)
             ret2 = groupDf2[target['targetList'][0]].sum()
             if target['op'] == '/':
-                ret2 = groupDf2[target['targetList'][0]].sum()/groupDf2[target['targetList'][1]].sum()
+                p1 = groupDf2[target['targetList'][0]].sum()
+                p2 = groupDf2[target['targetList'][1]].sum()
+                if p2 < 0.0001:
+                    reportStr += '数据不足，暂不分析\n\n'
+                    continue
+                ret2 = p1/p2
             elif target['op'] == '/*1000':
                 # 转为CPM准备
-                ret2 = groupDf2[target['targetList'][0]].sum()/groupDf2[target['targetList'][1]].sum()*1000
+                p1 = groupDf2[target['targetList'][0]].sum()
+                p2 = groupDf2[target['targetList'][1]].sum()
+                if p2 < 0.0001:
+                    reportStr += '数据不足，暂不分析\n\n'
+                    continue
+                ret2 = p1/p2*1000
+            elif target['op'] == 'rate':
+                sumAll = df2[target['targetList'][0]].sum()
+                sumGroup = groupDf2[target['targetList'][0]].sum()
+                ret2 = sumGroup/sumAll
 
             # 差异比例
-            rate = (ret1 - ret2)/ret2
+            if ret2 < 0.0001:
+                rate = 0
+            else:
+                rate = (ret1 - ret2)/ret2
             color = 'red'
             if rate < 0:
                 color = 'green'
@@ -227,7 +275,19 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
             elif target['format'] == '.2f':
                 ret2Str = '%.2f'%(ret2)
 
-            reportStr += '%s %s~%s %s %s(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(compareNameStr,startDayStr2,endDayStr2,target['name'],ret2Str,color,rate*100)
+            reportStr2 = '%s %s~%s %s %s(\\protect\\textcolor{%s}{%.2f\\%%})\n\n'%(compareNameStr,startDayStr2,endDayStr2,target['name'],ret2Str,color,rate*100)
+
+            if ret1 < 0.0001 and ret2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            else:
+                reportStr += reportStr0 + reportStr1 + reportStr2
+        else:
+            if ret1 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            else:
+                reportStr += reportStr0 + reportStr1
 
         if needMACD:
             # 计算analysisDayCount，endDayStr1 - startDayStr1 + 1
@@ -236,8 +296,14 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
             groupDf[target['name']] = groupDf[target['targetList'][0]]
             if target['op'] == '/':
                 groupDf[target['name']] = groupDf[target['targetList'][0]]/groupDf[target['targetList'][1]]
+            elif target['op'] == '/*1000':
+                groupDf[target['name']] = groupDf[target['targetList'][0]]/groupDf[target['targetList'][1]]*1000
+            elif target['op'] == 'rate':
+                # rate 这部分暂时不要做MACD，下面这两行代码不对
+                sumAll = df1[target['targetList'][0]].sum()
+                groupDf[target['name']] = groupDf[target['targetList'][0]]/sumAll
 
-            reportStr += macdAnalysis(groupDf,target=target['name'],startDayStr=startDayStr1,endDayStr=endDayStr1,analysisDayCount=analysisDayCount,picFilenamePrefix='%s_%s'%(groupName,target['name']))
+            reportStr += macdAnalysis(groupDf,target=target['name'],startDayStr=startDayStr1,endDayStr=endDayStr1,analysisDayCount=analysisDayCount,picFilenamePrefix='%s_%s'%(groupName,target['name']),path=path)
     
         reportStr += '\n\n'
     return reportStr
