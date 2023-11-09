@@ -143,7 +143,7 @@ def main():
         reportStr += getReport(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
         reportStr += '## CostRate\n\n'
-        reportStr += getReport(df,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
+        reportStr += getReport(df,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr,endDayStr1=endDayStr,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2,compareNameStr='环比',needMACD=False,path=directory)
 
         reportStr += '## revenue_1d\n\n'
         reportStr += getReport(df,{'name':'revenue_1d','op':'','targetList':['revenue_1d'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1,compareNameStr='环比',needMACD=False,path=directory)
