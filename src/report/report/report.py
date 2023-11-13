@@ -308,6 +308,137 @@ def getReport(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='2023100
         reportStr += '\n\n'
     return reportStr
 
+# 与getReport功能几乎一致，只是不再生成md，而是生成csv的行，不带表头，为了可以更加快速的查看数据
+def getCsv(df,target,groupBy = [],startDayStr1='20231001',endDayStr1='20231007',df2=None,startDayStr2='',endDayStr2=''):
+    csvStr = ''
+    df1 = df[(df['install_date'] >= startDayStr1) & (df['install_date'] <= endDayStr1)].copy()
+
+    aggDict = {}
+    for targetItem in target['targetList']:
+        aggDict[targetItem] = 'sum'
+    groupByList = ['install_date']
+    if len(groupBy) > 0:
+        groupNameList = df1[groupBy].unique().tolist()
+        groupByList.append(groupBy)
+    else:
+        groupNameList = ['all']
+    df1Group = df1.groupby(groupByList).agg(aggDict).reset_index()
+
+    if df2 is not None:
+        df2 = df2[(df2['install_date'] >= startDayStr2) & (df2['install_date'] <= endDayStr2)].copy()
+        df2Group = df2.groupby(groupByList).agg(aggDict).reset_index()
+    
+    for groupName in groupNameList:
+        groupName2 = groupName.replace(',','_')
+        csvStr0 = '%s,'%groupName2
+        if len(groupBy) > 0:
+            groupDf = df1Group[df1Group[groupBy] == groupName].copy()
+        else:
+            groupDf = df1Group.copy()
+
+        ret1 = groupDf[target['targetList'][0]].sum()
+        if target['op'] == '/':
+            p1 = groupDf[target['targetList'][0]].sum()
+            p2 = groupDf[target['targetList'][1]].sum()
+            if p2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = p1/p2
+        elif target['op'] == '/*1000':
+            # 转为CPM准备
+            p1 = groupDf[target['targetList'][0]].sum()
+            p2 = groupDf[target['targetList'][1]].sum()
+            if p2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = p1/p2*1000
+        elif target['op'] == 'rate':
+            sumAll = df1[target['targetList'][0]].sum()
+            sumGroup = groupDf[target['targetList'][0]].sum()
+            if sumAll < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            ret1 = sumGroup/sumAll
+
+        ret1Str = '%f'%ret1
+        if target['format'] == '.2f%':
+            ret1Str = '%.2f%%'%(ret1*100)
+        elif target['format'] == '.2f':
+            ret1Str = '%.2f'%(ret1)
+
+        for target0 in target['targetList']:
+            if df1[target0].isnull().any():
+                ret1Str = '数据不完整'
+                break
+
+        csvStr1 = '%s'%(ret1Str)
+
+        csvStr2 = ''
+        if isinstance(df2, pd.DataFrame):
+            if len(groupBy) > 0:
+                groupDf2 = df2Group[df2Group[groupBy] == groupName].copy()
+            else:
+                groupDf2 = df2Group.copy()
+            groupDf2 = groupDf2.fillna(0)
+            ret2 = groupDf2[target['targetList'][0]].sum()
+            if target['op'] == '/':
+                p1 = groupDf2[target['targetList'][0]].sum()
+                p2 = groupDf2[target['targetList'][1]].sum()
+                if p2 < 0.0001:
+                    # reportStr += '数据不足，暂不分析\n\n'
+                    continue
+                ret2 = p1/p2
+            elif target['op'] == '/*1000':
+                # 转为CPM准备
+                p1 = groupDf2[target['targetList'][0]].sum()
+                p2 = groupDf2[target['targetList'][1]].sum()
+                if p2 < 0.0001:
+                    # reportStr += '数据不足，暂不分析\n\n'
+                    continue
+                ret2 = p1/p2*1000
+            elif target['op'] == 'rate':
+                sumAll = df2Group[target['targetList'][0]].sum()
+                sumGroup = groupDf2[target['targetList'][0]].sum()
+                ret2 = sumGroup/sumAll
+
+            # 差异比例
+            if ret2 < 0.0001:
+                rate = 0
+            else:
+                rate = (ret1 - ret2)/ret2
+
+            ret2Str = '%f'%ret2
+            if target['format'] == '.2f%':
+                ret2Str = '%.2f%%'%(ret2*100)
+            elif target['format'] == '.2f':
+                ret2Str = '%.2f'%(ret2)
+
+            for target0 in target['targetList']:
+                if df2[target0].isnull().any():
+                    ret2Str = '数据不完整'
+                    break
+
+            csvStr2 = ',%s,'%(ret2Str)
+            if csvStr1 == '数据不完整':
+                csvStr2 += '数据不完整'
+            else:
+                csvStr2 += '%.2f%%'%(rate*100)
+
+            if ret1 < 0.0001 and ret2 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            else:
+                
+                csvStr += target['name'] + ',' + csvStr0 + csvStr1 + csvStr2 + '\n'
+        else:
+            if ret1 < 0.0001:
+                # reportStr += '数据不足，暂不分析\n\n'
+                continue
+            else:
+                csvStr += target['name'] + ',' + csvStr0 + csvStr1 + '\n'
+
+    return csvStr      
+
 def debug(df):
     df = df.groupby(['install_date'],as_index=False).sum().reset_index(drop=True)
     print(df)

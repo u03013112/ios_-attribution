@@ -11,7 +11,7 @@ sys.path.append('/src')
 
 from src.report.data.ad import getAdDataIOSGroupByCampaignAndGeoAndMedia
 from src.report.data.revenue import getRevenueDataIOSGroupByCampaignAndGeoAndMedia
-from src.report.report.report import toPdf,headStr,getReport
+from src.report.report.report import toPdf,headStr,getReport,getCsv
 
 
 def getFilename(filename,ext='csv'):
@@ -28,7 +28,7 @@ todayStr = today.strftime('%Y%m%d')
 
 print('今日日期：',todayStr)
 # 获得N天的数据
-N = 7
+N = 30
 # 获得一周前的UTC0日期，格式20231011，往前一天，不获取今天的不完整数据。
 startDayStr = (today - datetime.timedelta(days=N+1)).strftime('%Y%m%d')
 endDayStr = (today - datetime.timedelta(days=1)).strftime('%Y%m%d')
@@ -84,10 +84,87 @@ def main():
     startDayStr2ROI7 = (datetime.datetime.strptime(startDayStr2ROI3, "%Y%m%d") - datetime.timedelta(days=4)).strftime("%Y%m%d")
     endDayStr2ROI7 = (datetime.datetime.strptime(endDayStr2ROI3, "%Y%m%d") - datetime.timedelta(days=4)).strftime("%Y%m%d")
 
+    csvFilenameList = []
+    header = f'target,group,{startDayStr1ROI1}~{endDayStr1ROI1},{startDayStr2ROI1}~{endDayStr2ROI1},环比\n'
+    # 大盘
+    csvStr = '' + header
+    csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    # csvStr += getCsv(df,{'name':'CPM','op':'/*1000','targetList':['cost','impression'],'format':'.2f'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    # csvStr += getCsv(df,{'name':'CTR','op':'/','targetList':['click','impression'],'format':'.2f%'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    # csvStr += getCsv(df,{'name':'CVR','op':'/','targetList':['install_ad','click'],'format':'.2f%'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    # csvStr += getCsv(df,{'name':'CPI','op':'/','targetList':['cost','install_ad'],'format':'.2f'},startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    filename = getFilename('reportAll','csv')
+    with open(filename,'w') as f:
+        f.write(csvStr)
+    print('已存储在%s'%filename)
+    csvFilenameList.append(filename)
+
+    # 分媒体
+    csvStr = '' + header
+    csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'revenue_1d','op':'','targetList':['revenue_1d'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'revenue_1dRate','op':'rate','targetList':['revenue_1d'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'CPM','op':'/*1000','targetList':['cost','impression'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'CTR','op':'/','targetList':['click','impression'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'CVR','op':'/','targetList':['install_ad','click'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    csvStr += getCsv(df,{'name':'CPI','op':'/','targetList':['cost','install_ad'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=df,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+    filename = getFilename('reportMedia','csv')
+    with open(filename,'w') as f:
+        f.write(csvStr)
+    print('已存储在%s'%filename)
+    csvFilenameList.append(filename)
+
+    # 分媒体后分国家
+    mediaList = df['media'].unique().tolist()
+    for media in mediaList:
+        if media == 'other':
+            continue
+        mediaDf = df[df['media'] == media].copy()
+
+        csvStr = '' + header
+        csvStr += getCsv(mediaDf,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'CostRate','op':'rate','targetList':['cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'revenue_1d','op':'','targetList':['revenue_1d'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'revenue_1dRate','op':'rate','targetList':['revenue_1d'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'CPM','op':'/*1000','targetList':['cost','impression'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'CTR','op':'/','targetList':['click','impression'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'CVR','op':'/','targetList':['install_ad','click'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        csvStr += getCsv(mediaDf,{'name':'CPI','op':'/','targetList':['cost','install_ad'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1ROI1,endDayStr1=endDayStr1ROI1,df2=mediaDf,startDayStr2=startDayStr2ROI1,endDayStr2=endDayStr2ROI1)
+        filename = getFilename(f'reportMedia{media}','csv')
+        with open(filename,'w') as f:
+            f.write(csvStr)
+        print('已存储在%s'%filename)
+        csvFilenameList.append(filename)
+
+    # 对上面所有的生成csv进行收集与统计，将所有环比绝对值大于20%的数据挑出来，并存储到fastRead.csv中
+    
+    fastDf = pd.DataFrame()
+    for csvFilename in csvFilenameList:
+        df0 = pd.read_csv(csvFilename)
+        df0['filename'] = os.path.basename(csvFilename)
+        df0['环比'] = pd.to_numeric(df0['环比'].str.rstrip('%')) / 100
+        fastDf0 = df0.loc[(df0['环比'] > 0.2) | (df0['环比'] < -0.2)]
+        fastDf = pd.concat([fastDf,fastDf0],axis=0)
+    # 将环比列转换回百分比字符串格式
+    fastDf['环比'] = fastDf['环比'].apply(lambda x: f"{x:.2%}")
+    # 将group列 == 'other'的行去掉
+    fastDf = fastDf.loc[fastDf['group'] != 'other']
+    # fastDf = fastDf.sort_values(by=['target','group','环比'],ascending=[True,True,False])
+    fastDf.to_csv(getFilename('fastRead','csv'),index=False)
 
     # 大盘部分开始 ##########################################################################################
-    # if True:
-    if False:
+    if True:
+    # if False:
         reportStr = '' + headStr
         reportStr += f'# {startDayStr}~{endDayStr} iOS 海外周报 之 大盘汇总\n\n'
 
@@ -211,8 +288,8 @@ def main():
     # 分国家部分结束 ##########################################################################################
 
     # 分媒体之后分国家部分 ##########################################################################################
-    # if True:
-    if False:
+    if True:
+    # if False:
         mediaList = df['media'].unique().tolist()
         for media in mediaList:
             print('media:',media)
@@ -303,9 +380,10 @@ def main():
     # 分campaign部分结束 ##########################################################################################
 
 def debug():
-    df = pd.read_csv('/src/data/report/iOSWeekly20231029_20231105/revenue20231018_20231105_GroupByCampaignAndGeoAndMedia.csv')
+    df = pd.read_csv('/src/data/report/iOSWeekly20231030_20231106/revenue20231019_20231106_GroupByCampaignAndGeoAndMedia.csv')
     df = df.groupby(['install_date','media'],as_index=False).sum().reset_index(drop=True)
     print(df)
 
 if __name__ == '__main__':
     main()
+    # debug()

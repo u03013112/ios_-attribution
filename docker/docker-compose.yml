@@ -16,10 +16,16 @@ services:
         max-size: "10m"
         max-file: "1"
   
-  grafana:
-    image: my-grafana
-    container_name: 'grafana'
-    ports:
-      - 3000:3000
+  openai:
+    image: u03013112/openai:v1
+    container_name: 'openai'
+    tty: true
     volumes:
       - ../:/src:cached
+    working_dir: /src/
+    network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"

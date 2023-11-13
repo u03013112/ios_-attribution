@@ -367,6 +367,16 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
             SUM(rate) AS install,
             SUM(
                 CASE
+                    WHEN 
+                        event_timestamp > install_timestamp 
+                        AND event_timestamp - install_timestamp < 86400 
+                    THEN 
+                        event_revenue_usd
+                    ELSE 0
+                END * rate
+            )AS revenue_24h,
+            SUM(
+                CASE
                     WHEN DATEDIFF(
                         FROM_UNIXTIME(event_timestamp),
                         FROM_UNIXTIME(install_timestamp),
@@ -478,6 +488,16 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
             COUNT(distinct game_uid) AS install,
             SUM(
                 CASE
+                    WHEN 
+                        event_timestamp > install_timestamp 
+                        AND event_timestamp - install_timestamp < 86400 
+                    THEN 
+                        event_revenue_usd
+                    ELSE 0
+                END
+            )AS revenue_24h,
+            SUM(
+                CASE
                     WHEN DATEDIFF(
                         FROM_UNIXTIME(event_timestamp),
                         FROM_UNIXTIME(install_timestamp),
@@ -523,10 +543,11 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
     dfGroup = df.groupby(['install_date','geoGroup'],as_index=False).sum().reset_index(drop=True)
     mergeDf = pd.merge(df2,dfGroup,on=['install_date','geoGroup'],how='left',suffixes=('_total','_other'))
     mergeDf['install'] = mergeDf['install_total'] - mergeDf['install_other']
+    mergeDf['revenue_24h'] = mergeDf['revenue_24h_total'] - mergeDf['revenue_24h_other']
     mergeDf['revenue_1d'] = mergeDf['revenue_1d_total'] - mergeDf['revenue_1d_other']
     mergeDf['revenue_3d'] = mergeDf['revenue_3d_total'] - mergeDf['revenue_3d_other']
     mergeDf['revenue_7d'] = mergeDf['revenue_7d_total'] - mergeDf['revenue_7d_other']
-    mergeDf = mergeDf[['install_date','geoGroup','install','revenue_1d','revenue_3d','revenue_7d']]
+    mergeDf = mergeDf[['install_date','geoGroup','install','revenue_24h','revenue_1d','revenue_3d','revenue_7d']]
     mergeDf['media'] = 'organic'
     mergeDf['campaign_id'] = 'organic'
     mergeDf['campaign_name'] = 'organic'
