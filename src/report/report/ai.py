@@ -221,7 +221,7 @@ message_text3 = [
 # )
 # print(completion.choices[0].message.content)
 
-def getAiReport(message_text):
+def getAiResp(message_text):
     completion = openai.chat.completions.create(
         model="bigpt4",
         messages=message_text,
@@ -232,4 +232,59 @@ def getAiReport(message_text):
         stop=None
     )
     return(completion.choices[0].message.content)
+
+def getAiReport(reportPath):
+    retStr = '\n\n## 分国家\n'
+    report1 = os.path.join(reportPath,'report1_1.csv')
+    # 读取report1_1.csv，存到字符串s1中
+    s1 = '读下面csv格式表格，并对数据进行分析\n'
+    with open(report1, 'r', encoding='utf-8') as f:
+        s1 += f.read()
+    
+    message_text1 = [
+        {"role":"system","content":"You are an AI assistant that helps people find information."},
+        {"role":"user","content":s1_1},
+        {"role":"assistant","content":"准备好了"},
+        {"role":"user","content":s1},
+    ]
+
+    retStr += getAiResp(message_text1)
+
+    retStr += '\n\n## 分媒体\n'
+    report2 = os.path.join(reportPath,'report2_1.csv')
+    # 读取report2_1.csv，存到字符串s2中
+    s2 = '读下面csv格式表格，并对数据进行分析\n'
+    with open(report2, 'r', encoding='utf-8') as f:
+        s2 += f.read()
+
+    message_text2 = [
+        {"role":"system","content":"You are an AI assistant that helps people find information."},
+        {"role":"user","content":s1_2},
+        {"role":"assistant","content":"准备好了"},
+        {"role":"user","content":s2},
+    ]
+
+    retStr += getAiResp(message_text2)
+
+    for media in ['bytedanceglobal','facebook','google']:
+        retStr += '\n\n## 分媒体细节v1 '+media+'\n'
+        reportMedia = os.path.join(reportPath,'report3_1_'+media+'.csv')
+        # 读取report3_1_bytedanceglobal.csv，存到字符串s3中
+        s3 = '读下面csv格式表格，并对数据进行分析\n'
+        with open(reportMedia, 'r', encoding='utf-8') as f:
+            s3 += f.read()
+
+        message_text3 = [
+            {"role":"system","content":"You are an AI assistant that helps people find information."},
+            {"role":"user","content":s1_1},
+            {"role":"assistant","content":"准备好了"},
+            {"role":"user","content":s3},
+        ]
+
+        retStr += getAiResp(message_text3)
+
+    return retStr
+
+if __name__ == '__main__':
+    print(getAiReport('/src/data/report/iOSWeekly20231101_20231110/'))
 
