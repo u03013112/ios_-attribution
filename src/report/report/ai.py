@@ -12,7 +12,7 @@ openai.base_url = openaiUrl
 openai.api_version = "2023-07-01-preview"
 openai.api_key = openaiApiKey
 
-s1 = '''
+s1_1 = '''
 你是一个数据分析师，主要职责是帮助广告投放人员进行数据分析，协助他们进行广告投放。
 广告投放人员的KPI是在ROI合格的情况下尽可能的多花钱。
 KPI的ROI指的是7日ROI。并且是分国家进行制定的。
@@ -43,7 +43,7 @@ KPI：这里的KPI就是我们要求的KPI，根据target不同，ROI7是实际K
 下面我会给你一些数据，这条你了解了就回复我“准备好了”就好了。
 '''
 
-s2 = '''
+s2_1 = '''
 读下面csv格式表格，并对数据进行分析
 target,group,20231101~20231110,20231022~20231031,环比,KPI
 ROI24h,US,2.04%,2.11%,-3.56%,1.94%
@@ -75,9 +75,9 @@ Cost,other,746070.51,763645.26,-2.30%,
 
 message_text1 = [
     {"role":"system","content":"You are an AI assistant that helps people find information."},
-    {"role":"user","content":s1},
+    {"role":"user","content":s1_1},
     {"role":"assistant","content":"准备好了"},
-    {"role":"user","content":s2},
+    {"role":"user","content":s2_1},
 ]
 
 s1_2 = '''
@@ -169,13 +169,67 @@ message_text2 = [
     {"role":"user","content":s2_2},
 ]
 
-completion = openai.chat.completions.create(
-    model="bigpt4",
-    messages=message_text2,
-    temperature=0.1,
-    top_p=0.95,
-    frequency_penalty=0,
-    presence_penalty=0,
-    stop=None
-)
-print(completion.choices[0].message.content)
+s3_2 = '''
+target,group,20231101~20231110,20231022~20231031,环比,KPI
+ROI24h,US,1.70%,1.12%,51.70%,1.67%
+ROI24h,GCC,0.43%,2.31%,-81.17%,0.90%
+ROI24h,JP,2.95%,3.03%,-2.69%,1.05%
+ROI24h,KR,1.39%,2.12%,-34.51%,1.18%
+ROI24h,other,2.17%,1.12%,94.29%,1.75%
+ROI1,US,1.10%,0.68%,61.88%,1.04%
+ROI1,GCC,0.31%,1.75%,-82.40%,0.67%
+ROI1,JP,2.35%,2.51%,-6.26%,0.84%
+ROI1,KR,0.76%,1.94%,-60.94%,0.91%
+ROI1,other,1.93%,0.86%,123.00%,1.39%
+ROI3,US,2.96%,2.39%,24.23%,3.19%
+ROI3,GCC,1.39%,7.24%,-80.85%,2.98%
+ROI3,JP,4.92%,7.40%,-33.52%,2.05%
+ROI3,KR,1.99%,9.35%,-78.71%,3.97%
+ROI3,other,4.28%,2.99%,43.26%,4.17%
+ROI7,US,数据不完整,5.28%,数据不完整,6.50%
+ROI7,GCC,数据不完整,14.09%,数据不完整,6.00%
+ROI7,JP,数据不完整,22.86%,数据不完整,5.50%
+ROI7,KR,数据不完整,15.17%,数据不完整,6.50%
+ROI7,other,数据不完整,5.06%,数据不完整,7.00%
+Cost,US,46248.23,62323.99,-25.79%,
+Cost,GCC,1445.98,720.13,100.79%,
+Cost,JP,2738.41,2585.37,5.92%,
+Cost,KR,34574.05,35458.78,-2.50%,
+Cost,other,79107.32,151574.94,-47.81%,
+Cost rate,US,28.18%,24.67%,14.24%,
+Cost rate,GCC,0.88%,0.29%,209.13%,
+Cost rate,JP,1.67%,1.02%,63.07%,
+Cost rate,KR,21.07%,14.03%,50.11%,
+Cost rate,other,48.20%,59.99%,-19.65%,
+'''
+
+message_text3 = [
+    {"role":"system","content":"You are an AI assistant that helps people find information."},
+    {"role":"user","content":s1_1},
+    {"role":"assistant","content":"准备好了"},
+    {"role":"user","content":s3_2},
+]
+
+# completion = openai.chat.completions.create(
+#     model="bigpt4",
+#     messages=message_text3,
+#     temperature=0.1,
+#     top_p=0.95,
+#     frequency_penalty=0,
+#     presence_penalty=0,
+#     stop=None
+# )
+# print(completion.choices[0].message.content)
+
+def getAiReport(message_text):
+    completion = openai.chat.completions.create(
+        model="bigpt4",
+        messages=message_text,
+        temperature=0.1,
+        top_p=0.95,
+        frequency_penalty=0,
+        presence_penalty=0,
+        stop=None
+    )
+    return(completion.choices[0].message.content)
+
