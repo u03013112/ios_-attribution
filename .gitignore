@@ -137,3 +137,5 @@ sync.sh
 *.csv
 
 service_account.json
+
+tmp/*

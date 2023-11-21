@@ -118,6 +118,10 @@ def main(startDayStr,endDayStr):
 
     df1 = pd.read_csv(filename)
     df1 = pd.merge(df1,kpiDf,on=['target','group'],how='left')
+
+    df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = ((df1[f'{startDayStr1}~{endDayStr1}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+    df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = ((df1[f'{startDayStr2}~{endDayStr2}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+
     filename = getFilename('report1_1','csv')
     df1.to_csv(filename,index=False)
     print('已存储在%s'%filename)
@@ -181,6 +185,10 @@ def main(startDayStr,endDayStr):
 
         df1 = pd.read_csv(filename)
         df1 = pd.merge(df1,kpiDf,on=['target','group'],how='left')
+
+        df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = ((df1[f'{startDayStr1}~{endDayStr1}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+        df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = ((df1[f'{startDayStr2}~{endDayStr2}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+
         filename = getFilename(f'report3_1_{media}','csv')
         df1.to_csv(filename,index=False)
 
@@ -215,4 +223,3 @@ def debug():
 
 if __name__ == '__main__':
     main('20231101','20231110')
-    # debug()

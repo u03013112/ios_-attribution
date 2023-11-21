@@ -338,7 +338,7 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
                 campaign_id,
                 rate
             FROM
-                rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign
+                rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2
             WHERE
                 day between '{startDayStr}'
                 AND '{endDayStr}'
