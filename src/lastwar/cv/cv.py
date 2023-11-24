@@ -82,7 +82,7 @@ def getData1(sql,filename):
     # sql = '''select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."usd"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-12 and "#zone_offset"<=14, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('second', "#install_time", "#event_time")) as double) "#vp@life_time_second" from (select "#event_name","#event_time","usd","#zone_offset","#user_id","#install_time","$part_date","$part_event" from v_event_15)))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20230913)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay' ) ) )) and ((("$part_date" between '2023-09-19' and '2023-10-20') and ("@vpc_tz_#event_time" >= timestamp '2023-09-20' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-10-19'))) and (ta_ev."#vp@life_time_second" <= 8.64E+4)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC limit 10'''
 
     lines = ssSql2(sql)
-    print('lines:',len(lines))
+    # print('lines:',len(lines))
     # print('lines[0]:',lines[0])
 
 
@@ -174,7 +174,7 @@ def makeCvMap(levels):
 
 def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     userDfCopy = userDf.copy(deep=True).reset_index(drop=True)
-    for cv1 in cvMapDf['cv'].values:
+    for cv1 in cvMapDf[cv].values:
         min = cvMapDf['min_event_revenue'][cv1]
         max = cvMapDf['max_event_revenue'][cv1]
         userDfCopy.loc[
@@ -185,19 +185,20 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     return userDfCopy
 
 def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
-    cvMapDf.loc[cvMapDf['cv']==1,'avg'] = 0.99
+    cvMapDf.loc[cvMapDf[cv]==1,'avg'] = 0.99
     addCvDf = addCv(userDf,cvMapDf,usd,cv)
     df = addCvDf.merge(cvMapDf,on=[cv],how='left')
-    print(df.loc[df['install_date'] == '2023-10-18'])
+    # print(df.loc[df['install_date'] == '2023-10-18'])
     df = df.groupby(['install_date']).agg({usd:'sum','avg':'sum'}).reset_index()
     df['mape'] = abs(df[usd] - df['avg']) / df[usd]
-    df = df.loc[df['install_date']<'2023-10-19']
-    print(df)
+    # df = df.loc[df['install_date']<'2023-10-19']
+    # print(df)
     print('mape:',df['mape'].mean())
 
 def main1():
-    df = pd.read_csv('/src/data/zk2/lastwar20230920_20231019_allPay.csv')
-    # df.loc[df['payUsd'] > 1000,'payUsd'] = 1000
+    # df = pd.read_csv('/src/data/zk2/lastwar20230920_20231019_allPay.csv')
+
+    df = pd.read_csv('/src/data/lastwar_pay2_20230901_20231123.csv')
     N = 32
     for i in range (N,100):
         levels = makeLevels1(df,usd='payUsd',N=i)
@@ -207,8 +208,36 @@ def main1():
     
     cvMapDf = makeCvMap(levels)
     print(cvMapDf)
-    cvMapDf.to_csv('/src/data/zk2/lastwar20230920_20231019_allPay_cvMap.csv',index=False)
+    cvMapDf.to_csv('/src/data/zk2/lastwar20230901_20231123_allPay_cvMap.csv',index=False)
     checkCv(df,cvMapDf,usd='payUsd',cv='cv')
+
+def check():
+    # sql = '''
+    #     select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."#vp@closing_currency__price_local__USD"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, try_cast(try(ROUND((("price_local" / IF(("closing_currency" = 'USD'), 1, ex_currency_agg["closing_currency"])) * IF(('USD' = 'USD'), 1, ex_currency_agg['USD'])), 4)) as double) "#vp@closing_currency__price_local__USD" from (select v_alias_currency.*, currency__data_tbl.ex_currency_agg from (select *, if("#zone_offset" is not null and "#zone_offset">=-30 and "#zone_offset"<=30, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('hour', lw_register_date, "#event_time")) as double) "#vp@lifetime_hour" from (select "#event_name","lw_register_date","price_local","#event_time","#zone_offset","#user_id","closing_currency","$part_date","$part_event" from v_event_15))) v_alias_currency left join (SELECT ex_currency_date, ex_currency_agg FROM (SELECT CAST(ex_date AS varchar) ex_currency_date, (SELECT map_agg(currency, exchange) FROM ta_dim.ta_exchange WHERE (ex_date = '2023-11-24')) ex_currency_agg FROM (( SELECT sequence(date '2023-11-24', current_date)) currency_date (ex_all_date) CROSS JOIN UNNEST(ex_all_date) t (ex_date))) a UNION (SELECT ex_date ex_currency_date, map_agg(currency, exchange) ex_currency_agg FROM ta_dim.ta_exchange GROUP BY ex_date)) currency__data_tbl on currency__data_tbl.ex_currency_date=format_datetime( if("#zone_offset" is not null and "#zone_offset">=-30 and "#zone_offset"<=30, date_add('second', cast((0-"#zone_offset")*3600 as integer), v_alias_currency."#event_time"), v_alias_currency."#event_time"), 'yyyy-MM-dd')))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20230825)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay_new' ) ) )) and ((("$part_date" between '2023-08-31' and '2023-11-24') and ("@vpc_tz_#event_time" >= timestamp '2023-09-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-11-23'))) and (ta_ev."#vp@lifetime_hour" <= 24)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    # '''
+    # getData1(sql,'/src/data/zk2/lastwar20230901_20231023_allPay.csv')
+
+    df = pd.read_csv('/src/data/lastwar_pay_20230901_20231123.csv')
+    # print(len(df))
+    # print(df['注册时间(UT0)'].min())
+    df.rename(columns={'s_pay_new.美元付费金额 - USD(每日汇率)总和':'payUsd','注册时间(UT0)':'install_date'},inplace=True)
+    df = df[['payUsd','install_date']]
+    df['install_date'] = pd.to_datetime(df['install_date'],format='%Y-%m-%d')
+    df['payUsd'] = df['payUsd'].astype(float)
+
+    df = df.loc[df['install_date']>='2023-11-01']
+
+    df.to_csv('/src/data/lastwar_pay2_20230901_20231123.csv',index=False)
+
+    df = pd.read_csv('/src/data/lastwar_pay2_20230901_20231123.csv')
+    cvMapDf = pd.read_csv('/src/src/lastwar/cv/cvMap20231124.csv')
+    cvMapDf = cvMapDf.loc[cvMapDf['conversion_value']<32][['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
+    cvMapDf['avg'] = (cvMapDf['min_event_revenue'] + cvMapDf['max_event_revenue'])/2
+    # print(cvMapDf)
+
+    checkCv(df,cvMapDf,usd='payUsd',cv='conversion_value')
+
+
 
 if __name__ == '__main__':
     
@@ -217,6 +246,10 @@ if __name__ == '__main__':
 
     # sql2 = '''select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."usd"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-12 and "#zone_offset"<=14, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('second', "#install_time", "#event_time")) as double) "#vp@life_time_second" from (select "#event_name","#event_time","usd","#zone_offset","#user_id","#install_time","$part_date","$part_event" from v_event_15)))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id","lwu_platform" from v_user_15) where "#event_date" > 20230913)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay' ) ) )) and ((("$part_date" between '2023-09-19' and '2023-10-20') and ("@vpc_tz_#event_time" >= timestamp '2023-09-20' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-10-19'))) and ((ta_ev."#vp@life_time_second" <= 8.64E+4) and (ta_u."lwu_platform" IN ('AppStore')))) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC'''
     # getData1(sql2,'/src/data/zk2/lastwar20230920_20231019_appstorePay.csv')
+
+    
+
+    check()
 
     main1()
 

@@ -288,4 +288,4 @@ def getAiReport(reportPath):
     return retStr
 
 if __name__ == '__main__':
-    print(getAiReport('/src/data/report/iOSWeekly20230801_20230831'))
+    print(getAiReport('/src/data/report/iOSWeekly20231101_20231110'))
