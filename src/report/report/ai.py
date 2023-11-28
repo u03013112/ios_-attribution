@@ -250,7 +250,14 @@ def getAiReport(reportPath):
 
     # print(s1)
 
-    retStr += getAiResp(message_text1)
+    ret1 = getAiResp(message_text1)
+
+    # 将ret1保存到reportPath/report1_1_ai.txt中
+    report1_ai = os.path.join(reportPath,'report1_1_ai.txt')
+    with open(report1_ai, 'w', encoding='utf-8') as f:
+        f.write(ret1)
+
+    retStr += ret1
 
     retStr += '\n\n## 分媒体\n'
     report2 = os.path.join(reportPath,'report2_1.csv')
@@ -266,7 +273,14 @@ def getAiReport(reportPath):
         {"role":"user","content":s2},
     ]
 
-    retStr += getAiResp(message_text2)
+    ret2 = getAiResp(message_text2)
+
+    # 将ret2保存到reportPath/report2_1_ai.txt中
+    report2_ai = os.path.join(reportPath,'report2_1_ai.txt')
+    with open(report2_ai, 'w', encoding='utf-8') as f:
+        f.write(ret2)
+
+    retStr += ret2
 
     for media in ['bytedanceglobal','facebook','google']:
         retStr += '\n\n## 分媒体细节v1 '+media+'\n'
@@ -283,9 +297,16 @@ def getAiReport(reportPath):
             {"role":"user","content":s3},
         ]
 
-        retStr += getAiResp(message_text3)
+        ret3 = getAiResp(message_text3)
+
+        # 将ret3保存到reportPath/report3_1_bytedanceglobal_ai.txt中
+        report3_ai = os.path.join(reportPath,'report3_1_'+media+'_ai.txt')
+        with open(report3_ai, 'w', encoding='utf-8') as f:
+            f.write(ret3)
+
+        retStr += ret3
 
     return retStr
 
 if __name__ == '__main__':
-    print(getAiReport('/src/data/report/iOSWeekly20231101_20231110'))
+    print(getAiReport('/src/data/report/iOSWeekly20231118_20231125'))

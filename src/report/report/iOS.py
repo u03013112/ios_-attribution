@@ -13,6 +13,22 @@ from src.report.report.report import toPdf,headStr,getReport,getCsv
 def getFilename(filename,ext='csv'):
     return '%s/%s.%s'%(directory,filename,ext)
 
+# 自定义一个函数，用于检查字符串是否为百分比格式
+def is_percentage(s):
+    return isinstance(s, str) and s.endswith('%') and s[:-1].replace('.', '', 1).isdigit()
+
+# 使用apply函数对数据框的行进行操作
+def calculate(row, column_name):
+    value = row[column_name]
+    kpi = row['KPI']
+    
+    if is_percentage(value) and is_percentage(kpi):
+        value_float = float(value.rstrip('%'))
+        kpi_float = float(kpi.rstrip('%'))
+        return '{:.2f}%'.format((value_float - kpi_float) / kpi_float * 100)
+    else:
+        return '-'
+    
 def main(startDayStr,endDayStr):
     # 获得目前的UTC0日期，格式20231018
     today = datetime.datetime.utcnow()
@@ -29,9 +45,17 @@ def main(startDayStr,endDayStr):
         os.makedirs(directory)
 
     # 对查询日期进行修正
-    # 其中由于归因要用到融合归因的数据，只能获得T-3的数据，去掉不能获得的数据
+    
     endDayStrFix = endDayStr
-    endDayMaxStr = (today - datetime.timedelta(days=3)).strftime('%Y%m%d')
+    
+    # 其中由于归因要用到融合归因的数据，只能获得T-3的数据，去掉不能获得的数据
+    # 检查目前时间，如果超过北京时间15点(UTC 7点），那么可以获取到T-2的数据，否则只能获取到T-3的数据
+    n = 3
+    if today.hour >= 7:
+        n = 2
+
+    endDayMaxStr = (today - datetime.timedelta(days=n)).strftime('%Y%m%d')
+
     if endDayStr > endDayMaxStr:
         endDayStrFix = endDayMaxStr
     # 先计算startDayStr到endDayStrFix共有多少天
@@ -119,8 +143,10 @@ def main(startDayStr,endDayStr):
     df1 = pd.read_csv(filename)
     df1 = pd.merge(df1,kpiDf,on=['target','group'],how='left')
 
-    df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = ((df1[f'{startDayStr1}~{endDayStr1}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
-    df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = ((df1[f'{startDayStr2}~{endDayStr2}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+    
+
+    df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = df1.apply(calculate,args=(f'{startDayStr1}~{endDayStr1}',), axis=1)
+    df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = df1.apply(calculate,args=(f'{startDayStr2}~{endDayStr2}',), axis=1)
 
     filename = getFilename('report1_1','csv')
     df1.to_csv(filename,index=False)
@@ -186,8 +212,8 @@ def main(startDayStr,endDayStr):
         df1 = pd.read_csv(filename)
         df1 = pd.merge(df1,kpiDf,on=['target','group'],how='left')
 
-        df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = ((df1[f'{startDayStr1}~{endDayStr1}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
-        df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = ((df1[f'{startDayStr2}~{endDayStr2}'].str.rstrip('%').astype(float) - df1['KPI'].str.rstrip('%').astype(float))/df1['KPI'].str.rstrip('%').astype(float)).map(lambda n: '{:.2f}%'.format(n*100))
+        df1[f'{startDayStr1}~{endDayStr1} KPI比较'] = df1.apply(calculate,args=(f'{startDayStr1}~{endDayStr1}',), axis=1)
+        df1[f'{startDayStr2}~{endDayStr2} KPI比较'] = df1.apply(calculate,args=(f'{startDayStr2}~{endDayStr2}',), axis=1)
 
         filename = getFilename(f'report3_1_{media}','csv')
         df1.to_csv(filename,index=False)
@@ -222,4 +248,4 @@ def debug():
 
 
 if __name__ == '__main__':
-    main('20231101','20231110')
+    main('20231118','20231125')
