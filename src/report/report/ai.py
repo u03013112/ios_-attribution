@@ -308,5 +308,25 @@ def getAiReport(reportPath):
 
     return retStr
 
+
+from src.report.feishu.report1 import main as feishuMain
 if __name__ == '__main__':
-    print(getAiReport('/src/data/report/iOSWeekly20231118_20231125'))
+    # print(getAiReport('/src/data/report/iOSWeekly20231118_20231125'))
+    # 获取命令行参数 唯一的参数是报告文件夹路径
+    # reportPath = sys.argv[1]
+    # print('工作目录：',reportPath)
+    # print(getAiReport(reportPath))
+
+    filename = '/src/data/report/todoList.txt'
+    # 按行读取，每一行（去掉换行符）作为一个报告文件夹路径
+    with open(filename, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        for line in lines:
+            reportPath = line.strip()
+            print('工作目录：',reportPath)
+            getAiReport(reportPath)
+            feishuMain(reportPath)
+
+    # 完成后删除todoList.txt
+    os.remove(filename)
+    

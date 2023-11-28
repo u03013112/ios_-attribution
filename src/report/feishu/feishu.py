@@ -283,6 +283,37 @@ def addFile(tenantAccessToken,documentId,blockId,file_path):
     return
 
 
+# 获得chatId暂时没有封装
+# curl --location --request GET 'https://open.feishu.cn/open-apis/im/v1/chats' \
+# --header 'Authorization: Bearer t-'
+
+
+# curl --location --request POST 'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id' \
+# --header 'Authorization: Bearer t-' \
+# --header 'Content-Type: application/json' \
+# --data-raw '{
+#     "receive_id": "oc_3e59fcc0d068e649245cee2478d6a8b9",
+#     "msg_type": "text",
+#     "content": "{\"text\":\"今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/IMF7dtGpvoPhA6xzglScjM23nHH\"}"
+# }'
+def sendMessage(tenantAccessToken,message,chatId = 'oc_3e59fcc0d068e649245cee2478d6a8b9'):
+    url = f'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id'
+    headers = {
+        'Authorization': f'Bearer {tenantAccessToken}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'receive_id':chatId,
+        'msg_type':'text',
+        'content':message
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code != 200:
+        raise Exception(f"sendMessage Error: {response.status_code}, {response.text}")
+    
+    return response.json()
     
 
 if __name__ == '__main__':

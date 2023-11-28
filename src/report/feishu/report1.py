@@ -4,7 +4,7 @@ import os
 import sys
 sys.path.append('/src')
 
-from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage
 
 def main(dirFilePath):
     # 如果文件夹不存在，则退出
@@ -47,6 +47,9 @@ def main(dirFilePath):
         csvFilePath3 = os.path.join(dirFilePath,f'report3_1_{media}.csv')
         addFile(tenantAccessToken,docId,'',csvFilePath3)
 
+    # 发送消息
+    message = f'今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/{docId}'
+    sendMessage(tenantAccessToken,message)
     
     
 

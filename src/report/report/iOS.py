@@ -39,7 +39,7 @@ def main(startDayStr,endDayStr):
     print('查询日期：',startDayStr,'~',endDayStr)
 
     global directory
-    directory = f'/src/data/report/iOSWeekly{startDayStr}_{endDayStr}'
+    directory = f'/src/data/report/海外iOS速读AI版_{startDayStr}_{endDayStr}'
 
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -245,7 +245,24 @@ def debug():
             print(geoDf.loc[geoDf['revenue_1d'] > geoDf['revenue_24h']])
             
 
+# 周报，获取一周数据
+def weekly():
+    # endDay 是从今天往前推2天
+    today = datetime.datetime.utcnow()
+    endDayStr = (today - datetime.timedelta(days=2)).strftime('%Y%m%d')
+    # startDay 是从endDay往前推7+2天
+    startDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
 
+    # print('查询日期：',startDayStr,'~',endDayStr)
+    main(startDayStr,endDayStr)
+
+    # 将目录写到文件中/src/data/report/todoList.txt，供其他程序使用
+    # 这里就不做互斥了，先简单的做，之后可以搞个消息中心啥的
+    filename = '/src/data/report/todoList.txt'
+    with open(filename,'a') as f:
+        f.write(f'{directory}\n')
+    
 
 if __name__ == '__main__':
-    main('20231118','20231125')
+    # main('20231118','20231125')
+    weekly()
