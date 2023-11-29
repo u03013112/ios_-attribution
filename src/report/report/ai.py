@@ -248,14 +248,15 @@ def getAiReport(reportPath):
         {"role":"user","content":s1},
     ]
 
-    # print(s1)
-
-    ret1 = getAiResp(message_text1)
-
-    # 将ret1保存到reportPath/report1_1_ai.txt中
     report1_ai = os.path.join(reportPath,'report1_1_ai.txt')
-    with open(report1_ai, 'w', encoding='utf-8') as f:
-        f.write(ret1)
+    ret1 = ''
+    if os.path.exists(report1_ai):
+        with open(report1_ai, 'r', encoding='utf-8') as f:
+            ret1 = f.read()
+    else:
+        ret1 = getAiResp(message_text1)
+        with open(report1_ai, 'w', encoding='utf-8') as f:
+            f.write(ret1)
 
     retStr += ret1
 
@@ -272,13 +273,15 @@ def getAiReport(reportPath):
         {"role":"assistant","content":"准备好了"},
         {"role":"user","content":s2},
     ]
-
-    ret2 = getAiResp(message_text2)
-
-    # 将ret2保存到reportPath/report2_1_ai.txt中
     report2_ai = os.path.join(reportPath,'report2_1_ai.txt')
-    with open(report2_ai, 'w', encoding='utf-8') as f:
-        f.write(ret2)
+    ret2 = ''
+    if os.path.exists(report2_ai):
+        with open(report2_ai, 'r', encoding='utf-8') as f:
+            ret2 = f.read()
+    else:
+        ret2 = getAiResp(message_text2)
+        with open(report2_ai, 'w', encoding='utf-8') as f:
+            f.write(ret2)
 
     retStr += ret2
 
@@ -297,12 +300,15 @@ def getAiReport(reportPath):
             {"role":"user","content":s3},
         ]
 
-        ret3 = getAiResp(message_text3)
-
-        # 将ret3保存到reportPath/report3_1_bytedanceglobal_ai.txt中
         report3_ai = os.path.join(reportPath,'report3_1_'+media+'_ai.txt')
-        with open(report3_ai, 'w', encoding='utf-8') as f:
-            f.write(ret3)
+        ret3 = ''
+        if os.path.exists(report3_ai):
+            with open(report3_ai, 'r', encoding='utf-8') as f:
+                ret3 = f.read()
+        else:
+            ret3 = getAiResp(message_text3)
+            with open(report3_ai, 'w', encoding='utf-8') as f:
+                f.write(ret3)
 
         retStr += ret3
 
@@ -318,13 +324,16 @@ if __name__ == '__main__':
     # print(getAiReport(reportPath))
 
     filename = '/src/data/report/todoList.txt'
+    if not os.path.exists(filename):
+        print('todoList.txt 不存在')
+        exit(0)
     # 按行读取，每一行（去掉换行符）作为一个报告文件夹路径
     with open(filename, 'r', encoding='utf-8') as f:
         lines = f.readlines()
         for line in lines:
             reportPath = line.strip()
             print('工作目录：',reportPath)
-            getAiReport(reportPath)
+            getAiReport(reportPath)            
             feishuMain(reportPath)
 
     # 完成后删除todoList.txt

@@ -1,5 +1,6 @@
 # 飞书的一些基础方法
 import os
+import json
 import sys
 sys.path.append('/src')
 
@@ -302,21 +303,27 @@ def sendMessage(tenantAccessToken,message,chatId = 'oc_3e59fcc0d068e649245cee247
         'Authorization': f'Bearer {tenantAccessToken}',
         'Content-Type': 'application/json'
     }
+    content = json.dumps({"text": message})
     data = {
         'receive_id':chatId,
         'msg_type':'text',
-        'content':message
+        'content':content
     }
 
     response = requests.post(url, headers=headers, json=data)
 
     if response.status_code != 200:
+        print('data:',data)
         raise Exception(f"sendMessage Error: {response.status_code}, {response.text}")
+    
     
     return response.json()
     
 
 if __name__ == '__main__':
-    print(getTenantAccessToken())
+    # print(getTenantAccessToken())
     # print(createDoc(getTenantAccessToken(),'一篇新的文档'))
+
+    token = getTenantAccessToken()
+    sendMessage(token,'今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/FGWld7bQboqDJux6axPcx5TOnIc')
 
