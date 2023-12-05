@@ -5,7 +5,7 @@ import openai
 import sys
 sys.path.append('/src')
 
-from src.config import openaiApiKey,openaiUrl
+from src.config import openaiApiKey,openaiUrl,openaiApiKey2,openaiUrl2
 
 openai.api_type = "azure"
 openai.base_url = openaiUrl
@@ -100,16 +100,13 @@ group：这里是媒体分组，有些指标是没有自然量的，比如广告
 2、所有的点评与措辞都要保守，尽量不要使用错误、问题、不合理等词汇，可以使用 “有风险” “大概率” 等词汇。
 3、注意列名，上面例子中20231101~20231110,20231022~20231031的20231022~20231031是上一个周期，20231101~20231110是本周期，这个是不固定的，所以要注意。
 4、再强调一次，尽量让投放人员尽快的看到重点，其他数据他们会自己看详细数据。整体不要超过50字。
-格式模板，只是格式与措辞的范例，不是数据的范例：
+格式模板，只是格式与措辞的范例，不是数据的范例。范例中的注意都是提醒你注意的点，不是报告内容：
 1、上周期摘要：Google的ROI7比较低，只有5%。自然量收入大幅（40%）提高。
-    注意：主要关注ROI7列，其他ROI列都只做补充。上个周期的ROI7是完整数据。收入比例中自然量也比较敏感，要是环比变化大，也要关注。
+    注意：只关注ROI7这一组ROI相关数据，其他ROI列比如ROI1在上周期摘要环节不要提！这很重要！
+    注意：收入比例中自然量也比较敏感，要是环比变化大，要添加到上周期摘要的最后部分。
 2、上周期到本周期操作点评：本周期Facebook有较大幅度的花费增加，Google和字节都是较大幅度的减少花费。
     注意：所谓操作也主要针对在不同媒体的花费调整，调整之后ROI是否有大幅变动。
-    注意：只关注环比差距在20%以上内容，环比低于20%的数据不要出现在分析里！
-    注意：只关注环比差距在20%以上内容，环比低于20%的数据不要出现在分析里！
-    注意：只关注环比差距在20%以上内容，环比低于20%的数据不要出现在分析里！
-    你要是看不到这个注意就不要做了！！我已经重复3遍了！！！
-
+    注意：只关注环比差距在20%以上内容，环比低于20%的数据不要出现在分析里！这对我非常重要！
 下面我会给你一些数据，这条你了解了就回复我“准备好了”就好了。
 '''
 
@@ -224,9 +221,10 @@ message_text3 = [
 
 def getAiResp(message_text):
     completion = openai.chat.completions.create(
-        model="bigpt4",
+        # model="bigpt4",
+        model="gpt4-202311",
         messages=message_text,
-        temperature=0.1,
+        temperature=0.0,
         top_p=0.95,
         frequency_penalty=0,
         presence_penalty=0,
@@ -272,7 +270,6 @@ def getAiReport(reportPath):
         {"role":"system","content":"You are an AI assistant that helps people find information."},
         {"role":"user","content":s1_2},
         {"role":"assistant","content":"准备好了"},
-        {"role":"user","content":'再开始之前，再次确认一次，请注意我在模板中提到的注意事项，不要忽略任何一条注意事项。'},
         {"role":"user","content":s2},
     ]
     report2_ai = os.path.join(reportPath,'report2_1_ai.txt')
@@ -282,6 +279,8 @@ def getAiReport(reportPath):
             ret2 = f.read()
     else:
         ret2 = getAiResp(message_text2)
+        print(message_text2)
+        print(ret2)
         with open(report2_ai, 'w', encoding='utf-8') as f:
             f.write(ret2)
 
@@ -320,37 +319,24 @@ import time
 from src.report.feishu.report1 import main as feishuMain
 from src.report.feishu.feishu import sendMessageDebug
 if __name__ == '__main__':
-    retryMax = 10
+    reportPath = '/src/data/report/海外iOS速读AI版_20231126_20231202'
+    report2 = os.path.join(reportPath,'report2_1.csv')
+    # 读取report2_1.csv，存到字符串s2中
+    s2 = '读下面csv格式表格，并对数据进行分析\n'
+    with open(report2, 'r', encoding='utf-8') as f:
+        s2 += f.read()
 
-    for retryCount in range(retryMax):        
-        filename = '/src/data/report/todoList.txt'
-        if not os.path.exists(filename):
-            if retryCount == retryMax-1:
-                print('todoList.txt 重试最大次数仍不存在,退出')
-                # 通知管理员
-                sendMessageDebug('todoList.txt 重试最大次数仍不存在,退出')
-                break
-            print('todoList.txt 不存在,等待5分钟')
-            time.sleep(300)
-            continue
+    message_text2 = [
+        {"role":"system","content":"You are an AI assistant that helps people find information."},
+        {"role":"user","content":s1_2},
+        {"role":"assistant","content":"准备好了"},
+        {"role":"user","content":'再开始之前，再次确认一次，请注意我在模板中提到的注意事项，不要忽略任何一条注意事项。'},
+        {"role":"user","content":s2},
+    ]
+    
+    ret2 = getAiResp(message_text2)
+    # print(message_text2)
+    print(ret2)
 
-        try:
-            # 按行读取，每一行（去掉换行符）作为一个报告文件夹路径
-            with open(filename, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                for line in lines:
-                    reportPath = line.strip()
-                    print('工作目录：',reportPath)
-                    getAiReport(reportPath)            
-                    feishuMain(reportPath)
-        except Exception as e:
-            print('报告生成失败',e)
-            # 通知管理员
-            sendMessageDebug('报告生成失败'+str(e))
-            continue
-        
-        # 完成后删除todoList.txt
-        os.remove(filename)
 
-        break
     
