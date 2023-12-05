@@ -38,8 +38,9 @@ KPI：这里的KPI就是我们要求的KPI，根据target不同，ROI7是实际K
     注意：只关注ROI7列，上个周期的ROI7是完整数据。只关注高于or低于KPI比例较大的数据，比例较小的数据不要出现在分析里！
 2、上周期到本周期操作点评：主要花费变化在XX（如果有多个就放一起写）地区花费大幅增加or减少，符合（不符合）一般规律。
     注意：符合或者不符合的一般规律，指的是上周ROI7比KPI高or低，本周花费增加or减少，这是一般规律。如果上周ROI7比KPI低，本周花费增加，那就是不符合一般规律。
-3、本周期目前情况与建议：ROI1和ROI3方面，与折算KPI比较，基本满足or不满足KPI的，其中XX（如果有多个就放一起写）在本周表现很好，可以适度放量。
+3、本周期目前情况与建议：ROI1和ROI3方面，与折算KPI比较，基本满足or不满足KPI的，其中XX（如果有多个就放一起写）在本周表现很好（或者不好），可以适度放量（减量）。
     注意：本周期的ROI7是不完整数据。所以主要关注ROI1、ROI3、ROI24h。
+    注意：如果总体上与折算KPI比较都好或者不好，没有任何一个国家满足KPI或折算KPI，那就不要再有后面 “其中XX” 及以后的内容了。用建议性的措辞来概括即可。比如建议适度整体放量或者减量。
 
 下面我会给你一些数据，这条你了解了就回复我“准备好了”就好了。
 '''
@@ -246,6 +247,7 @@ def getAiReport(reportPath):
         {"role":"system","content":"You are an AI assistant that helps people find information."},
         {"role":"user","content":s1_1},
         {"role":"assistant","content":"准备好了"},
+        {"role":"user","content":'再开始之前，再次确认一次，请注意我在模板中提到的注意事项，不要忽略任何一条注意事项。'},
         {"role":"user","content":s1},
     ]
 
@@ -299,6 +301,7 @@ def getAiReport(reportPath):
             {"role":"system","content":"You are an AI assistant that helps people find information."},
             {"role":"user","content":s1_1},
             {"role":"assistant","content":"准备好了"},
+            {"role":"user","content":'再开始之前，再次确认一次，请注意我在模板中提到的注意事项，不要忽略任何一条注意事项。'},
             {"role":"user","content":s3},
         ]
 
@@ -347,6 +350,7 @@ if __name__ == '__main__':
             print('报告生成失败',e)
             # 通知管理员
             sendMessageDebug('报告生成失败'+str(e))
+            time.sleep(300)
             continue
         
         # 完成后删除todoList.txt
