@@ -3,9 +3,11 @@ import os
 import datetime
 import subprocess
 import pandas as pd
+import time
 
 import sys
 sys.path.append('/src')
+from src.maxCompute import execSql
 
 from src.report.data.ad import getAdDataIOSGroupByCampaignAndGeoAndMedia
 from src.report.data.revenue import getRevenueDataIOSGroupByCampaignAndGeoAndMedia
@@ -243,7 +245,24 @@ def debug():
             print('1d:',geoDf['revenue_1d'].sum())
 
             print(geoDf.loc[geoDf['revenue_1d'] > geoDf['revenue_24h']])
-            
+
+# 测试融合归因结论是否已经准备好 
+def check(endDayStr):
+    sql = f'''
+        SELECT
+            *
+        FROM
+            rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2
+        WHERE
+            day = '{endDayStr}'
+    '''
+    print(sql)
+    df = execSql(sql)
+    if len(df) == 0:
+        print('没有数据')
+        return False
+    
+    return True
 
 # 周报，获取一周数据
 def weekly():
@@ -253,14 +272,24 @@ def weekly():
     # startDay 是从endDay往前推7+2天
     startDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
 
-    # print('查询日期：',startDayStr,'~',endDayStr)
-    main(startDayStr,endDayStr)
+    retryMax = 10
+    for _ in range(retryMax):    
+        if not check(endDayStr):
+            print('数据还没有准备好，等待5分钟后重试')
+            # 等待5分钟
+            time.sleep(300)
+            continue
 
-    # 将目录写到文件中/src/data/report/todoList.txt，供其他程序使用
-    # 这里就不做互斥了，先简单的做，之后可以搞个消息中心啥的
-    filename = '/src/data/report/todoList.txt'
-    with open(filename,'a') as f:
-        f.write(f'{directory}\n')
+        # print('查询日期：',startDayStr,'~',endDayStr)
+        main(startDayStr,endDayStr)
+
+        # 将目录写到文件中/src/data/report/todoList.txt，供其他程序使用
+        # 这里就不做互斥了，先简单的做，之后可以搞个消息中心啥的
+        filename = '/src/data/report/todoList.txt'
+        with open(filename,'a') as f:
+            f.write(f'{directory}\n')
+        
+        break
     
 
 if __name__ == '__main__':

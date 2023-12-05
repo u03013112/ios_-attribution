@@ -48,7 +48,7 @@ def main(dirFilePath):
         addFile(tenantAccessToken,docId,'',csvFilePath3)
 
     # 发送消息
-    message = f'今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/{docId}'
+    message = f'今日iOS海外AI速读报告：https://rivergame.feishu.cn/docx/{docId}'
     sendMessage(tenantAccessToken,message)
     
     

@@ -287,7 +287,14 @@ def addFile(tenantAccessToken,documentId,blockId,file_path):
 # 获得chatId暂时没有封装
 # curl --location --request GET 'https://open.feishu.cn/open-apis/im/v1/chats' \
 # --header 'Authorization: Bearer t-'
-
+def getAllChatId(tenantAccessToken):
+    url = f'https://open.feishu.cn/open-apis/im/v1/chats'
+    headers = {
+        'Authorization': f'Bearer {tenantAccessToken}'
+    }
+    response = requests.get(url, headers=headers)
+    
+    return response.text
 
 # curl --location --request POST 'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id' \
 # --header 'Authorization: Bearer t-' \
@@ -319,11 +326,17 @@ def sendMessage(tenantAccessToken,message,chatId = 'oc_3e59fcc0d068e649245cee247
     
     return response.json()
     
+# 封装，为了外部引用，直接给debug群发消息
+def sendMessageDebug(message):
+    token = getTenantAccessToken()
+    sendMessage(token,message,'oc_1e418dff75881d2b0d85a5f701262cb8')
 
 if __name__ == '__main__':
     # print(getTenantAccessToken())
     # print(createDoc(getTenantAccessToken(),'一篇新的文档'))
 
     token = getTenantAccessToken()
-    sendMessage(token,'今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/FGWld7bQboqDJux6axPcx5TOnIc')
+    # sendMessage(token,'今日iOS海外AI速度报告：https://rivergame.feishu.cn/docx/FGWld7bQboqDJux6axPcx5TOnIc')
+    # print(getAllChatId(token))
+    sendMessage(token,'debug','oc_1e418dff75881d2b0d85a5f701262cb8')
 

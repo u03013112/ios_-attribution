@@ -314,28 +314,33 @@ def getAiReport(reportPath):
 
     return retStr
 
-
+import time
 from src.report.feishu.report1 import main as feishuMain
+from src.report.feishu.feishu import sendMessageDebug
 if __name__ == '__main__':
-    # print(getAiReport('/src/data/report/iOSWeekly20231118_20231125'))
-    # 获取命令行参数 唯一的参数是报告文件夹路径
-    # reportPath = sys.argv[1]
-    # print('工作目录：',reportPath)
-    # print(getAiReport(reportPath))
+    retryMax = 10
 
-    filename = '/src/data/report/todoList.txt'
-    if not os.path.exists(filename):
-        print('todoList.txt 不存在')
-        exit(0)
-    # 按行读取，每一行（去掉换行符）作为一个报告文件夹路径
-    with open(filename, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-        for line in lines:
-            reportPath = line.strip()
-            print('工作目录：',reportPath)
-            getAiReport(reportPath)            
-            feishuMain(reportPath)
+    for retryCount in range(retryMax):        
+        filename = '/src/data/report/todoList.txt'
+        if not os.path.exists(filename):
+            if retryCount == retryMax-1:
+                print('todoList.txt 重试最大次数仍不存在,退出')
+                # 通知管理员
+                sendMessageDebug('todoList.txt 重试最大次数仍不存在,退出')
+                break
+            print('todoList.txt 不存在,等待5分钟')
+            time.sleep(300)
+            continue
 
-    # 完成后删除todoList.txt
-    os.remove(filename)
+        # 按行读取，每一行（去掉换行符）作为一个报告文件夹路径
+        with open(filename, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            for line in lines:
+                reportPath = line.strip()
+                print('工作目录：',reportPath)
+                getAiReport(reportPath)            
+                feishuMain(reportPath)
+
+        # 完成后删除todoList.txt
+        os.remove(filename)
     
