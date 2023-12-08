@@ -1,5 +1,6 @@
 # 定期的计算，最近一个月的cv值，是否比之前的版本有长足进步，如果有，就保存当前版本，并通知管理员
-
+# 每周一早上10点，执行一次
+# 10 10 * * 1 docker exec -t ios_attribution python /src/src/lastwar/cv/autoCv.py
 import sys
 sys.path.append('/src')
 
@@ -141,7 +142,7 @@ def main():
     mape = checkCv(df,cvMapDf,usd='revenue')
 
     # 计算旧版本的Mape
-    cvMapDfOld = pd.read_csv('cvMap20231205.csv')
+    cvMapDfOld = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
     cvMapDfOld = cvMapDfOld.loc[cvMapDfOld['conversion_value']<32][['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
     cvMapDfOld['avg'] = (cvMapDfOld['min_event_revenue'] + cvMapDfOld['max_event_revenue'])/2
     print(cvMapDfOld)
