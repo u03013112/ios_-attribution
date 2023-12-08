@@ -185,14 +185,17 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     return userDfCopy
 
 def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
-    cvMapDf.loc[cvMapDf[cv]==1,'avg'] = 0.99
+    # cvMapDf.loc[cvMapDf[cv]==1,'avg'] = 0.99
     addCvDf = addCv(userDf,cvMapDf,usd,cv)
     df = addCvDf.merge(cvMapDf,on=[cv],how='left')
-    # print(df.loc[df['install_date'] == '2023-10-18'])
+    
+    tmpDf = df.groupby([cv]).agg({usd:'sum','avg':'sum'}).reset_index()
+    tmpDf['usd/usdSum'] = tmpDf[usd]/tmpDf[usd].sum()
+    tmpDf['avg/avgSum'] = tmpDf['avg']/tmpDf['avg'].sum()
+    print(tmpDf)
+
     df = df.groupby(['install_date']).agg({usd:'sum','avg':'sum'}).reset_index()
     df['mape'] = abs(df[usd] - df['avg']) / df[usd]
-    # df = df.loc[df['install_date']<'2023-10-19']
-    # print(df)
     print('mape:',df['mape'].mean())
 
 def main1():
@@ -273,6 +276,34 @@ def check():
 #     print(df.head(10))
 
 
+def check2():
+    df = pd.read_csv('/src/data/lastwar_pay2_20230901_20231123.csv')
+    
+    # 需要将payUsd列去重，然后要计算每一种payUsd的合计金额占所有金额的比例
+    df['payUsdSum'] = df['payUsd']
+    # 将payUsd四舍五入，保留1位小数
+    df['payUsd'] = df['payUsd'].round(1)
+    df = df.loc[df['payUsd'] <= 3]
+    df = df.groupby(['payUsd']).agg({'payUsdSum':'sum'}).reset_index()
+    df['payUsdSumRate'] = df['payUsdSum']/df['payUsdSum'].sum()
+    # df['payUsdSumRate'] = df['payUsdSumRate'].round(5)
+    # payUsdSumRate 改为.2f%格式
+    df['payUsdSumRate'] = df['payUsdSumRate'].apply(lambda x: '%.2f%%' % (x * 100))
+    df = df.sort_values(['payUsd'],ascending=True)
+    df = df[['payUsd','payUsdSumRate']]
+    df.to_csv('/src/data/report/iOS2_20230401_20230731/check2.csv')
+
+
+def check3():
+    df = pd.read_csv('p1.csv')
+    df = df [['支付币种','S新支付.美元付费金额 - USD(每日汇率)总和','S新支付.price_local总和']]
+    df.rename(columns={'支付币种':'currency','S新支付.美元付费金额 - USD(每日汇率)总和':'payUsd','S新支付.price_local总和':'payLocal'},inplace=True)
+    # print(df.columns)
+    df = df.groupby(['currency','payUsd','payLocal']).sum().reset_index()
+    df = df.sort_values(['payUsd','currency','payLocal'],ascending=True).reset_index(drop=True)
+    df = df[df['payUsd'] <= 3]
+    df.to_csv('/src/data/report/iOS2_20230401_20230731/check3.csv')
+
 if __name__ == '__main__':
     
     # sql = '''select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,group_1,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,group_1,"$__Date_Time",cast(coalesce(SUM(ta_ev."usd"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-12 and "#zone_offset"<=14, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('second', "#install_time", "#event_time")) as double) "#vp@life_time_second" from (select "#event_name","#event_time","usd","#zone_offset","#user_id","#install_time","$part_date","$part_event" from v_event_15)))) ta_ev inner join (select *, "#account_id" group_0,format_datetime(ta_date_trunc('day',"lwu_register_date",1),'yyyy-MM-dd') group_1 from (select * from (select "lwu_register_date","#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20230814)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay' ) ) )) and ((("$part_date" between '2023-08-20' and '2023-10-20') and ("@vpc_tz_#event_time" >= timestamp '2023-08-21' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-10-19'))) and (ta_ev."#vp@life_time_second" <= 8.64E+4)) group by group_0,group_1,"$__Date_Time")) group by group_0,group_1)) ORDER BY total_amount DESC'''
@@ -287,8 +318,13 @@ if __name__ == '__main__':
 
     # main1()
 
-    main2()
+    # main2()
 
-    check()
+    # check()
+
+
+    check2()
+
+    # check3()
 
     

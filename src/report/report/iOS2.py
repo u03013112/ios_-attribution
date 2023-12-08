@@ -10,8 +10,9 @@ import pandas as pd
 import sys
 sys.path.append('/src')
 
-from src.report.data.ad import getAdDataIOSGroupByCampaignAndGeoAndMedia
-from src.report.data.revenue import getRevenueDataIOSGroupByCampaignAndGeoAndMedia2
+from src.report.geo import getIOSGeoGroup01
+from src.report.data.ad import getAdDataIOSGroupByCampaignAndGeoAndMedia,getAdDataIOSGroupByCampaignAndGeoAndMedia2
+from src.report.data.revenue import getRevenueDataIOSGroupByCampaignAndGeoAndMedia2,getRevenueDataIOSGroupByGeo
 
 directory = '/src/data/'
 def getFilename(filename,ext='csv'):
@@ -26,20 +27,20 @@ def main(startDayStr,endDayStr):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    # adCostDf = getAdDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directory)
-    # revenueDf = getRevenueDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,directory)
+    adCostDf = getAdDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directory)
+    revenueDf = getRevenueDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,directory)
 
-    # df = pd.merge(adCostDf,revenueDf,on=[
-    #     'install_date','campaign_id','campaign_name','media','geoGroup'
-    #     ],how='outer',suffixes=('_ad','_revenue'))
+    df = pd.merge(adCostDf,revenueDf,on=[
+        'install_date','campaign_id','campaign_name','media','geoGroup'
+        ],how='outer',suffixes=('_ad','_revenue'))
 
-    # df = df.fillna(0)
+    df = df.fillna(0)
 
-    # df.to_csv(getFilename('merge'),index=False)
+    df.to_csv(getFilename('merge'),index=False)
 
-    # df = pd.read_csv(getFilename('merge'))
-    # df = df.groupby(['install_date','media','geoGroup']).sum().reset_index()
-    # df.to_csv(getFilename('merge_groupby'),index=False)
+    df = pd.read_csv(getFilename('merge'))
+    df = df.groupby(['install_date','media','geoGroup']).sum().reset_index()
+    df.to_csv(getFilename('merge_groupby'),index=False)
         
     df = pd.read_csv(getFilename('merge_groupby'),dtype={'install_date':str})
     # print(df.columns)
@@ -69,5 +70,43 @@ def main(startDayStr,endDayStr):
     df2.to_csv(getFilename('roi'),index=False)
 
 
+def debug():
+    df = pd.read_csv('/src/data/report/iOS2_20230401_20230731/roi.csv')
+    df.groupby(['media']).sum().reset_index().to_csv('/src/data/report/iOS2_20230401_20230731/roi_groupby_media.csv',index=False)
+
+def debug2(startDayStr,endDayStr):
+    global directory
+    directory = f'/src/data/report/iOS2_{startDayStr}_{endDayStr}'
+    df = getRevenueDataIOSGroupByGeo(startDayStr,endDayStr,directory)
+
+    df = df.groupby(['country_code']).sum().reset_index()
+
+    adDf = getAdDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,directory)
+    adDf = adDf.groupby(['country_code']).sum().reset_index()
+
+    df = pd.merge(df,adDf,on='country_code',how='outer',suffixes=('_revenue','_ad'))
+    df = df.fillna(0)
+
+    # print(df.head(10))
+    # 将US作为基准，要求获得roi120高于US的，并且revenue_120d/revenue_7d 也高于US的国家
+    df['roi7'] = df['revenue_7d']/df['cost']
+    df['roi120'] = df['revenue_120d']/df['cost']
+    df['r120/r7'] = df['revenue_120d']/df['revenue_7d']
+    roi120US = df.loc[df['country_code']=='US','roi120'].values[0]
+    r120r7US = df.loc[df['country_code']=='US','r120/r7'].values[0]
+
+    df = df.loc[
+        (df['roi120'] > roi120US)
+        & (df['r120/r7'] > r120r7US)
+        & (df['cost'] > 1000)
+    ][['country_code','cost','roi7','roi120','r120/r7']]
+
+    df.to_csv(getFilename('roi120'),index=False)
+
+
+    
+
 if __name__ == '__main__':
-    main('20230401','20230731')
+    main('20230401','20230930')
+    # debug()
+    # debug2('20230401','20230731')

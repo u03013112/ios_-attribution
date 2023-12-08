@@ -815,7 +815,7 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,direct
                         FROM_UNIXTIME(event_timestamp),
                         FROM_UNIXTIME(install_timestamp),
                         'dd'
-                    ) >= 90 THEN event_revenue_usd
+                    ) < 120 THEN event_revenue_usd
                     ELSE 0
                 END
             ) AS revenue_120d
@@ -857,6 +857,126 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,direct
 
     return df
 
+def getRevenueDataIOSGroupByGeo(startDayStr,endDayStr,directory):
+    filename = getFilename1('revenue3',startDayStr,endDayStr,directory,'GroupByGeo')
+    if os.path.exists(filename):
+        print('已存在%s'%filename)
+        return pd.read_csv(filename, dtype={'install_date':str,'campaign_id':str})
+    else:
+        print('从MC获得数据')
+
+    # startDayStr 格式 20231001 转成 2023-10-01 00:00:00
+    startDayStr2 = datetime.datetime.strptime(startDayStr,'%Y%m%d').strftime('%Y-%m-%d 00:00:00')
+    # endDayStr 格式 20231001 转成 2023-10-01 23:59:59
+    endDayStr2 = datetime.datetime.strptime(endDayStr,'%Y%m%d').strftime('%Y-%m-%d 23:59:59')
+
+    sql = f'''
+        WITH tmp_unique_id AS (
+            SELECT
+                CAST(install_timestamp AS BIGINT) AS install_timestamp,
+                game_uid,
+                country_code
+            FROM
+                rg_bi.tmp_unique_id
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND install_timestamp between UNIX_TIMESTAMP(datetime '{startDayStr2}')
+                AND UNIX_TIMESTAMP(datetime '{endDayStr2}')
+        ),
+        ods_platform_appsflyer_events AS (
+            SELECT
+                customer_user_id,
+                event_timestamp,
+                event_revenue_usd
+            FROM
+                rg_bi.ods_platform_appsflyer_events
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND day >= '{startDayStr}'
+                AND event_name IN ('af_purchase_oldusers', 'af_purchase')
+                AND zone = 0
+        ),
+        joined_data AS (
+            SELECT
+                t.install_timestamp,
+                t.game_uid,
+                t.country_code,
+                o.event_timestamp,
+                o.event_revenue_usd
+            FROM
+                tmp_unique_id t
+                LEFT JOIN ods_platform_appsflyer_events o ON t.game_uid = o.customer_user_id
+                AND o.event_timestamp >= t.install_timestamp
+        )
+        SELECT
+            to_char(FROM_UNIXTIME(install_timestamp), 'YYYYMMDD') AS install_date,
+            jd.country_code,
+            COUNT(distinct game_uid) AS install,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 30 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_30d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 60 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_60d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 90 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_90d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 120 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_120d
+        FROM
+            joined_data jd
+        GROUP BY
+            install_date,
+            jd.country_code
+        ORDER BY
+            install_date;
+    '''
+    print(sql)
+    df = execSql(sql)
+
+    df.to_csv(filename,index=False)
+    return df
 
 
 if __name__ == '__main__':
