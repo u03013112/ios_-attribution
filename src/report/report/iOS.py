@@ -109,7 +109,7 @@ def main(startDayStr,endDayStr):
     # 备注：比如ROI7的行，后面备注KPI指标，ROI1，ROI3可以给出参考值，按照这段时间内所有可参考数据平均值进行估算
     csvStr = '' + header
     csvStr += getCsv(df,{'name':'ROI24h','op':'/','targetList':['revenue_24h','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
-    csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
+    # csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
@@ -136,8 +136,8 @@ def main(startDayStr,endDayStr):
         p7_24 = geoDf['revenue_7d'].sum() / geoDf['revenue_24h'].sum()
         kpiDf = kpiDf.append({'target':'ROI24h','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p7_24*100)},ignore_index=True)
         
-        p71 = geoDf['revenue_7d'].sum() / geoDf['revenue_1d'].sum()
-        kpiDf = kpiDf.append({'target':'ROI1','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p71*100)},ignore_index=True)
+        # p71 = geoDf['revenue_7d'].sum() / geoDf['revenue_1d'].sum()
+        # kpiDf = kpiDf.append({'target':'ROI1','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p71*100)},ignore_index=True)
 
         p73 = geoDf['revenue_7d'].sum() / geoDf['revenue_3d'].sum()
         kpiDf = kpiDf.append({'target':'ROI3','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p73*100)},ignore_index=True)
@@ -158,7 +158,7 @@ def main(startDayStr,endDayStr):
     # 分媒体
     csvStr = '' + header
     csvStr += getCsv(df,{'name':'ROI24h','op':'/','targetList':['revenue_24h','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
-    csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
+    # csvStr += getCsv(df,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
     csvStr += getCsv(df,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='media',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=df,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
@@ -185,7 +185,7 @@ def main(startDayStr,endDayStr):
 
         csvStr = '' + header
         csvStr += getCsv(mediaDf,{'name':'ROI24h','op':'/','targetList':['revenue_24h','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
-        csvStr += getCsv(mediaDf,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
+        # csvStr += getCsv(mediaDf,{'name':'ROI1','op':'/','targetList':['revenue_1d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
         csvStr += getCsv(mediaDf,{'name':'ROI3','op':'/','targetList':['revenue_3d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
         csvStr += getCsv(mediaDf,{'name':'ROI7','op':'/','targetList':['revenue_7d','cost'],'format':'.2f%'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
         csvStr += getCsv(mediaDf,{'name':'Cost','op':'','targetList':['cost'],'format':'.2f'},groupBy='geoGroup',startDayStr1=startDayStr1,endDayStr1=endDayStr1,df2=mediaDf,startDayStr2=startDayStr2,endDayStr2=endDayStr2)
@@ -205,8 +205,8 @@ def main(startDayStr,endDayStr):
             p7_24 = geoDf['revenue_7d'].sum() / geoDf['revenue_24h'].sum()
             kpiDf = kpiDf.append({'target':'ROI24h','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p7_24*100)},ignore_index=True)
 
-            p71 = geoDf['revenue_7d'].sum() / geoDf['revenue_1d'].sum()
-            kpiDf = kpiDf.append({'target':'ROI1','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p71*100)},ignore_index=True)
+            # p71 = geoDf['revenue_7d'].sum() / geoDf['revenue_1d'].sum()
+            # kpiDf = kpiDf.append({'target':'ROI1','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p71*100)},ignore_index=True)
 
             p73 = geoDf['revenue_7d'].sum() / geoDf['revenue_3d'].sum()
             kpiDf = kpiDf.append({'target':'ROI3','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p73*100)},ignore_index=True)
