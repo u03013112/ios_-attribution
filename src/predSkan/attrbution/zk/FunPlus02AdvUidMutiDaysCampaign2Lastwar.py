@@ -338,7 +338,7 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     sql = f'''
         select
             install_timestamp,
-            appsflyer_id as customer_user_id,
+            customer_user_id as customer_user_id,
             sum(event_revenue_usd) as r1usd,
             to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyymmdd") as install_date,
             country_code as country_code
@@ -352,7 +352,7 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
             and event_name in ('af_purchase','af_purchase_oldusers','install')
         group by
             install_timestamp,
-            appsflyer_id,
+            customer_user_id,
             install_time,
             country_code
         ;
@@ -601,53 +601,53 @@ def check(dayStr):
     return
 
 def main():
-    # check(dayStr)
-    # # 1、获取skan数据
-    # skanDf = getSKANDataFromMC(dayStr,days)
-    # # 将skanDf中media不属于mediaList的media改为other
-    # skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
-    # # skanDf = skanDf[skanDf['media'].isin(mediaList)]
-    # # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
-    # skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
-    # skanDf['cv'] = skanDf['cv'].fillna(-1)
-    # skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
-    # # 2、计算合法的激活时间范围
-    # skanDf = skanAddValidInstallDate(skanDf)
-    # # 3、获取广告信息
-    # minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
-    # maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
-    # minValidInstallTimestamp -= 10*24*3600
-    # print('minValidInstallTimestamp:',minValidInstallTimestamp)
-    # print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
-    # campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
-    # campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
-    # # 4、将skan数据和广告信息合并，获得skan中的国家信息
-    # skanDf = skanAddGeo(skanDf,campaignGeo2Df)
-    # print('skanDf (head 5):')
-    # print(skanDf.head(5))
-    # # 5、获取af数据
-    # afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
-    # userDf = addCv(afDf,getCvMap())
+    check(dayStr)
+    # 1、获取skan数据
+    skanDf = getSKANDataFromMC(dayStr,days)
+    # 将skanDf中media不属于mediaList的media改为other
+    skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
+    # skanDf = skanDf[skanDf['media'].isin(mediaList)]
+    # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
+    skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
+    skanDf['cv'] = skanDf['cv'].fillna(-1)
+    skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+    # 2、计算合法的激活时间范围
+    skanDf = skanAddValidInstallDate(skanDf)
+    # 3、获取广告信息
+    minValidInstallTimestamp = skanDf['min_valid_install_timestamp'].min()
+    maxValidInstallTimestamp = skanDf['max_valid_install_timestamp'].max()
+    minValidInstallTimestamp -= 10*24*3600
+    print('minValidInstallTimestamp:',minValidInstallTimestamp)
+    print('maxValidInstallTimestamp:',maxValidInstallTimestamp)
+    campaignGeo2Df = getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp)
+    campaignGeo2Df = getCountryFromCampaign2(campaignGeo2Df)
+    # 4、将skan数据和广告信息合并，获得skan中的国家信息
+    skanDf = skanAddGeo(skanDf,campaignGeo2Df)
+    print('skanDf (head 5):')
+    print(skanDf.head(5))
+    # 5、获取af数据
+    afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    userDf = addCv(afDf,getCvMap())
 
-    # userDf['geo'] = 'other'
-    # for geo in geoMap:
-    #     userDf.loc[userDf['country_code'].isin(geo['codeList']), 'geo'] = geo['name']
+    userDf['geo'] = 'other'
+    for geo in geoMap:
+        userDf.loc[userDf['country_code'].isin(geo['codeList']), 'geo'] = geo['name']
 
-    # userDf.rename(columns={'country_code': 'country_code1'}, inplace=True)
-    # userDf.rename(columns={'geo': 'country_code'}, inplace=True)
+    userDf.rename(columns={'country_code': 'country_code1'}, inplace=True)
+    userDf.rename(columns={'geo': 'country_code'}, inplace=True)
 
-    # cvMap = getCvMap()[['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
-    # cvMap['avg_event_revenue'] = (cvMap['min_event_revenue'] + cvMap['max_event_revenue']) / 2
-    # cvMap.rename(columns={'conversion_value': 'cv','avg_event_revenue':'usd'}, inplace=True)
-    # cvMap = cvMap[['cv','usd']]
+    cvMap = getCvMap()[['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
+    cvMap['avg_event_revenue'] = (cvMap['min_event_revenue'] + cvMap['max_event_revenue']) / 2
+    cvMap.rename(columns={'conversion_value': 'cv','avg_event_revenue':'usd'}, inplace=True)
+    cvMap = cvMap[['cv','usd']]
     
-    # skanDf = skanDf.merge(cvMap,on='cv',how='left')
+    skanDf = skanDf.merge(cvMap,on='cv',how='left')
 
     # userDf.to_csv('/src/data/zk/userDf2.csv',index=False)
     # skanDf.to_csv('/src/data/zk/skanDf2.csv',index=False)
 
-    userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
-    skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
+    # userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
+    # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
 
     # 进行归因
     attDf = meanAttributionFastv2(userDf,skanDf)
