@@ -150,12 +150,21 @@ def main():
 
     # 当前版本的Mape比旧版本的Mape小超过1%，就通知管理员
     if mape < mapeOld - 0.01:
-        message = '当前版本的Mape比旧版本的Mape小超过1%，请检查\n'
+        message = '当前版本的Mape比旧版本的Mape超过1%，请检查\n'
         message += '当前版本的Mape为%f\n'%mape
         message += '旧版本的Mape为%f\n'%mapeOld
         message += cvMapDf.to_string()
 
         sendMessageDebug(message)
+    else:
+        message = 'cv 自动计算任务完成\n'
+        message += '当前版本的Mape为%f\n'%mape
+        message += '旧版本的Mape为%f\n'%mapeOld
+        message += cvMapDf.to_string()
+        
+        sendMessageDebug(message)
+
+
 
 
 if __name__ == '__main__':
