@@ -46,7 +46,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20231210'
+        dayStr = '20231201'
         days = '15'
 
     # 如果days不是整数，转成整数
@@ -287,76 +287,76 @@ def skanAddGeo(skanDf,campaignGeo2Df):
     
 def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
-    # sql = f'''
-    #     SELECT
-    #         game_uid as customer_user_id,
-    #         install_timestamp,
-    #         COALESCE(
-    #             SUM(
-    #                 CASE
-    #                     WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN revenue_value_usd
-    #                     ELSE 0
-    #                 END
-    #             ),
-    #             0
-    #         ) as r1usd,
-    #         COALESCE(
-    #             SUM(
-    #                 CASE
-    #                     WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN revenue_value_usd
-    #                     ELSE 0
-    #                 END
-    #             ),
-    #             0
-    #         ) as r2usd,
-    #         COALESCE(
-    #             SUM(
-    #                 CASE
-    #                     WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN revenue_value_usd
-    #                     ELSE 0
-    #                 END
-    #             ),
-    #             0
-    #         ) as r7usd,
-    #         TO_CHAR(
-    #             TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
-    #             "yyyy-mm-dd"
-    #         ) as install_date,
-    #         country as country_code
-    #     FROM
-    #         rg_bi.ads_topwar_ios_purchase_adv
-    #     WHERE
-    #         install_timestamp BETWEEN '{minValidInstallTimestamp}'
-    #         AND '{maxValidInstallTimestamp}'
-    #         AND game_uid IS NOT NULL
-    #     GROUP BY
-    #         game_uid,
-    #         install_timestamp,
-    #         country;
-    # '''
-
     sql = f'''
-        select
+        SELECT
+            game_uid as customer_user_id,
             install_timestamp,
-            customer_user_id as customer_user_id,
-            sum(event_revenue_usd) as r1usd,
-            to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyymmdd") as install_date,
-            country_code as country_code
-        from ods_platform_appsflyer_events
-        where
-            zone = 0
-            and app = 502
-            and app_id = 'id6448786147'
-            and install_timestamp BETWEEN '{minValidInstallTimestamp}' and '{maxValidInstallTimestamp}'
-            and event_timestamp-install_timestamp between 0 and 24*3600
-            and event_name in ('af_purchase','af_purchase_oldusers','install')
-        group by
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r1usd,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r2usd,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                ),
+                0
+            ) as r7usd,
+            TO_CHAR(
+                TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
+                "yyyy-mm-dd"
+            ) as install_date,
+            country as country_code
+        FROM
+            rg_bi.ads_lastwar_ios_purchase_adv
+        WHERE
+            install_timestamp BETWEEN '{minValidInstallTimestamp}'
+            AND '{maxValidInstallTimestamp}'
+            AND game_uid IS NOT NULL
+        GROUP BY
+            game_uid,
             install_timestamp,
-            customer_user_id,
-            install_time,
-            country_code
-        ;
+            country;
     '''
+
+    # sql = f'''
+    #     select
+    #         install_timestamp,
+    #         customer_user_id as customer_user_id,
+    #         sum(event_revenue_usd) as r1usd,
+    #         to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyymmdd") as install_date,
+    #         country_code as country_code
+    #     from ods_platform_appsflyer_events
+    #     where
+    #         zone = 0
+    #         and app = 502
+    #         and app_id = 'id6448786147'
+    #         and install_timestamp BETWEEN '{minValidInstallTimestamp}' and '{maxValidInstallTimestamp}'
+    #         and event_timestamp-install_timestamp between 0 and 24*3600
+    #         and event_name in ('af_purchase','af_purchase_oldusers','install')
+    #     group by
+    #         install_timestamp,
+    #         customer_user_id,
+    #         install_time,
+    #         country_code
+    #     ;
+    # '''
 
     print(sql)
     df = execSql(sql)
@@ -423,6 +423,8 @@ def addCv(df, cvMapDf):
 
 import gc
 def meanAttributionFastv2(userDf, skanDf):
+    skanDf['campaign_id'] = skanDf['campaign_id'].astype(str)
+
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
     userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
     S = 60 * 60
@@ -434,7 +436,10 @@ def meanAttributionFastv2(userDf, skanDf):
     skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
     skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
     skanDf['count'] = 1
-    skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media','usd']).agg({'count': 'sum'}).reset_index(drop = False)
+    skanDf['usd'] = skanDf['usd'].fillna(0)
+
+    skanDf = skanDf.groupby(['campaign_id','cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','media','usd']).agg({'count': 'sum'}).reset_index(drop = False)
+
     skanDf['usd x count'] = skanDf['usd'] * skanDf['count']
 
     # print('skanDf:')
@@ -444,10 +449,10 @@ def meanAttributionFastv2(userDf, skanDf):
     N = 10
     attributeDf = pd.DataFrame(columns=['user index', 'campaignId', 'skan index', 'rate'])
 
-    # 将campaign_id转换为字符串类型
-    skanDf['campaign_id'] = skanDf['campaign_id'].astype(str)
     campaignList = skanDf.loc[~skanDf['campaign_id'].isnull()]['campaign_id'].unique().tolist()
-    # print('campaignList:', campaignList)
+    # print('campaignList:', sorted(campaignList))
+    print('campaignList length:', len(campaignList))
+
     for campaignId in campaignList:
         userDf['%s rate'%(campaignId)] = 0
 
@@ -575,7 +580,6 @@ def meanAttributionFastv2(userDf, skanDf):
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
     userDf = userDf.explode('customer_user_id')
-
     return userDf
 
 # 检查是否已经获得了af数据
