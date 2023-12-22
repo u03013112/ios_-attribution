@@ -69,10 +69,8 @@ def getDataFromMC():
             WHERE
                 event_name in ('af_purchase_oldusers','af_purchase')
                 AND zone = 0
-                AND day BETWEEN '20230101'
-                AND '20230730'
-                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('2023-01-01', "yyyy-mm-dd")
-                AND to_date('2023-07-01', "yyyy-mm-dd")
+                AND day >= '20230101'
+                AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") >= to_date('2023-01-01', "yyyy-mm-dd")
         )
         SELECT
             installs.uid,
@@ -686,6 +684,82 @@ def debug2():
     df['MAPE'] = abs(df['r7/r1'] - df['r7p/r1']) / df['r7/r1']
     df.to_csv(getFilename('20230908LongRet2'), index=False)
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def debug3():
+    df = pd.read_csv(getFilename('attributionRetCheckGeo24V2Long'))
+
+    # df拥有列['media', 'install_date', 'user_count', 'r1usd', 'r7usd', 'r14usd','r30usd', 'r60usd', 'r90usd', 'r120usd', 'count', 'payCount', 'r1usdp','r7usdp', 'r14usdp', 'r30usdp', 'r60usdp', 'r90usdp', 'r120usdp','MAPE1', 'MAPE7', 'MAPE14', 'MAPE30', 'MAPE60', 'MAPE90', 'MAPE120']
+
+    mediaList = ['Facebook Ads', 'googleadwords_int', 'bytedanceglobal_int']
+    daysList = [7,30,60,90,120]
+
+    # install_date是类似2023-01-01的字符串，转为日期格式
+    df['install_date'] = pd.to_datetime(df['install_date'])
+
+    for days in daysList:
+        # 画图，画3张图，每个媒体一张图，3张图竖着组成一张大图。横坐标一致。
+        # 横坐标是install_date
+        # 纵坐标是双y轴，其中一个y轴是 r{days}usd和r{days}usdp，另一个y轴是针对r{days}usd的MAPE
+        # 保存到'/src/data/zk2/20230908LongRet3_{days}.png'
+        fig, axes = plt.subplots(len(mediaList), 1, figsize=(24, 16), sharex=True)
+
+        for i, media in enumerate(mediaList):
+            # 筛选特定媒体的数据
+            media_df = df[df['media'] == media].copy()
+
+            # 计算滚动平均值
+            rolling_rusd = media_df[f'r{days}usd'].rolling(7).mean()
+            rolling_rusdp = media_df[f'r{days}usdp'].rolling(7).mean()
+
+            # 重新计算MAPE
+            rolling_mape = abs((rolling_rusdp - rolling_rusd) / rolling_rusd)
+
+            print(f'{media} - {days} Days')
+            print('mape mean:', media_df[f'MAPE{days}'].mean())
+            print('rolling mape mean:', rolling_mape.mean())
+
+            # 将media_df[f'MAPE{days}']超过2的值设置为2，否则图像会不好看
+            media_df.loc[media_df[f'MAPE{days}'] > 2, f'MAPE{days}'] = 2
+            rolling_mape.loc[rolling_mape > 2] = 2
+
+            ax1 = axes[i]
+            ax2 = ax1.twinx()
+
+            # 绘制r{days}usd和r{days}usdp
+            ax1.plot(media_df['install_date'], media_df[f'r{days}usd'], label=f'r{days}usd', color='b', alpha=0.5)
+            ax1.plot(media_df['install_date'], media_df[f'r{days}usdp'], label=f'r{days}usdp', color='g', alpha=0.5)
+            ax2.plot(media_df['install_date'], media_df[f'MAPE{days}'], label=f'MAPE{days}', color='r', linestyle='--', alpha=0.5)
+
+            # 绘制滚动平均值
+            ax1.plot(media_df['install_date'], rolling_rusd, label=f'rolling r{days}usd', color='b')
+            ax1.plot(media_df['install_date'], rolling_rusdp, label=f'rolling r{days}usdp', color='g')
+            ax2.plot(media_df['install_date'], rolling_mape, label=f'rolling MAPE{days}', color='r', linestyle='--')
+
+            # 设置图例和标签
+            ax1.legend(loc='upper left')
+            ax2.legend(loc='upper right')
+            ax1.set_ylabel(f'r{days}usd & r{days}usdp')
+            ax2.set_ylabel(f'MAPE{days}')
+            ax1.set_title(f'{media} - {days} Days')
+
+            # 按月汇总
+            media_df['install_date'] = media_df['install_date'].dt.strftime('%Y-%m')
+            media_df = media_df.groupby('install_date').sum().reset_index()
+            media_df['MAPE'] = abs(media_df[f'r{days}usdp'] - media_df[f'r{days}usd']) / media_df[f'r{days}usd']
+            print('按月汇总的MAPE:', media_df['MAPE'].mean())
+
+        plt.xlabel('install_date')
+        plt.savefig(f'/src/data/zk2/20230908LongRet3_{days}.png')
+        plt.close(fig)
+
+        print(f'save /src/data/zk2/20230908LongRet3_{days}.png')
+        print('')
+
+        
+
+
 if __name__ == '__main__':
     # getDataFromMC()
     # # getCountryFromCampaign()
@@ -732,9 +806,11 @@ if __name__ == '__main__':
     # },inplace=True)
     # userDf = meanAttributionResult(userDf)
     # userDf.to_csv(getFilename('attribution1Ret24GeoV2Long'), index=False)
-    # # userDf = pd.read_csv(getFilename('attribution1Ret24GeoV2Long'))
+    # userDf = pd.read_csv(getFilename('attribution1Ret24GeoV2Long'))
     # checkRet(userDf)
 
     # long()
     # debug()
-    debug2()
+    # debug2()
+
+    debug3()
