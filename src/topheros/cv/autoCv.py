@@ -27,7 +27,7 @@ def getPayDataFromMC():
         from
             dwd_overseas_revenue_allproject
         where
-            app = 502
+            app = 116
             and zone = 0
             and day between {oneMonthAgoStr} and {todayStr}
         group by
@@ -80,7 +80,7 @@ def makeLevels1(userDf, usd='r1usd', N=32):
     levels.remove(0)
     # levels 排序
     levels.sort()
-    max = levels[len(levels)-1]
+    # max = levels[len(levels)-1]
     # levels[N-2] = 1000
     return levels
 
@@ -124,10 +124,10 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     addCvDf = addCv(userDf,cvMapDf,usd,cv)
     df = addCvDf.merge(cvMapDf,on=[cv],how='left')
     
-    # tmpDf = df.groupby([cv]).agg({usd:'sum','avg':'sum'}).reset_index()
-    # tmpDf['usd/usdSum'] = tmpDf[usd]/tmpDf[usd].sum()
-    # tmpDf['avg/avgSum'] = tmpDf['avg']/tmpDf['avg'].sum()
-    # print(tmpDf)
+    tmpDf = df.groupby([cv]).agg({usd:'sum','avg':'sum'}).reset_index()
+    tmpDf['usd/usdSum'] = tmpDf[usd]/tmpDf[usd].sum()
+    tmpDf['avg/avgSum'] = tmpDf['avg']/tmpDf['avg'].sum()
+    print(tmpDf)
 
     df = df.groupby(['install_date']).agg({usd:'sum','avg':'sum'}).reset_index()
     df['mape'] = abs(df[usd] - df['avg']) / df[usd]
@@ -136,37 +136,41 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 
 from src.report.feishu.feishu import sendMessageDebug
 def main():
-    df = getPayDataFromMC()
-    df.to_csv('/src/data/payData.csv',index=False)
+    # df = getPayDataFromMC()
+    # df.to_csv('/src/data/payData.csv',index=False)
     df = pd.read_csv('/src/data/payData.csv')
-    levels = makeLevels1(df,usd='revenue',N=33)
+    # 进行一定的过滤，将收入超过2000美元的用户收入改为2000美元
+    df.loc[df['revenue']>2000,'revenue'] = 2000
+
+    # levels = makeLevels1(df,usd='revenue',N=33)
+    levels = makeLevels1(df,usd='revenue',N=67)
     cvMapDf = makeCvMap(levels)
     print(cvMapDf)
+    cvMapDf.to_csv('/src/data/topherosCvMap.csv',index=False)
     mape = checkCv(df,cvMapDf,usd='revenue')
 
-    # 计算旧版本的Mape
-    cvMapDfOld = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
-    cvMapDfOld = cvMapDfOld.loc[cvMapDfOld['conversion_value']<32][['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
-    cvMapDfOld['avg'] = (cvMapDfOld['min_event_revenue'] + cvMapDfOld['max_event_revenue'])/2
-    print(cvMapDfOld)
-    mapeOld = checkCv(df,cvMapDfOld,usd='revenue',cv='conversion_value')
+    # # 计算旧版本的Mape
+    # cvMapDfOld = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
+    # cvMapDfOld = cvMapDfOld.loc[cvMapDfOld['conversion_value']<32][['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
+    # cvMapDfOld['avg'] = (cvMapDfOld['min_event_revenue'] + cvMapDfOld['max_event_revenue'])/2
+    # # print(cvMapDfOld)
+    # mapeOld = checkCv(df,cvMapDfOld,usd='revenue',cv='conversion_value')
 
-    # 当前版本的Mape比旧版本的Mape小超过1%，就通知管理员
-    if mape < mapeOld - 0.01:
-        message = '当前版本的Mape比旧版本的Mape超过1%，请检查\n'
-        message += '当前版本的Mape为%f\n'%mape
-        message += '旧版本的Mape为%f\n'%mapeOld
-        message += cvMapDf.to_string()
+    # # 当前版本的Mape比旧版本的Mape小超过1%，就通知管理员
+    # if mape < mapeOld - 0.01:
+    #     message = '当前版本的Mape比旧版本的Mape超过1%，请检查\n'
+    #     message += '当前版本的Mape为%f\n'%mape
+    #     message += '旧版本的Mape为%f\n'%mapeOld
+    #     message += cvMapDf.to_string()
 
-        sendMessageDebug(message)
-    else:
-        message = 'cv 自动计算任务完成\n'
-        message += '当前版本的Mape为%f\n'%mape
-        message += '旧版本的Mape为%f\n'%mapeOld
-        message += cvMapDf.to_string()
+    #     sendMessageDebug(message)
+    # else:
+    #     message = 'cv 自动计算任务完成\n'
+    #     message += '当前版本的Mape为%f\n'%mape
+    #     message += '旧版本的Mape为%f\n'%mapeOld
+    #     message += cvMapDf.to_string()
         
-        sendMessageDebug(message)
-
+    #     sendMessageDebug(message)
 
 
 

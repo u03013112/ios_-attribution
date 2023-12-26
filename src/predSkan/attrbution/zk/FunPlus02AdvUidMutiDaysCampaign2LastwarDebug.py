@@ -189,6 +189,72 @@ def debug2():
     df = execSql(sql)
     print(df)
 
+def debug3(sinceDayStr, untilDayStr):
+
+    sql = f'''
+        SELECT
+            SUM(CASE WHEN sql1.rate >= 0.99 THEN sql2.revenue_value_usd ELSE 0 END) / SUM(sql2.revenue_value_usd) AS rate_over_99,
+            SUM(CASE WHEN sql1.rate >= 0.8 THEN sql2.revenue_value_usd ELSE 0 END) / SUM(sql2.revenue_value_usd) AS rate_over_80,
+            SUM(CASE WHEN sql1.rate >= 0.5 THEN sql2.revenue_value_usd ELSE 0 END) / SUM(sql2.revenue_value_usd) AS rate_over_50,
+            SUM(CASE WHEN sql1.rate >= 0 THEN sql2.revenue_value_usd ELSE 0 END) / SUM(sql2.revenue_value_usd) AS rate_over_0
+        FROM
+            (
+                SELECT
+                    customer_user_id,
+                    max(rate) as rate
+                FROM
+                    lastwar_ios_funplus02_adv_uid_mutidays_campaign2
+                WHERE
+                    day BETWEEN '{sinceDayStr}'
+                    AND '{untilDayStr}'
+                group by
+                    customer_user_id
+            ) AS sql1
+            LEFT JOIN (
+                SELECT
+                    game_uid AS customer_user_id,
+                    sum(revenue_value_usd) as revenue_value_usd
+                FROM
+                    rg_bi.ads_lastwar_ios_purchase_adv
+                WHERE
+                    event_timestamp - install_timestamp BETWEEN 0
+                    AND 24 * 3600
+                GROUP BY
+                    game_uid
+            ) AS sql2 ON sql1.customer_user_id = sql2.customer_user_id
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    print(df)
+
+
+def debug4(sinceDayStr, untilDayStr):
+    sql = f'''
+        select
+            sum(case when revenue_value_usd > 50 then 1 else 0 end)/sum(case when revenue_value_usd > 0 then 1 else 0 end) as 50_rate,
+            sum(case when revenue_value_usd > 30 then 1 else 0 end)/sum(case when revenue_value_usd > 0 then 1 else 0 end) as 30_rate,
+            sum(case when revenue_value_usd > 20 then 1 else 0 end)/sum(case when revenue_value_usd > 0 then 1 else 0 end) as 20_rate,
+            sum(case when revenue_value_usd > 10 then 1 else 0 end)/sum(case when revenue_value_usd > 0 then 1 else 0 end) as 10_rate
+        from
+            (
+                select
+                    game_uid as customer_user_id,
+                    sum(revenue_value_usd) as revenue_value_usd
+                from
+                    ads_topwar_ios_purchase_adv
+                where
+                    install_day between '{sinceDayStr}' and '{untilDayStr}'
+                    and event_timestamp - install_timestamp between 0 and 24 * 3600
+                group by
+                    game_uid
+            )
+        ;    
+    '''
+    print(sql)
+    df = execSql(sql)
+    print(df)
+
 def main(sinceDayStr, untilDayStr):
     # 先获取这段时间的SKAN收入
     skanDf = getSKANDataFromMC(sinceDayStr, untilDayStr)
@@ -231,5 +297,7 @@ def main(sinceDayStr, untilDayStr):
     print(f'skanCountSum={skanCountSum}, zkCountSum={zkCountSum}, (skanCountSum-zkCountSum)/zkCountSum={(skanCountSum-zkCountSum)/zkCountSum}')
 
 if __name__ == '__main__':
-    main('20231201', '20231220')
+    # main('20231201', '20231220')
     # debug('20231201', '20231214')
+    # debug3('20231201', '20231220')
+    debug4('20231201', '20231220')
