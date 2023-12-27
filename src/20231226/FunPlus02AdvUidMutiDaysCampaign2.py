@@ -398,13 +398,22 @@ def meanAttributionFastv2(userDf, skanDf):
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
     userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
     S = 60 * 60
+    # 对于cv == 0的用户，再进行激活时间的汇总，要求没有那么高，所以按S的S2倍来做处理，比如S2 = 12就是12小时
+    S2 = 24 * S
+    print('init:',userDf.loc[userDf['cv'] == 0].head(10))
     userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
+    
+    userDf.loc[userDf['cv'] == 0, 'install_timestamp'] = (userDf.loc[userDf['cv'] == 0, 'install_timestamp'] // S2) * S2
+    
     userDf['count'] = 1
     userDf['install_date'] = userDf['install_date'].fillna('')
     userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
 
     skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
     skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
+    skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] = (skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] // S2) * S2
+    skanDf.loc[skanDf['cv'] == 0, 'max_valid_install_timestamp'] = (skanDf.loc[skanDf['cv'] == 0, 'max_valid_install_timestamp'] // S2) * S2
+
     skanDf['count'] = 1
     skanDf = skanDf.groupby(['cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','campaign_id','media','usd']).agg({'count': 'sum'}).reset_index(drop = False)
     skanDf['usd x count'] = skanDf['usd'] * skanDf['count']
@@ -431,6 +440,10 @@ def meanAttributionFastv2(userDf, skanDf):
         skanDf_to_process = skanDf.loc[pending_skan_indices]
         print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
         
+        failedSkanDf = skanDf_to_process.copy()
+        print('待分配cv分布：')
+        print(failedSkanDf.groupby('cv')['count'].sum())
+        
         # 在每次循环开始时，预先计算每一行的media rate的总和
         userDf['total media rate'] = userDf.apply(lambda x: sum([x[campaignId + ' rate'] for campaignId in campaignList]), axis=1)
         
@@ -443,7 +456,12 @@ def meanAttributionFastv2(userDf, skanDf):
             max_valid_install_timestamp = item['max_valid_install_timestamp']
             
             min_valid_install_timestamp -= i*12*3600
-            item_country_code_list = item['country_code_list']
+            
+            if i < N - 2:
+                item_country_code_list = item['country_code_list']
+            else:
+                # 最后一次分配，不再强制国家匹配
+                item_country_code_list = ''
 
             condition_rate = userDf['total media rate'] < 0.95
             condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
@@ -477,11 +495,6 @@ def meanAttributionFastv2(userDf, skanDf):
                 new_pending_skan_indices.append(index)
 
         print('未分配成功：', len(new_pending_skan_indices))
-        # 打印未分配成功的skan的前10行
-        # print(skanDf_to_process.loc[new_pending_skan_indices].head(10))
-        failedSkanDf = skanDf_to_process.loc[new_pending_skan_indices].copy()
-        print('未分配成功cv分布：')
-        print(failedSkanDf.groupby('cv')['count'].sum())
 
         attributeDf2 = pd.DataFrame({'user index': user_indices, 'campaignId': campaignIds, 'skan index': skan_indices, 'rate': rates})
         
@@ -621,8 +634,8 @@ def main():
 
     # 进行归因
     attDf = meanAttributionFastv2(userDf,skanDf)
-    # print('attDf (head 5):')
-    # print(attDf.head(5))
+    print('attDf (head 5):')
+    print(attDf.head(5))
     return attDf
 
 # 下面部分就只有线上环境可以用了
