@@ -46,7 +46,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20231201'
+        dayStr = '20231225'
         days = '15'
 
     # 如果days不是整数，转成整数
@@ -428,13 +428,18 @@ def meanAttributionFastv2(userDf, skanDf):
     skanDf['country_code_list'] = skanDf['country_code_list'].fillna('')
     userDf['install_timestamp'] = pd.to_numeric(userDf['install_timestamp'], errors='coerce')
     S = 60 * 60
+    S2 = 24 * S
     userDf['install_timestamp'] = (userDf['install_timestamp'] // S) * S
+    userDf.loc[userDf['cv'] == 0, 'install_timestamp'] = (userDf.loc[userDf['cv'] == 0, 'install_timestamp'] // S2) * S2
     userDf['count'] = 1
     userDf['install_date'] = userDf['install_date'].fillna('')
     userDf = userDf.groupby(['cv', 'country_code', 'install_timestamp','install_date']).agg({'customer_user_id': lambda x: '|'.join(x),'count': 'sum'}).reset_index()
 
     skanDf['min_valid_install_timestamp'] = (skanDf['min_valid_install_timestamp'] // S) * S
     skanDf['max_valid_install_timestamp'] = (skanDf['max_valid_install_timestamp'] // S) * S
+    skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] = (skanDf.loc[skanDf['cv'] == 0, 'min_valid_install_timestamp'] // S2) * S2
+    skanDf.loc[skanDf['cv'] == 0, 'max_valid_install_timestamp'] = (skanDf.loc[skanDf['cv'] == 0, 'max_valid_install_timestamp'] // S2) * S2
+    
     skanDf['count'] = 1
     skanDf['usd'] = skanDf['usd'].fillna(0)
 
@@ -580,6 +585,26 @@ def meanAttributionFastv2(userDf, skanDf):
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
     userDf = userDf.explode('customer_user_id')
+
+    userDf = userDf[userDf.filter(like='rate', axis=1).sum(axis=1) > 0]
+    # install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
+    userDf['install_date'] = userDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
+    # day是将install_timestamp转换为日期，格式为20230531
+    userDf['day'] = userDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
+    # 只保留需要的列
+    campaignIdRateList = userDf.filter(like='rate', axis=1).columns.tolist()
+    userDf = userDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
+    attDf_melted = userDf.melt(
+            id_vars=['customer_user_id', 'install_date', 'day'],
+            var_name='campaign_id',
+            value_name='rate'
+        )
+
+    # 清理 campaign_id 列，只保留数字
+    attDf_melted['campaign_id'] = attDf_melted['campaign_id'].str.extract('(.*) rate')
+
+    userDf = attDf_melted.loc[attDf_melted['rate'] > 0]
+
     return userDf
 
 # 检查是否已经获得了af数据
@@ -647,16 +672,15 @@ def main():
     
     skanDf = skanDf.merge(cvMap,on='cv',how='left')
 
-    # userDf.to_csv('/src/data/zk/userDf2.csv',index=False)
-    # skanDf.to_csv('/src/data/zk/skanDf2.csv',index=False)
+    userDf.to_csv('/src/data/zk/userDf2.csv',index=False)
+    skanDf.to_csv('/src/data/zk/skanDf2.csv',index=False)
 
     # userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
     # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
 
     # 进行归因
     attDf = meanAttributionFastv2(userDf,skanDf)
-    # print('attDf (head 5):')
-    # print(attDf.head(5))
+    
     return attDf
 
 # 下面部分就只有线上环境可以用了
@@ -700,32 +724,6 @@ def writeTable(df,dayStr):
 
 init()
 attDf = main()
-# # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
-# attDf.to_csv('/src/data/zk2/attDf.csv',index=False)
-
-# attDf = pd.read_csv('/src/data/zk2/attDf.csv')
-
-attDf = attDf[attDf.filter(like='rate', axis=1).sum(axis=1) > 0]
-# install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
-attDf['install_date'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
-# day是将install_timestamp转换为日期，格式为20230531
-attDf['day'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
-# 只保留需要的列
-campaignIdRateList = attDf.filter(like='rate', axis=1).columns.tolist()
-attDf = attDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
-attDf_melted = attDf.melt(
-        id_vars=['customer_user_id', 'install_date', 'day'],
-        var_name='campaign_id',
-        value_name='rate'
-    )
-
-# 清理 campaign_id 列，只保留数字
-attDf_melted['campaign_id'] = attDf_melted['campaign_id'].str.extract('(.*) rate')
-
-# print('attDf_melted (head 5):')
-# print(attDf_melted.head(5))
-
-attDf = attDf_melted.loc[attDf_melted['rate'] > 0]
 
 createTable()
 
