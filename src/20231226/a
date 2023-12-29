@@ -1,0 +1,67 @@
+--修正部分超越时间限制数据的时间戳
+--@skad1 :=
+--  select
+--  campaign_id,
+--  media,
+--  cv,
+--  LEAST(
+--    UNIX_TIMESTAMP(cast(postback_timestamp as string), 'yyyy-MM-dd HH:mm:ss'),
+--    UNIX_TIMESTAMP(CONCAT(@dayStr, ' 23:59:59'), 'yyyyMMdd HH:mm:ss')
+--  ) AS postback_timestamp
+--from
+--  @skadRawData;
+
+--@skanAddValidInstallDate := SELECT
+--  campaign_id,
+--  media,
+--  cv,
+--  postback_timestamp,
+--  CASE
+--    WHEN cv < 0 THEN postback_timestamp - 72 * 3600
+--    WHEN cv = 0 THEN postback_timestamp - 48 * 3600
+--    ELSE postback_timestamp - 72 * 3600
+--  END AS min_valid_install_timestamp,
+--  postback_timestamp - 24 * 3600 AS max_valid_install_timestamp
+--FROM
+--@skad1;
+--
+--@minValidInstallTimestamp := select
+--  min(min_valid_install_timestamp) as min_valid_install_timestamp
+--from
+--  @skanAddValidInstallDate;
+--
+--@maxValidInstallTimestamp := select
+--  max(max_valid_install_timestamp) as max_valid_install_timestamp
+--from
+--  @skanAddValidInstallDate;
+--
+--select
+--  TO_CHAR(from_unixtime(min_valid_install_timestamp), 'yyyyMMdd') as min_valid_install_timestamp_day_str
+--from
+--  @skanAddValidInstallDate;
+--;
+
+--select
+--  day,
+--  media_source,
+--  campaign_id,
+--  country_code,
+--  cost
+--from
+--  ods_platform_appsflyer_masters
+--where
+--  app_id = 'id1479198816'
+--  AND day BETWEEN (
+--    SELECT
+--      TO_CHAR(from_unixtime(min(min_valid_install_timestamp)), 'yyyyMMdd') as min_valid_install_timestamp_day_str
+--    FROM
+--      @skanAddValidInstallDate
+--  ) AND (
+--    SELECT
+--      TO_CHAR(from_unixtime(max(max_valid_install_timestamp)), 'yyyyMMdd') as max_valid_install_timestamp_day_str
+--    FROM
+--      @skanAddValidInstallDate
+--  )
+--  AND app = '102'
+--  AND cost >= 1
+--;

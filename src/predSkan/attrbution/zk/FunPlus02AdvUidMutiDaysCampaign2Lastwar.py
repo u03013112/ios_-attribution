@@ -593,6 +593,9 @@ def meanAttributionFastv2(userDf, skanDf):
     userDf['day'] = userDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
     # 只保留需要的列
     campaignIdRateList = userDf.filter(like='rate', axis=1).columns.tolist()
+    # 如果campaignIdRateList中包含'total media rate'，则删除
+    if 'total media rate' in campaignIdRateList:
+        campaignIdRateList.remove('total media rate')
     userDf = userDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
     attDf_melted = userDf.melt(
             id_vars=['customer_user_id', 'install_date', 'day'],
