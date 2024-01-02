@@ -1,0 +1,168 @@
+-- 前置依赖
+-- 需要先完成step1
+SET odps.sql.timezone=Africa/Accra;
+set odps.sql.hive.compatible=true;
+
+CREATE TABLE IF NOT EXISTS rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_skandata(campaign_id STRING,media STRING,postback_timestamp BIGINT COMMENT 'postback timestamp,like 1701135104',min_valid_install_timestamp BIGINT,max_valid_install_timestamp BIGINT ,cv BIGINT COMMENT '0~63',country_code_list STRING COMMENT 'like US|JP|other') PARTITIONED BY (`day` STRING COMMENT 'postback time,like 20221018') STORED AS ALIORC;
+
+@dayStr := '20230901';
+
+@skanAddValidInstallDate :=
+select * from rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_step1
+where day = @dayStr;
+
+-- 广告的最大有效时间戳，比最大合法激活时间向前推7天，这是一般广告的转化周期，也是一般性估计，由于广告很少更改投放国家，这个可以容忍不太准确。
+@minValidInstallTimestampForAd := select
+min(min_valid_install_timestamp) - 24 * (8+7) * 3600 as min_valid_install_timestamp
+from
+@skanAddValidInstallDate;
+
+@minValidInstallAdDayStr := select
+TO_CHAR(to_date(from_unixtime((select * from @minValidInstallTimestampForAd))), 'yyyyMMdd') as min_valid_install_timestamp_day_str;
+
+@maxValidInstallTimestamp := select
+max(max_valid_install_timestamp) as max_valid_install_timestamp
+from
+@skanAddValidInstallDate;
+
+@maxValidInstallDayStr := select
+TO_CHAR(to_date(from_unixtime((select * from @maxValidInstallTimestamp))), 'yyyyMMdd') as max_valid_install_day_str;
+
+@countryFromCampaignData :=
+  select
+  day,
+  media_source,
+  campaign_id,
+  country_code,
+  cost
+  from
+  ods_platform_appsflyer_masters
+  where
+  app_id = 'id1479198816'
+  AND day BETWEEN (
+    select * from @minValidInstallAdDayStr
+  ) AND (
+    select * from @maxValidInstallDayStr
+  )
+  AND app = '102'
+  AND cost >= 1
+;
+
+@campaignTotalCost := select
+campaign_id,
+sum(cost) as cost
+from @countryFromCampaignData
+group by
+campaign_id
+;
+
+@campaignCountryCost := select
+campaign_id,
+country_code,
+sum(cost) as cost
+from @countryFromCampaignData
+group by
+campaign_id,
+country_code
+;
+
+@campaignCountryCostRatio := SELECT
+t1.campaign_id,
+t1.country_code,
+t1.cost / t2.cost AS cost_ratio
+FROM
+@campaignCountryCost t1
+JOIN
+@campaignTotalCost t2
+ON
+t1.campaign_id = t2.campaign_id;
+
+-- # 筛选掉花费占比不足3%的国家
+@campaignCountryFilted :=
+  select
+  campaign_id,
+  country_code
+  from @campaignCountryCostRatio
+  where
+  cost_ratio >= 0.03
+;
+
+@campaignCountry1 :=
+  select
+  t2.day,
+  t2.media_source,
+  t2.campaign_id,
+  t2.country_code
+  from @campaignCountryFilted t1
+  left join @countryFromCampaignData t2
+  on t1.campaign_id = t2.campaign_id
+  and t1.country_code = t2.country_code
+;
+
+@campaignCountry2 :=
+  select
+  day,
+  unix_timestamp(day, 'yyyyMMdd') as day_timestamp,
+  media_source,
+  campaign_id,
+  CASE
+  WHEN country_code IN ('SA', 'AE', 'KW', 'QA', 'OM', 'BH') THEN 'GCC'
+  WHEN country_code = 'KR' THEN 'KR'
+  WHEN country_code = 'US' THEN 'US'
+  WHEN country_code = 'JP' THEN 'JP'
+  ELSE 'other'
+  END AS geo
+  from
+  @campaignCountry1
+  group by
+  day,
+  media_source,
+  campaign_id,
+  geo
+;
+
+@skanAddGeo0 :=
+  select
+  skan.campaign_id,
+  skan.media,
+  skan.cv,
+  skan.postback_timestamp,
+  skan.min_valid_install_timestamp,
+  skan.max_valid_install_timestamp,
+  geo.geo as geo
+  from @skanAddValidInstallDate skan
+  left join @campaignCountry2 geo
+  on skan.campaign_id = geo.campaign_id
+  and geo.day_timestamp between skan.min_valid_install_timestamp and skan.max_valid_install_timestamp
+  group by
+  skan.campaign_id,
+  skan.media,
+  skan.cv,
+  skan.postback_timestamp,
+  skan.min_valid_install_timestamp,
+  skan.max_valid_install_timestamp,
+  geo.geo
+;
+
+@skanData :=
+  select
+  campaign_id,
+  media,
+  cv,
+  postback_timestamp,
+  min_valid_install_timestamp,
+  max_valid_install_timestamp,
+  wm_concat('|',geo) as country_code_list
+  from
+  @skanAddGeo0
+  group by
+  campaign_id,
+  media,
+  cv,
+  postback_timestamp,
+  min_valid_install_timestamp,
+  max_valid_install_timestamp
+;
+
+INSERT OVERWRITE TABLE rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_skandata partition(day=@dayStr)
+SELECT campaign_id,media,postback_timestamp,min_valid_install_timestamp,max_valid_install_timestamp,cv,country_code_list FROM @skanData;

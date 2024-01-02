@@ -1,0 +1,109 @@
+-- 前置依赖
+-- 需要先完成step1
+
+SET odps.sql.timezone=Africa/Accra;
+set odps.sql.hive.compatible=true;
+
+CREATE TABLE IF NOT EXISTS rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_userdata(customer_user_id STRING COMMENT 'from ods_platform_appsflyer_events.customer_user_id',install_timestamp BIGINT COMMENT 'install timestamp,like 1701135104',r1usd DOUBLE COMMENT  '24hours revenue in usd,like 0.99',cv BIGINT COMMENT '0~63',country_code STRING COMMENT 'like US') PARTITIONED BY (`day` STRING COMMENT 'postback time,like 20221018') STORED AS ALIORC;
+
+@dayStr := '20230901';
+
+@skanAddValidInstallDate :=
+  select * from rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_step1
+  where day = @dayStr;
+
+-- 最小有效时间戳，比最小合法激活时间向前推8天，这是一个比较保守的估计，为了后面融合归因的时候可以扩大有效范围进行匹配，目前的算法是扩大到5天，这里富裕3天。
+@minValidInstallTimestamp := select
+  min(min_valid_install_timestamp) - 24 * 8 * 3600 as min_valid_install_timestamp
+from
+  @skanAddValidInstallDate;
+
+@maxValidInstallTimestamp := select
+  max(max_valid_install_timestamp) as max_valid_install_timestamp
+from
+  @skanAddValidInstallDate;
+
+@afData :=
+  SELECT
+  game_uid as customer_user_id,
+  install_timestamp,
+  COALESCE(
+    SUM(
+      CASE
+      WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN revenue_value_usd
+      ELSE 0
+      END
+    ),
+    0
+  ) as r1usd,
+  TO_CHAR(
+    to_date(
+      from_unixtime(
+        cast (install_timestamp as bigint)
+      )
+    ),
+    "yyyy-mm-dd"
+  ) as install_date,
+  CASE
+  WHEN country IN ('SA', 'AE', 'KW', 'QA', 'OM', 'BH') THEN 'GCC'
+  WHEN country = 'KR' THEN 'KR'
+  WHEN country = 'US' THEN 'US'
+  WHEN country = 'JP' THEN 'JP'
+  ELSE 'other'
+  END AS country_code
+  FROM
+    rg_bi.ads_topwar_ios_purchase_adv
+  WHERE
+  install_timestamp BETWEEN (select * from @minValidInstallTimestamp) AND (select * from @maxValidInstallTimestamp)
+  AND game_uid IS NOT NULL
+  GROUP BY
+  game_uid,
+  install_timestamp,
+  country;
+
+@userData :=
+  select
+  customer_user_id,
+  cast (install_timestamp as bigint) as install_timestamp,
+  r1usd,
+  country_code,
+  CASE
+  WHEN (r1usd > 0.0 AND r1usd <= 1.64) THEN 1
+  WHEN (r1usd > 1.64 AND r1usd <= 3.24) THEN 2
+  WHEN (r1usd > 3.24 AND r1usd <= 5.35) THEN 3
+  WHEN (r1usd > 5.35 AND r1usd <= 7.8) THEN 4
+  WHEN (r1usd > 7.8 AND r1usd <= 10.71) THEN 5
+  WHEN (r1usd > 10.71 AND r1usd <= 14.47) THEN 6
+  WHEN (r1usd > 14.47 AND r1usd <= 18.99) THEN 7
+  WHEN (r1usd > 18.99 AND r1usd <= 24.29) THEN 8
+  WHEN (r1usd > 24.29 AND r1usd <= 31.08) THEN 9
+  WHEN (r1usd > 31.08 AND r1usd <= 40.26) THEN 10
+  WHEN (r1usd > 40.26 AND r1usd <= 51.52) THEN 11
+  WHEN (r1usd > 51.52 AND r1usd <= 61.25) THEN 12
+  WHEN (r1usd > 61.25 AND r1usd <= 70.16) THEN 13
+  WHEN (r1usd > 70.16 AND r1usd <= 82.56) THEN 14
+  WHEN (r1usd > 82.56 AND r1usd <= 97.38) THEN 15
+  WHEN (r1usd > 97.38 AND r1usd <= 111.57) THEN 16
+  WHEN (r1usd > 111.57 AND r1usd <= 125.27) THEN 17
+  WHEN (r1usd > 125.27 AND r1usd <= 142.67) THEN 18
+  WHEN (r1usd > 142.67 AND r1usd <= 161.66) THEN 19
+  WHEN (r1usd > 161.66 AND r1usd <= 184.42) THEN 20
+  WHEN (r1usd > 184.42 AND r1usd <= 204.85) THEN 21
+  WHEN (r1usd > 204.85 AND r1usd <= 239.74) THEN 22
+  WHEN (r1usd > 239.74 AND r1usd <= 264.97) THEN 23
+  WHEN (r1usd > 264.97 AND r1usd <= 306.91) THEN 24
+  WHEN (r1usd > 306.91 AND r1usd <= 355.15) THEN 25
+  WHEN (r1usd > 355.15 AND r1usd <= 405.65) THEN 26
+  WHEN (r1usd > 405.65 AND r1usd <= 458.36) THEN 27
+  WHEN (r1usd > 458.36 AND r1usd <= 512.69) THEN 28
+  WHEN (r1usd > 512.69 AND r1usd <= 817.08) THEN 29
+  WHEN (r1usd > 817.08 AND r1usd <= 1819.03) THEN 30
+  WHEN (r1usd > 1819.03) THEN 31
+  ELSE 0
+  END AS cv
+  from @afData
+;
+
+INSERT OVERWRITE TABLE rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_userdata partition(day=@dayStr)
+SELECT customer_user_id,install_timestamp,r1usd,cv,country_code FROM @userData;
+

@@ -272,7 +272,7 @@ def weekly():
     # startDay 是从endDay往前推7+2天
     startDayStr = (today - datetime.timedelta(days=8)).strftime('%Y%m%d')
 
-    retryMax = 10
+    retryMax = 20
     for _ in range(retryMax):    
         if not check(endDayStr):
             print('数据还没有准备好，等待5分钟后重试')

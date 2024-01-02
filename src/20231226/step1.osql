@@ -1,0 +1,74 @@
+SET odps.sql.timezone=Africa/Accra;
+set odps.sql.hive.compatible=true;
+
+CREATE TABLE IF NOT EXISTS rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_step1(campaign_id STRING COMMENT '',media STRING COMMENT '',cv BIGINT COMMENT '0~31',postback_timestamp BIGINT,min_valid_install_timestamp BIGINT,max_valid_install_timestamp BIGINT) PARTITIONED BY (`day` STRING COMMENT 'postback time,like 20221018') STORED AS ALIORC;
+
+@dayStr := '20230901';
+@days := 7;
+
+@day := to_date(@dayStr, 'yyyyMMdd');
+@dayBefore := date_sub(@day, @days);
+@dayBeforeStr := to_char(@dayBefore, 'yyyyMMdd');
+
+@skadRawData0 := SELECT
+ad_network_campaign_id as campaign_id,
+media_source as media,
+skad_conversion_value as cv,
+`timestamp` as postback_time_str
+FROM
+ods_platform_appsflyer_skad_details
+WHERE
+day between @dayBeforeStr and @dayStr
+AND app_id = 'id1479198816'
+AND event_name in (
+'af_skad_install',
+'af_skad_redownload'
+)
+;
+
+--字段名称纠正，postback_timestamp为真的时间戳
+@skadRawData := SELECT
+campaign_id,
+media,
+cv,
+UNIX_TIMESTAMP(postback_time_str, 'yyyy-MM-dd HH:mm:ss') as postback_timestamp
+FROM
+@skadRawData0
+;
+
+--修正部分超越时间限制数据的时间戳
+@skad1 :=
+  select
+  campaign_id,
+  media,
+  cast (cv as bigint) as cv,
+  LEAST(
+    postback_timestamp,
+    UNIX_TIMESTAMP(CONCAT(@dayStr, ' 23:59:59'), 'yyyyMMdd HH:mm:ss')
+  ) AS postback_timestamp
+  from
+  @skadRawData;
+
+-- 推算有效激活时间
+-- cv 从 0~63 改为 0~31，空值改为 -1
+@skanAddValidInstallDate :=
+  SELECT
+  campaign_id,
+  media,
+  case
+  when cv >= 32 then cv - 32
+  when cv is null then -1
+  else cv
+  end as cv,
+  postback_timestamp,
+  CASE
+  WHEN cv < 0 THEN postback_timestamp - 72 * 3600
+  WHEN cv = 0 THEN postback_timestamp - 48 * 3600
+  ELSE postback_timestamp - 72 * 3600
+  END AS min_valid_install_timestamp,
+  postback_timestamp - 24 * 3600 AS max_valid_install_timestamp
+  FROM
+  @skad1;
+
+INSERT OVERWRITE TABLE rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2_step1 partition(day=@dayStr)
+SELECT campaign_id,media,cv,postback_timestamp,min_valid_install_timestamp,max_valid_install_timestamp FROM @skanAddValidInstallDate;
