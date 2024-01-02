@@ -298,24 +298,6 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
                 ),
                 0
             ) as r1usd,
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                ),
-                0
-            ) as r2usd,
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                ),
-                0
-            ) as r7usd,
             TO_CHAR(
                 TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
                 "yyyy-mm-dd"
@@ -327,34 +309,12 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
             install_timestamp BETWEEN '{minValidInstallTimestamp}'
             AND '{maxValidInstallTimestamp}'
             AND game_uid IS NOT NULL
+            AND mediasource <> 'Apple Search Ads'
         GROUP BY
             game_uid,
             install_timestamp,
             country;
     '''
-
-    # sql = f'''
-    #     select
-    #         install_timestamp,
-    #         customer_user_id as customer_user_id,
-    #         sum(event_revenue_usd) as r1usd,
-    #         to_char(to_date(install_time,"yyyy-mm-dd hh:mi:ss"),"yyyymmdd") as install_date,
-    #         country_code as country_code
-    #     from ods_platform_appsflyer_events
-    #     where
-    #         zone = 0
-    #         and app = 502
-    #         and app_id = 'id6448786147'
-    #         and install_timestamp BETWEEN '{minValidInstallTimestamp}' and '{maxValidInstallTimestamp}'
-    #         and event_timestamp-install_timestamp between 0 and 24*3600
-    #         and event_name in ('af_purchase','af_purchase_oldusers','install')
-    #     group by
-    #         install_timestamp,
-    #         customer_user_id,
-    #         install_time,
-    #         country_code
-    #     ;
-    # '''
 
     print(sql)
     df = execSql(sql)
