@@ -320,6 +320,41 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     df = execSql(sql)
     return df
 
+
+# 获得ASA用户数据，这里直接从二次归因表中获得，只需要uid，安装时间
+def getAsaDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
+    sql = f'''
+        SELECT
+            uid as customer_user_id,
+            campaign_id,
+            TO_CHAR(
+            from_unixtime(install_timestamp),
+            "yyyymmdd"
+            ) as day,
+            TO_CHAR(
+            from_unixtime(install_timestamp),
+            "yyyy-mm-dd hh:mi:ss"
+            ) as install_date
+        FROM
+            rg_bi.dws_overseas_lastwar_unique_uid
+        WHERE
+            app_package = 'id6448786147'
+            AND install_timestamp BETWEEN {minValidInstallTimestamp}
+            AND {maxValidInstallTimestamp}
+            AND uid IS NOT NULL
+            AND mediasource = 'Apple Search Ads'
+        GROUP BY
+            uid,
+            campaign_id,
+            day,
+            install_date
+        ;
+    '''
+
+    print(sql)
+    df = execSql(sql)
+    return df
+
 def getCvMap():
     csv_str = '''
 app_id,conversion_value,event_name,min_event_counter,max_event_counter,min_event_revenue,max_event_revenue,min_time_post_install,max_time_post_install,last_config_change,postback_sequence_index,coarse_conversion_value,lock_window_type,lock_window_time
@@ -679,9 +714,10 @@ def main():
     print('归因完成，结果表info：')
     userDf.info(memory_usage='deep')
 
-    # userDf.to_csv('/src/data/zk/userDf722.csv',index=False)
-    # userDf = pd.read_csv('/src/data/zk/userDf722.csv',dtype={'customer_user_id':str,'day':str})
-    
+    asaDf = getAsaDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    print('asaDf:')
+    print(asaDf.head(5))
+
     # 分天处理，解决内存问题
     # 这里计算所有可以更新的安装日期，简单的说就是获取最小skan的前一天，在至少获取5天的前提下，这一天是完整的
     dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days+1)).strftime('%Y%m%d')
@@ -711,6 +747,16 @@ def main():
 
         dayDf = attDf_melted.loc[attDf_melted['rate'] > 0]
 
+        # 追加ASA数据
+        asaDayDf = asaDf[asaDf['day'] == dayStr0].copy()
+        asaDayDf['rate'] = 1
+        asaDayDf['campaign_id'] = asaDayDf['campaign_id'].astype(str)
+        asaDayDf = asaDayDf[['customer_user_id', 'install_date', 'campaign_id', 'rate']]
+        print('追加ASA数据：')
+        print(asaDayDf.head(5))
+
+        dayDf = dayDf.append(asaDayDf, ignore_index=True)
+        
         # 写入表
         writeTable(dayDf,dayStr0)
 
