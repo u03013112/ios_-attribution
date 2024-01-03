@@ -322,7 +322,7 @@ import time
 from src.report.feishu.report1 import main as feishuMain
 from src.report.feishu.feishu import sendMessageDebug
 if __name__ == '__main__':
-    retryMax = 20
+    retryMax = 30
 
     for retryCount in range(retryMax):        
         filename = '/src/data/report/todoList.txt'
