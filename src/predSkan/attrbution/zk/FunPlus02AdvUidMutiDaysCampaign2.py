@@ -295,24 +295,6 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
                 ),
                 0
             ) as r1usd,
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN event_timestamp <= install_timestamp + 48 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                ),
-                0
-            ) as r2usd,
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN event_timestamp <= install_timestamp + 168 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                ),
-                0
-            ) as r7usd,
             TO_CHAR(
                 TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
                 "yyyy-mm-dd"
@@ -324,6 +306,7 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
             install_timestamp BETWEEN '{minValidInstallTimestamp}'
             AND '{maxValidInstallTimestamp}'
             AND game_uid IS NOT NULL
+            AND mediasource <> 'Apple Search Ads'
         GROUP BY
             game_uid,
             install_timestamp,
@@ -333,6 +316,43 @@ def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
     print(sql)
     df = execSql(sql)
     return df
+
+# 获得ASA用户数据，这里直接从二次归因表中获得，只需要uid，安装时间
+def getAsaDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
+    sql = f'''
+        SELECT
+            game_uid as customer_user_id,
+            campaign_id,
+            TO_CHAR(
+                from_unixtime(cast(install_timestamp as bigint)),
+                "yyyymmdd"
+            ) as day,
+            TO_CHAR(
+                from_unixtime(cast(install_timestamp as bigint)),
+                "yyyy-mm-dd hh:mi:ss"
+            ) as install_date
+        FROM
+            rg_bi.tmp_unique_id
+        WHERE
+            app = 102
+            AND app_id = 'id1479198816' 
+            AND install_timestamp BETWEEN '{minValidInstallTimestamp}'
+            AND '{maxValidInstallTimestamp}'
+            AND game_uid IS NOT NULL
+            AND mediasource = 'Apple Search Ads'
+        GROUP BY
+            game_uid,
+            campaign_id,
+            day,
+            install_date
+        ;
+    '''
+
+    print(sql)
+    df = execSql(sql)
+    return df
+
+
 
 def getCvMap():
     csv_str = '''
@@ -444,6 +464,9 @@ def meanAttributionFastv2(userDf, skanDf):
             
             min_valid_install_timestamp -= i*12*3600
             item_country_code_list = item['country_code_list']
+            # 最后一次分配，忽略国家限制
+            if i == N-1:
+                item_country_code_list = ''
 
             condition_rate = userDf['total media rate'] < 0.95
             condition_time = (userDf['install_timestamp'] >= min_valid_install_timestamp) & (userDf['install_timestamp'] <= max_valid_install_timestamp)
@@ -540,7 +563,23 @@ def meanAttributionFastv2(userDf, skanDf):
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
     userDf = userDf.explode('customer_user_id')
 
-    return userDf
+    userDf = userDf[userDf.filter(like='rate', axis=1).sum(axis=1) > 0]
+    # install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
+    userDf['install_date'] = userDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
+    # day是将install_timestamp转换为日期，格式为20230531
+    userDf['day'] = userDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
+    # 只保留需要的列
+    campaignIdRateList = userDf.filter(like='rate', axis=1).columns.tolist()
+    # 如果campaignIdRateList中包含'total media rate'，则删除
+    if 'total media rate' in campaignIdRateList:
+        campaignIdRateList.remove('total media rate')
+    userDf = userDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
+    # 类型优化
+    for col in userDf.iloc[:, 3:].columns:
+        # 原本是float64，转换为float32，精度足够
+        userDf[col] = userDf[col].astype('float32')
+
+    return userDf.reset_index(drop=True)
 
 # 检查是否已经获得了af数据
 def check(dayStr):
@@ -563,6 +602,45 @@ def check(dayStr):
     if len(df) <= 0:
         raise Exception('没有有效的获得af skan数据，请稍后重试')
     return
+
+# 下面部分就只有线上环境可以用了
+from odps.models import Schema, Column, Partition
+def createTable():
+    if 'o' in globals():
+        columns = [
+            Column(name='customer_user_id', type='string', comment='from ods_platform_appsflyer_events.customer_user_id'),
+            Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
+            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
+            Column(name='rate', type='double', comment='rate,lile 0.1'),
+        ]
+        
+        partitions = [
+            Partition(name='day', type='string', comment='postback time,like 20221018')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table = o.create_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2', schema, if_not_exists=True)
+        return table
+    else:
+        print('createTable failed, o is not defined')
+
+def deleteTable(dayStr):
+    print('try to delete table:',dayStr)
+    if 'o' in globals():
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2')
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+
+def writeTable(df,dayStr):
+    print('try to write table:')
+    print(df.head(5))
+    if 'o' in globals():
+        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2')
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
+            writer.write(df)
+    else:
+        print('writeTable failed, o is not defined')
+        print('try to write csv file')
+        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
 
 def main():
     check(dayStr)
@@ -614,96 +692,61 @@ def main():
     # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
 
     # 进行归因
-    attDf = meanAttributionFastv2(userDf,skanDf)
-    # print('attDf (head 5):')
-    # print(attDf.head(5))
-    return attDf
+    userDf = meanAttributionFastv2(userDf,skanDf)
+    
+    asaDf = getAsaDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    print('asaDf:')
+    print(asaDf.head(5))
 
-# 下面部分就只有线上环境可以用了
-from odps.models import Schema, Column, Partition
-def createTable():
-    if 'o' in globals():
-        columns = [
-            Column(name='customer_user_id', type='string', comment='from ods_platform_appsflyer_events.customer_user_id'),
-            Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
-            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
-            Column(name='rate', type='double', comment='rate,lile 0.1'),
-        ]
+    # 分天处理，解决内存问题
+    # 这里计算所有可以更新的安装日期，简单的说就是获取最小skan的前一天，在至少获取5天的前提下，这一天是完整的
+    dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days+1)).strftime('%Y%m%d')
+    print('写入开始日期:',dayBeforeStr)
+    userDf = userDf[userDf['day'] >= dayBeforeStr]
+    # 要按照day分区，所以要先按照day分组，然后再写入表
+    # 先找到所有的day，升序排列
+    daysInUserDf = userDf['day'].unique()
+    daysInUserDf.sort()
+    for dayStr0 in daysInUserDf:
+        print('处理日期:',dayStr0)
+        # 找到dayStr对应的数据
+        dayDf = userDf[userDf['day'] == dayStr0]
+        # 将day列丢掉
+        dayDf = dayDf.drop(columns=['day'])
+        # print('melt之前：')
+        # dayDf.info(memory_usage='deep')
+        attDf_melted = dayDf.melt(
+            id_vars=['customer_user_id', 'install_date'],
+            var_name='campaign_id',
+            value_name='rate'
+        )
+        # print('melt之后：')
+        # attDf_melted.info(memory_usage='deep')
+        # 改用这种比较简单的方式，更加省内存
+        attDf_melted['campaign_id'] = attDf_melted['campaign_id'].str[:-5]
+
+        dayDf = attDf_melted.loc[attDf_melted['rate'] > 0]
+
+        # 追加ASA数据
+        asaDayDf = asaDf[asaDf['day'] == dayStr0].copy()
+        asaDayDf['rate'] = 1
+        asaDayDf['campaign_id'] = asaDayDf['campaign_id'].astype(str)
+        asaDayDf = asaDayDf[['customer_user_id', 'install_date', 'campaign_id', 'rate']]
+        print('追加ASA数据：')
+        print(asaDayDf.head(5))
+
+        dayDf = dayDf.append(asaDayDf, ignore_index=True)
         
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2', schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
+        # 写入表
+        writeTable(dayDf,dayStr0)
 
-def deleteTable(dayStr):
-    print('try to delete table:',dayStr)
-    if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-
-def writeTable(df,dayStr):
-    print('try to write table:')
-    print(df.head(5))
-    if 'o' in globals():
-        t = o.get_table('topwar_ios_funplus02_adv_uid_mutidays_campaign2')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
-    else:
-        print('writeTable failed, o is not defined')
-        print('try to write csv file')
-        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
+        # 释放内存
+        del dayDf
 
 init()
-attDf = main()
-# # 将所有media的归因值相加，得到总归因值，总归因值为0的，丢掉
-# attDf.to_csv('/src/data/zk2/attDf.csv',index=False)
-
-# attDf = pd.read_csv('/src/data/zk2/attDf.csv')
-
-attDf = attDf[attDf.filter(like='rate', axis=1).sum(axis=1) > 0]
-# install_timestamp 列是一个unix s时间戳，需要转换为日期，并存入install_date列
-attDf['install_date'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
-# day是将install_timestamp转换为日期，格式为20230531
-attDf['day'] = attDf['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
-# 只保留需要的列
-campaignIdRateList = attDf.filter(like='rate', axis=1).columns.tolist()
-attDf = attDf[['customer_user_id', 'install_date', 'day'] + campaignIdRateList]
-attDf_melted = attDf.melt(
-        id_vars=['customer_user_id', 'install_date', 'day'],
-        var_name='campaign_id',
-        value_name='rate'
-    )
-
-# 清理 campaign_id 列，只保留数字
-attDf_melted['campaign_id'] = attDf_melted['campaign_id'].str.extract('(.*) rate')
-
-# print('attDf_melted (head 5):')
-# print(attDf_melted.head(5))
-
-attDf = attDf_melted.loc[attDf_melted['rate'] > 0]
-
 createTable()
 
-# 这里计算所有可以更新的安装日期，简单的说就是获取最小skan的前一天，在至少获取5天的前提下，这一天是完整的
-dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days+1)).strftime('%Y%m%d')
-print('写入开始日期:',dayBeforeStr)
-attDf = attDf[attDf['day'] >= dayBeforeStr]
-# 要按照day分区，所以要先按照day分组，然后再写入表
-# 先找到所有的day，升序排列
-days = attDf['day'].unique()
-days.sort()
-for dayStr0 in days:
-    # 找到dayStr对应的数据
-    dayDf = attDf[attDf['day'] == dayStr0]
-    # 将day列丢掉
-    dayDf = dayDf.drop(columns=['day'])
-    # 写入表
-    writeTable(dayDf,dayStr0)
+main()
 
 # 删除额外的分区，为了确保AF修改postback时间不会导致任何提前数据，双保险，与上面的postback时间戳过滤一起使用
 deleteTable(dayStr)
