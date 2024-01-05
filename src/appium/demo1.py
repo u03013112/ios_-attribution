@@ -1,6 +1,5 @@
 from appium import webdriver
 from appium.options.android import UiAutomator2Options
-from appium.webdriver.common.appiumby import AppiumBy
 
 APPIUM_PORT = 4723
 APPIUM_HOST = '127.0.0.1'
