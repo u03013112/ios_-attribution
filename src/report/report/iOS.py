@@ -119,7 +119,7 @@ def main(startDayStr,endDayStr):
         f.write(csvStr)
     print('已存储在%s'%filename)
 
-     # KPI指标
+    # KPI指标
     kpiDf = pd.DataFrame(columns=['target','group','KPI'])
     kpi = {
         'US':0.065,
@@ -202,7 +202,12 @@ def main(startDayStr,endDayStr):
 
             geoDf = mediaDf[(mediaDf['geoGroup'] == geo) & (mediaDf['revenue_7d'].isnull() == False)& (mediaDf['revenue_3d'].isnull() == False)]
             
-            p7_24 = geoDf['revenue_7d'].sum() / geoDf['revenue_24h'].sum()
+            # 添加容错性，如果geoDf['revenue_24h'].sum() == 0，那么p7_24就会出现除0错误
+            # 所以这里如果geoDf['revenue_24h'].sum() == 0，那么p7_24就设置为1
+            p7_24 = 3
+            if geoDf['revenue_24h'].sum() != 0:
+                p7_24 = geoDf['revenue_7d'].sum() / geoDf['revenue_24h'].sum()
+
             kpiDf = kpiDf.append({'target':'ROI24h','group':geo,'KPI':'%.2f%%'%(kpi[geo]/p7_24*100)},ignore_index=True)
 
             # p71 = geoDf['revenue_7d'].sum() / geoDf['revenue_1d'].sum()

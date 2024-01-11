@@ -562,6 +562,275 @@ def getRevenueDataIOSGroupByCampaignAndGeoAndMedia(startDayStr,endDayStr,directo
 
     return df
 
+# 换新的表，不再用ods_platform_appsflyer_events，改用ads_topwar_ios_purchase_adv
+def getRevenueDataIOSGroupByCampaignAndGeoAndMediaNew(startDayStr,endDayStr,directory):
+    print('getRevenueDataIOSGroupByCampaignAndGeoAndMedia 采用融合归因结论，媒体固定只能分这么多，请注意')
+    filename = getFilename1('revenue',startDayStr,endDayStr,directory,'GroupByCampaignAndGeoAndMedia')
+    if os.path.exists(filename):
+        print('已存在%s'%filename)
+        return pd.read_csv(filename, dtype={'install_date':str,'campaign_id':str})
+    else:
+        print('从MC获得数据')
+
+    # startDayStr 格式 20231001 转成 2023-10-01 00:00:00
+    startDayStr2 = datetime.datetime.strptime(startDayStr,'%Y%m%d').strftime('%Y-%m-%d 00:00:00')
+    # endDayStr 格式 20231001 转成 2023-10-01 23:59:59
+    endDayStr2 = datetime.datetime.strptime(endDayStr,'%Y%m%d').strftime('%Y-%m-%d 23:59:59')
+
+    sql = f'''
+        WITH tmp_unique_id AS (
+            SELECT
+                CAST(install_timestamp AS BIGINT) AS install_timestamp,
+                game_uid,
+                country_code
+            FROM
+                rg_bi.tmp_unique_id
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND install_timestamp between UNIX_TIMESTAMP(datetime '{startDayStr2}')
+                AND UNIX_TIMESTAMP(datetime '{endDayStr2}')
+        ),
+        ods_platform_appsflyer_events AS (
+            SELECT
+                game_uid as customer_user_id,
+                CAST(event_timestamp as bigint) as event_timestamp,
+                revenue_value_usd as event_revenue_usd
+            FROM
+                rg_bi.ads_topwar_ios_purchase_adv
+            WHERE
+                app_package = 'id1479198816'
+                AND install_day >= '{startDayStr}'
+        ),
+        adv_uid_mutidays_campaign AS (
+            SELECT
+                customer_user_id,
+                campaign_id,
+                rate
+            FROM
+                rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2
+            WHERE
+                day between '{startDayStr}'
+                AND '{endDayStr}'
+        ),
+        joined_data AS (
+            SELECT
+                t.install_timestamp,
+                t.game_uid,
+                t.country_code,
+                o.event_timestamp,
+                o.event_revenue_usd,
+                a.campaign_id,
+                a.rate
+            FROM
+                tmp_unique_id t
+                LEFT JOIN ods_platform_appsflyer_events o ON t.game_uid = o.customer_user_id
+                AND o.event_timestamp >= t.install_timestamp
+                LEFT JOIN adv_uid_mutidays_campaign a ON t.game_uid = a.customer_user_id
+        )
+        SELECT    
+            to_char(FROM_UNIXTIME(install_timestamp), 'YYYYMMDD') AS install_date,
+            jd.country_code,
+            jd.campaign_id,
+            cmap.mediasource,
+            cmap.campaign_name,
+            SUM(rate) AS install,
+            SUM(
+                CASE
+                    WHEN 
+                        event_timestamp > install_timestamp 
+                        AND event_timestamp - install_timestamp < 86400 
+                    THEN 
+                        event_revenue_usd
+                    ELSE 0
+                END * rate
+            )AS revenue_24h,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 1 THEN event_revenue_usd
+                    ELSE 0
+                END * rate
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 3 THEN event_revenue_usd
+                    ELSE 0
+                END * rate
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END * rate
+            ) AS revenue_7d
+        FROM
+            joined_data jd
+            LEFT JOIN (
+                SELECT 
+                    cmap.campaign_id,
+                    MAX(cmap.mediasource) AS mediasource,
+                    MAX(cmap.campaign_name) AS campaign_name
+                FROM 
+                    rg_bi.dwb_overseas_mediasource_campaign_map AS cmap
+                GROUP BY 
+                    cmap.campaign_id
+            ) AS cmap ON jd.campaign_id = cmap.campaign_id
+        GROUP BY
+            install_date,
+            jd.country_code,
+            jd.campaign_id,
+            cmap.mediasource,
+            cmap.campaign_name
+        ORDER BY
+            install_date
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+
+    geoGroupList = getIOSGeoGroup01()
+    df['geoGroup'] = 'other'
+    for geoGroup in geoGroupList:
+        df.loc[df.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
+
+    mediaGroupList = getIOSMediaGroup01()
+    df['media'] = 'other'
+    for mediaGroup in mediaGroupList:
+        df.loc[df.mediasource.isin(mediaGroup['codeList']),'media'] = mediaGroup['name']
+
+    df = df.groupby(['install_date','campaign_id','campaign_name','geoGroup','media'],as_index=False).sum().reset_index(drop=True)
+
+    sql = f'''
+        WITH tmp_unique_id AS (
+            SELECT
+                CAST(install_timestamp AS BIGINT) AS install_timestamp,
+                game_uid,
+                country_code
+            FROM
+                rg_bi.tmp_unique_id
+            WHERE
+                app = 102
+                AND app_id = 'id1479198816'
+                AND install_timestamp between UNIX_TIMESTAMP(datetime '{startDayStr2}')
+                AND UNIX_TIMESTAMP(datetime '{endDayStr2}')
+        ),
+        ods_platform_appsflyer_events AS (
+            SELECT
+                game_uid as customer_user_id,
+                CAST(event_timestamp as bigint) as event_timestamp,
+                revenue_value_usd as event_revenue_usd
+            FROM
+                rg_bi.ads_topwar_ios_purchase_adv
+            WHERE
+                app_package = 'id1479198816'
+                AND install_day >= '{startDayStr}'
+        ),
+        joined_data AS (
+            SELECT
+                t.install_timestamp,
+                t.game_uid,
+                t.country_code,
+                o.event_timestamp,
+                o.event_revenue_usd
+            FROM
+                tmp_unique_id t
+                LEFT JOIN ods_platform_appsflyer_events o ON t.game_uid = o.customer_user_id
+                AND o.event_timestamp >= t.install_timestamp
+        )
+        SELECT
+            to_char(FROM_UNIXTIME(install_timestamp), 'YYYYMMDD') AS install_date,
+            jd.country_code,
+            COUNT(distinct game_uid) AS install,
+            SUM(
+                CASE
+                    WHEN 
+                        event_timestamp > install_timestamp 
+                        AND event_timestamp - install_timestamp < 86400 
+                    THEN 
+                        event_revenue_usd
+                    ELSE 0
+                END
+            )AS revenue_24h,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 1 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 3 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN DATEDIFF(
+                        FROM_UNIXTIME(event_timestamp),
+                        FROM_UNIXTIME(install_timestamp),
+                        'dd'
+                    ) < 7 THEN event_revenue_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d
+        FROM
+            joined_data jd
+        GROUP BY
+            install_date,
+            jd.country_code
+        ORDER BY
+            install_date;
+    '''
+    print(sql)
+    df2 = execSql(sql)
+    df2['geoGroup'] = 'other'
+    for geoGroup in geoGroupList:
+        df2.loc[df2.country_code.isin(geoGroup['codeList']),'geoGroup'] = geoGroup['name']
+    df2 = df2.groupby(['install_date','geoGroup'],as_index=False).sum().reset_index(drop=True)
+    dfGroup = df.groupby(['install_date','geoGroup'],as_index=False).sum().reset_index(drop=True)
+    mergeDf = pd.merge(df2,dfGroup,on=['install_date','geoGroup'],how='left',suffixes=('_total','_other'))
+    mergeDf['install'] = mergeDf['install_total'] - mergeDf['install_other']
+    mergeDf['revenue_24h'] = mergeDf['revenue_24h_total'] - mergeDf['revenue_24h_other']
+    mergeDf['revenue_1d'] = mergeDf['revenue_1d_total'] - mergeDf['revenue_1d_other']
+    mergeDf['revenue_3d'] = mergeDf['revenue_3d_total'] - mergeDf['revenue_3d_other']
+    mergeDf['revenue_7d'] = mergeDf['revenue_7d_total'] - mergeDf['revenue_7d_other']
+    mergeDf = mergeDf[['install_date','geoGroup','install','revenue_24h','revenue_1d','revenue_3d','revenue_7d']]
+    mergeDf['media'] = 'organic'
+    mergeDf['campaign_id'] = 'organic'
+    mergeDf['campaign_name'] = 'organic'
+    # 将mergeDf中，revenue_7d 为 空的行，删除
+    mergeDf = mergeDf.loc[mergeDf.revenue_7d.notnull()]
+    df = pd.concat([df,mergeDf],ignore_index=True)
+
+    df.to_csv(filename,index=False)
+    print('已获得%d条数据'%len(df))
+    print('存储在%s'%filename)
+    df['install_date'] = df['install_date'].astype(str)
+
+    return df
+
+
+
 # 获得更长期的收入数据，主要是7日，30日，60日，90日，120日数据
 def getRevenueDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr,directory):
     print('getRevenueDataIOSGroupByCampaignAndGeoAndMedia 采用融合归因结论，媒体固定只能分这么多，请注意')
@@ -978,6 +1247,53 @@ def getRevenueDataIOSGroupByGeo(startDayStr,endDayStr,directory):
     df.to_csv(filename,index=False)
     return df
 
+# 获得里程碑数据
+# 要求startDayStr，endDayStr 都要求是满7日的最近时间
+def getRevenueMilestones(startDayStr,endDayStr,directory):
+    print('getRevenueMilestones')
+    filename = getFilename1('revenueMilestones',startDayStr,endDayStr,directory,'')
+    if os.path.exists(filename):
+        print('已存在%s'%filename)
+        return pd.read_csv(filename, dtype={'install_date':str})
+    else:
+        print('从MC获得数据')
+
+    sql = f'''
+        SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN datediff(to_date(purchase_day,'yyyymmdd'),to_date(install_day,'yyyymmdd'),'dd') < 7 THEN revenue_value_usd
+                    ELSE 0
+                    END
+                ),
+                0
+            ) as r7usd,
+            CASE
+                WHEN country IN ('SA', 'AE', 'KW', 'QA', 'OM', 'BH') THEN 'GCC'
+                WHEN country = 'KR' THEN 'KR'
+                WHEN country = 'US' THEN 'US'
+                WHEN country = 'JP' THEN 'JP'
+            ELSE 'other'
+            END as country_group
+        FROM
+            rg_bi.ads_topwar_ios_purchase_adv
+        WHERE
+            install_day BETWEEN '{startDayStr}' 
+            AND '{endDayStr}'
+        GROUP BY
+            country_group
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    df.to_csv(filename,index=False)
+    print('已获得%d条数据'%len(df))
+    print('存储在%s'%filename)
+    return df
+    
+
+    
 
 if __name__ == '__main__':
     # startDayStr = '20230826'

@@ -143,7 +143,7 @@ def addHead2(tenantAccessToken,documentId,blockId,title):
     else:
         raise Exception(f"Error: {response.status_code}, {response.text}")
 
-def addText(tenantAccessToken,documentId,blockId,text):
+def addText(tenantAccessToken,documentId,blockId,text,text_color = 0,bold = False):
     # blockId 为空的时候 blockId = documentId
 
     if not blockId or blockId == '':
@@ -170,6 +170,14 @@ def addText(tenantAccessToken,documentId,blockId,text):
             }
         ]
     }
+
+    data['children'][0]['text']['elements'][0]['text_run']['text_element_style'] = {}
+
+    if text_color != 0:
+        data['children'][0]['text']['elements'][0]['text_run']['text_element_style']['text_color'] = text_color
+
+    if bold:
+        data['children'][0]['text']['elements'][0]['text_run']['text_element_style']['bold'] = bold
 
     response = requests.post(url, headers=headers, json=data)
 
