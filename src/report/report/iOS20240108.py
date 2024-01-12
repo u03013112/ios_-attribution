@@ -664,6 +664,7 @@ def text2():
 
 
 from src.report.feishu.report2 import main as feishuMain
+from src.report.feishu.feishu import sendMessageDebug
 def main(days = 7):
     # 获得目前的UTC0日期，格式20231018
     today = datetime.datetime.utcnow()
@@ -676,16 +677,25 @@ def main(days = 7):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    report1Fix(days)
-    text1Fix()
+    retryMax = 3
+    for _ in range(retryMax):
+        try:
+            report1Fix(days)
+            text1Fix()
 
-    report2(days)
-    text2()
+            report2(days)
+            text2()
 
-    reportOrganic(days)
-    textOrganic()
-    
-    feishuMain(directory)
+            reportOrganic(days)
+            textOrganic()
+            
+            feishuMain(directory)
+        except Exception as e:
+            print(e)
+            sendMessageDebug('报告生成失败'+str(e))
+            # 等待5分钟
+            time.sleep(300)
+            continue
 
 if __name__ == '__main__':
     main()
