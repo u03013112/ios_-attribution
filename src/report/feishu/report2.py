@@ -45,18 +45,23 @@ def main(dirFilePath):
         text = f.read()
         addText(tenantAccessToken,docId,'',text,text_color=4,bold=True)
 
-    addText(tenantAccessToken,docId,'','里程碑完成情况表：')
+    addHead2(tenantAccessToken,docId,'','参考数据')
+
+    addText(tenantAccessToken,docId,'','里程碑完成情况表：',bold=True)
+    addText(tenantAccessToken,docId,'','其中统计了从里程碑开始~上周期开始，从里程碑开始~上周期结束，从里程碑开始~本周起结束 3个累计里程碑完成情况。然后通过对这3个数据求差，对上周期和本周期内里程碑完成情况进行统计。')
     csvFilePath1 = os.path.join(dirFilePath,'report1Fix.csv')
     addFile(tenantAccessToken,docId,'',csvFilePath1)
 
     # reportOrganic1
-    addText(tenantAccessToken,docId,'','自然量占比情况表：')
+    addText(tenantAccessToken,docId,'','自然量占比情况表：',bold=True)
+    addText(tenantAccessToken,docId,'','自然量占比从一定程度的反应了媒体表现情况，在大盘ROI稳定情况下，自然量占比越高，媒体表现越差。')
     csvFilePath2 = os.path.join(dirFilePath,'reportOrganic2.csv')
     addFile(tenantAccessToken,docId,'',csvFilePath2)
 
-    addHead1(tenantAccessToken,docId,'','详细数据')
+    addHead1(tenantAccessToken,docId,'','分国家+分媒体详细数据')
 
     addHead2(tenantAccessToken,docId,'','各媒体回收占比（包括自然量）')
+    addText(tenantAccessToken,docId,'','媒体7日收入采用融合归因数据，自然量采用大盘数据减融合归因数据。')
     # reportOrganic2
     csvFilePath3 = os.path.join(dirFilePath,'reportOrganic1.csv')
     addFile(tenantAccessToken,docId,'',csvFilePath3)

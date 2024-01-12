@@ -501,7 +501,7 @@ def text1Fix():
     LCBDays = (LCBEndDate - LCBStartDate).days + 1
 
     ret1 = f'目前里程碑于{LCBStartDateStr}开始，截止目前满7日数据（{LCBEndDateStr}），共计{LCBDays}天。\n'
-    ret1 += f'本周期（{range2}）里程碑达标花费增长为{df["cost 2-1"].iloc[-1]}，环比上周期（{range1}）上升{df["花费环比Str"].iloc[-1]}。\n'
+    ret1 += f'本周期（{range2}）里程碑达标花费增长为{df["cost 2-1"].iloc[-1]:.2f}，环比上周期（{range1}）上升{df["花费环比Str"].iloc[-1]}。\n'
 
     print(ret1)
     filename = getFilename('report1Text_1Fix','txt')
