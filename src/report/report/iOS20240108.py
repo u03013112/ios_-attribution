@@ -18,6 +18,7 @@ import sys
 sys.path.append('/src')
 from src.maxCompute import execSql
 
+from src.report.data.milestones import getMilestonesStartDate
 from src.report.data.ad import getAdDataIOSGroupByCampaignAndGeoAndMedia,getAdCostDataIOSGroupByGeo
 from src.report.data.revenue import getRevenueDataIOSGroupByCampaignAndGeoAndMediaNew,getRevenueMilestones
 
@@ -114,7 +115,7 @@ def report1(days = 7):
 
 # 从里程碑开始算
 def report1Fix(days = 7):
-    startDayStr = '20231227'
+    startDayStr = getMilestonesStartDate()
     print('report1')
     today = datetime.datetime.utcnow()
     # N 是获得满N日数据的周期
@@ -145,9 +146,7 @@ def report1Fix(days = 7):
     df2 = pd.merge(df2,adCostDf2,on=['country_group'],how='outer',suffixes=('','_2'))
     df2 = df2.fillna(0)
 
-    df = pd.merge(df,df2,on=['country_group'],how='outer') 
-    print(df)
-    
+    df = pd.merge(df,df2,on=['country_group'],how='outer')     
     
     df['roi7'] = df['r7usd']/df['cost']
     df['roi7_1'] = df['r7usd_1']/df['cost_1']
@@ -585,13 +584,17 @@ def textOrganic():
     ret1 = ''
     ret2 = ''
 
-    filename = getFilename('report1','csv')
+    filename = getFilename('report1Fix','csv')
     df1 = pd.read_csv(filename)
 
     filename = getFilename('reportOrganic2','csv')
     dfO = pd.read_csv(filename)
 
-    df1['花费环比'] = df1['花费环比'].apply(lambda x:float(x[:-1])/100)
+    costHBCol = df1.columns[12]
+    print('花费环比列名：',costHBCol)
+
+
+    df1[costHBCol] = df1[costHBCol].apply(lambda x:float(x[:-1])/100)
     dfO['7日回收占比环比'] = dfO['7日回收占比环比'].apply(lambda x:float(x[:-1])/100)
 
     # 当一个国家花费环比变高，并且自然量回收占比环比变低的时候，代表媒体的表现在变好，可能是行情变好
@@ -603,10 +606,10 @@ def textOrganic():
     for i in range(len(df1)):
         if df1.iloc[i,0] == '所有国家汇总':
             continue
-        if df1.iloc[i,5] > threshold1 and dfO.iloc[i,4] < -1 * thresholdO:
-            ret1 += f'{df1.iloc[i,0]}国家达标花费环比上升{df1.iloc[i,5]*100}%，自然量回收占比环比下降{dfO.iloc[i,4]*100}%，媒体表现变好，可能是行情变好。\n'
-        if df1.iloc[i,5] < -1 * threshold1 and dfO.iloc[i,4] > thresholdO:
-            ret2 += f'{df1.iloc[i,0]}国家达标花费环比下降{df1.iloc[i,5]*100}%，自然量回收占比环比上升{dfO.iloc[i,4]*100}%，媒体表现变差，可能是行情变差。\n'
+        if df1.iloc[i,12] > threshold1 and dfO.iloc[i,4] < -1 * thresholdO:
+            ret1 += f'{df1.iloc[i,0]}国家达标花费环比上升{df1.iloc[i,12]*100}%，自然量回收占比环比下降{dfO.iloc[i,4]*100}%，媒体表现变好，可能是行情变好。\n'
+        if df1.iloc[i,12] < -1 * threshold1 and dfO.iloc[i,4] > thresholdO:
+            ret2 += f'{df1.iloc[i,0]}国家达标花费环比下降{df1.iloc[i,12]*100}%，自然量回收占比环比上升{dfO.iloc[i,4]*100}%，媒体表现变差，可能是行情变差。\n'
     
     # print(ret)
     filename = getFilename('reportOrganicText_1','txt')
@@ -668,16 +671,13 @@ def main(days = 7):
     print('今日日期：',todayStr)
 
     global directory
-    directory = f'/src/data/report/海外iOS速读AI版v2_{todayStr}_{days}'
+    directory = f'/src/data/report/海外iOS里程碑进度日报_{todayStr}'
 
     if not os.path.exists(directory):
         os.makedirs(directory)
 
     report1Fix(days)
     text1Fix()
-
-    # report1(days)
-    # text1()
 
     report2(days)
     text2()

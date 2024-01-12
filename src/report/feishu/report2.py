@@ -22,7 +22,7 @@ def main(dirFilePath):
     docId = createDoc(tenantAccessToken,dirFileName)
 
     addHead1(tenantAccessToken,docId,'','文档说明')
-    addText(tenantAccessToken,docId,'',f'本文档每天发布，针对里程碑相关数据，数据均是满7日数据。\n其他说明请参考下面《名词解释》章节。\n')
+    addText(tenantAccessToken,docId,'',f'本文档每天发布，针对海外iOS里程碑相关数据，数据均是满7日数据。\n比BI里程碑快一天，所以花费比BI的数值略大。\n其他说明请参考下面《名词解释》章节。\n')
     
     addHead1(tenantAccessToken,docId,'','里程碑')
     with open(os.path.join(dirFilePath,'report1Text_1Fix.txt'),'r') as f:
@@ -46,7 +46,7 @@ def main(dirFilePath):
         addText(tenantAccessToken,docId,'',text,text_color=4,bold=True)
 
     addText(tenantAccessToken,docId,'','里程碑完成情况表：')
-    csvFilePath1 = os.path.join(dirFilePath,'report1.csv')
+    csvFilePath1 = os.path.join(dirFilePath,'report1Fix.csv')
     addFile(tenantAccessToken,docId,'',csvFilePath1)
 
     # reportOrganic1
