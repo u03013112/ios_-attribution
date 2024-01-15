@@ -607,9 +607,9 @@ def textOrganic():
         if df1.iloc[i,0] == '所有国家汇总':
             continue
         if df1.iloc[i,12] > threshold1 and dfO.iloc[i,4] < -1 * thresholdO:
-            ret1 += f'{df1.iloc[i,0]}国家达标花费环比上升{df1.iloc[i,12]*100}%，自然量回收占比环比下降{dfO.iloc[i,4]*100}%，媒体表现变好，可能是行情变好。\n'
+            ret1 += f'{df1.iloc[i,0]} 达标花费环比上升{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比下降{dfO.iloc[i,4]*100:.2f}%，媒体表现变好。\n'
         if df1.iloc[i,12] < -1 * threshold1 and dfO.iloc[i,4] > thresholdO:
-            ret2 += f'{df1.iloc[i,0]}国家达标花费环比下降{df1.iloc[i,12]*100}%，自然量回收占比环比上升{dfO.iloc[i,4]*100}%，媒体表现变差，可能是行情变差。\n'
+            ret2 += f'{df1.iloc[i,0]} 达标花费环比下降{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比上升{dfO.iloc[i,4]*100:.2f}%，媒体表现变差。\n'
     
     # print(ret)
     filename = getFilename('reportOrganicText_1','txt')
