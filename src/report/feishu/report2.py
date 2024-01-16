@@ -66,6 +66,14 @@ def main(dirFilePath):
     csvFilePath3 = os.path.join(dirFilePath,'reportOrganic1.csv')
     addFile(tenantAccessToken,docId,'',csvFilePath3)
 
+    addHead2(tenantAccessToken,docId,'','媒体评价补充说明')
+    addText(tenantAccessToken,docId,'','媒体KPI折算：由于最终的KPI是含自然量ROI，所以按照最近自然量回收占比折算媒体KPI，即无自然量下媒体ROI标准。取最近两周的自然量回收占比中较低、较高的比例，折算媒体ROI的较低标准和较高标准。',text_color=0)
+    addText(tenantAccessToken,docId,'','媒体评价：如果低于较低的媒体折算KPI，就评价为较差；如果高于较高的媒体折算KPI，就评价为较好。',text_color=0)
+    addText(tenantAccessToken,docId,'','然后再结合花费环比，对最近媒体表现进行风险评估。',text_color=0)
+    addText(tenantAccessToken,docId,'','下面ROI7均是满7日数据。',text_color=0)
+    addText(tenantAccessToken,docId,'','下面ROI24小时 是最近数据，这部分数据没有7日完整回收。',text_color=0)
+    addText(tenantAccessToken,docId,'','请注意周期的时间范围。',bold=True)
+
     for media in ['bytedanceglobal','facebook','google']:
         addHead2(tenantAccessToken,docId,'',f'{media} ROI7 与 花费')
         
@@ -79,6 +87,20 @@ def main(dirFilePath):
 
         csvFilePath3 = os.path.join(dirFilePath,f'report2_{media}.csv')
         addFile(tenantAccessToken,docId,'',csvFilePath3)
+
+        # 24小时
+        addHead2(tenantAccessToken,docId,'',f'{media} ROI24小时')
+
+        with open(os.path.join(dirFilePath,f'report3Text_{media}_1.txt'),'r') as f:
+            text = f.read()
+            addText(tenantAccessToken,docId,'',text,text_color=2)
+
+        with open(os.path.join(dirFilePath,f'report3Text_{media}_2.txt'),'r') as f:
+            text = f.read()
+            addText(tenantAccessToken,docId,'',text,text_color=4)
+
+        csvFilePath4 = os.path.join(dirFilePath,f'report3_{media}.csv')
+        addFile(tenantAccessToken,docId,'',csvFilePath4)
 
     addHead1(tenantAccessToken,docId,'','名词解释')
     addText(tenantAccessToken,docId,'','本周期 & 上周期：使用可获得的最近的两周的满7日数据。并分为本周期与上周期两周进行环比。请注意周期中提到的具体日期。\n')

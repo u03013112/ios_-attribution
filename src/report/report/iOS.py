@@ -260,6 +260,8 @@ def check(endDayStr):
             rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2
         WHERE
             day = '{endDayStr}'
+        LIMIT 10
+        ;
     '''
     print(sql)
     df = execSql(sql)

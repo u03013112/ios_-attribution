@@ -220,22 +220,32 @@ def report1Fix(days = 7):
 
     df['目标ROI'] = df['目标ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
 
-    df[f'{startDayStr}~{startDayStr1}花费'] = df[f'{startDayStr}~{startDayStr1}花费'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr}~{endDayStr1}花费'] = df[f'{startDayStr}~{endDayStr1}花费'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr}~{endDayStr2}花费'] = df[f'{startDayStr}~{endDayStr2}花费'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr1}~{endDayStr1}花费'] = df[f'{startDayStr1}~{endDayStr1}花费'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr2}~{endDayStr2}花费'] = df[f'{startDayStr2}~{endDayStr2}花费'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr}~{startDayStr1}花费(排除未达标花费)'] = df[f'{startDayStr}~{startDayStr1}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr}~{endDayStr1}花费(排除未达标花费)'] = df[f'{startDayStr}~{endDayStr1}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
-    df[f'{startDayStr}~{endDayStr2}花费(排除未达标花费)'] = df[f'{startDayStr}~{endDayStr2}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
+    # 整理格式
 
-    df[f'{startDayStr2}~{endDayStr2}与{startDayStr1}~{endDayStr1}花费环比'] = df[f'{startDayStr2}~{endDayStr2}与{startDayStr1}~{endDayStr1}花费环比'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # 花费保留两位小数，用索引是因为，列名是变化的，而且有可能会重名，当周期的开始正好是里程碑开始时间，会导致列重名
+    for colIndex in [2,4,6,8,10,13,14,15]:
+        df.iloc[:,colIndex] = df.iloc[:,colIndex].apply(lambda x:'%.2f'%x)
 
-    df[f'{startDayStr}~{startDayStr1}满7ROI'] = df[f'{startDayStr}~{startDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
-    df[f'{startDayStr}~{endDayStr1}满7ROI'] = df[f'{startDayStr}~{endDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
-    df[f'{startDayStr}~{endDayStr2}满7ROI'] = df[f'{startDayStr}~{endDayStr2}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
-    df[f'{startDayStr1}~{endDayStr1}满7ROI'] = df[f'{startDayStr1}~{endDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
-    df[f'{startDayStr2}~{endDayStr2}满7ROI'] = df[f'{startDayStr2}~{endDayStr2}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # df[f'{startDayStr}~{startDayStr1}花费'] = df[f'{startDayStr}~{startDayStr1}花费'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr}~{endDayStr1}花费'] = df[f'{startDayStr}~{endDayStr1}花费'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr}~{endDayStr2}花费'] = df[f'{startDayStr}~{endDayStr2}花费'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr1}~{endDayStr1}花费'] = df[f'{startDayStr1}~{endDayStr1}花费'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr2}~{endDayStr2}花费'] = df[f'{startDayStr2}~{endDayStr2}花费'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr}~{startDayStr1}花费(排除未达标花费)'] = df[f'{startDayStr}~{startDayStr1}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr}~{endDayStr1}花费(排除未达标花费)'] = df[f'{startDayStr}~{endDayStr1}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
+    # df[f'{startDayStr}~{endDayStr2}花费(排除未达标花费)'] = df[f'{startDayStr}~{endDayStr2}花费(排除未达标花费)'].apply(lambda x:'%.2f'%x)
+
+    # 与上面统一写法
+    for colIndex in [3,5,7,9,11,12]:
+        df.iloc[:,colIndex] = df.iloc[:,colIndex].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+
+    # df[f'{startDayStr2}~{endDayStr2}与{startDayStr1}~{endDayStr1}花费环比'] = df[f'{startDayStr2}~{endDayStr2}与{startDayStr1}~{endDayStr1}花费环比'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+
+    # df[f'{startDayStr}~{startDayStr1}满7ROI'] = df[f'{startDayStr}~{startDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # df[f'{startDayStr}~{endDayStr1}满7ROI'] = df[f'{startDayStr}~{endDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # df[f'{startDayStr}~{endDayStr2}满7ROI'] = df[f'{startDayStr}~{endDayStr2}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # df[f'{startDayStr1}~{endDayStr1}满7ROI'] = df[f'{startDayStr1}~{endDayStr1}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+    # df[f'{startDayStr2}~{endDayStr2}满7ROI'] = df[f'{startDayStr2}~{endDayStr2}满7ROI'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
     
     filename = getFilename('report1Fix','csv')
     df.to_csv(filename,index=False)
@@ -326,7 +336,7 @@ def report2(days = 7):
         retDf.to_csv(filename,index=False)
         print('report2 done,save to',filename)
 
-# 第三段，即自然量比例分析，也是针对第一段的一个补充
+# 即自然量比例分析，也是针对第一段的一个补充
 def reportOrganic(days = 7):
     print('reportOrganic')
     today = datetime.datetime.utcnow()
@@ -389,6 +399,143 @@ def reportOrganic(days = 7):
     filename = getFilename(f'reportOrganic2','csv')
     retDf.to_csv(filename,index=False)
     print('reportOrganic done,save to',filename)
+
+# 测试融合归因结论是否已经准备好 
+def check(endDayStr):
+    sql = f'''
+        SELECT
+            *
+        FROM
+            rg_bi.topwar_ios_funplus02_adv_uid_mutidays_campaign2
+        WHERE
+            day = '{endDayStr}'
+        LIMIT 10
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    if len(df) == 0:
+        print('没有数据')
+        return False
+    
+    return True
+
+
+
+# 第三段，针对最近几天的数据，进行分析
+# 直接使用24小时的数据，不进行任何推测
+def report3():
+    print('report3')
+    today = datetime.datetime.utcnow()
+
+    # 尝试获得T-2的数据，如果没有，就使用T-3的数据
+    endDayStr = (today - datetime.timedelta(days=2)).strftime('%Y%m%d')
+    if not check(endDayStr):
+        print('T-2 数据无法获得')
+        endDayStr = (today - datetime.timedelta(days=3)).strftime('%Y%m%d')
+
+    print('查询日期：',endDayStr)
+
+    endDayStr2 = endDayStr
+    # 从目前可以获得的时间，一直到T-7（已获得完整7日收入数据的时间）是目前周期
+    startDayStr2 = (today - datetime.timedelta(days=7-1)).strftime('%Y%m%d')
+
+    # days = 天数 endDayStr2 - startDayStr2
+    days = (datetime.datetime.strptime(endDayStr2,'%Y%m%d') - datetime.datetime.strptime(startDayStr2,'%Y%m%d')).days + 1
+    endDayStr1 = (today - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    startDayStr1 = (today - datetime.timedelta(days=7+days-1)).strftime('%Y%m%d')
+
+    print('查询日期：',startDayStr1,'~',endDayStr1,'和',startDayStr2,'~',endDayStr2)
+
+    adCostDf = getAdDataIOSGroupByCampaignAndGeoAndMedia(startDayStr1,endDayStr2,directory)
+    revenueDf = getRevenueDataIOSGroupByCampaignAndGeoAndMediaNew(startDayStr1,endDayStr2,directory)
+
+    df = pd.merge(adCostDf,revenueDf,on=[
+        'install_date','campaign_id','campaign_name','media','geoGroup'
+        ],how='outer',suffixes=('_ad','_revenue'))
+    df = df.fillna(0)
+
+    mediaList = df['media'].unique().tolist()
+
+    for media in mediaList:
+        if media == 'organic':
+            continue
+
+        mediaDf = df[df['media']==media]
+
+        df1 = mediaDf[mediaDf['install_date']<=endDayStr1].groupby(['geoGroup']).agg(
+            {
+                'cost':'sum',
+                'revenue_24h':'sum',
+                'revenue_7d':'sum'
+            }
+        ).reset_index()
+        df1['ROI24H'] = df1['revenue_24h']/df1['cost']
+
+        df2 = mediaDf[mediaDf['install_date']>=startDayStr2].groupby(['geoGroup']).agg(
+            {
+                'cost':'sum',
+                'revenue_24h':'sum',
+                'revenue_7d':'sum'
+            }
+        ).reset_index()
+        df2['ROI24H'] = df2['revenue_24h']/df2['cost']
+
+        retDf = pd.merge(df1,df2,on=['geoGroup'],how='outer',suffixes=('_1','_2'))
+        
+        retDf['ROI24H环比'] = (retDf['ROI24H_2'] - retDf['ROI24H_1'])/retDf['ROI24H_1']
+
+        retDf['cost环比'] = (retDf['cost_2'] - retDf['cost_1'])/retDf['cost_1']
+
+        retDf = retDf[['geoGroup','ROI24H_1','ROI24H_2','ROI24H环比','cost_1','cost_2','cost环比']]
+        retDf.rename(columns={
+            'geoGroup':'国家',
+            'ROI24H_1':f'ROI24H {startDayStr1}~{endDayStr1}',
+            'ROI24H_2':f'ROI24H {startDayStr2}~{endDayStr2}',
+            'cost_1':f'{startDayStr1}~{endDayStr1}花费',
+            'cost_2':f'{startDayStr2}~{endDayStr2}花费',
+        },inplace=True)
+
+        # 格式整理
+        retDf[f'ROI24H {startDayStr1}~{endDayStr1}'] = retDf[f'ROI24H {startDayStr1}~{endDayStr1}'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+        retDf[f'ROI24H {startDayStr2}~{endDayStr2}'] = retDf[f'ROI24H {startDayStr2}~{endDayStr2}'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+        retDf['ROI24H环比'] = retDf['ROI24H环比'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+        
+        retDf[f'{startDayStr1}~{endDayStr1}花费'] = retDf[f'{startDayStr1}~{endDayStr1}花费'].apply(lambda x:'%.2f'%x)
+        retDf[f'{startDayStr2}~{endDayStr2}花费'] = retDf[f'{startDayStr2}~{endDayStr2}花费'].apply(lambda x:'%.2f'%x)
+        retDf['cost环比'] = retDf['cost环比'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
+        
+        filename = getFilename(f'report3_{media}','csv')
+        retDf.to_csv(filename,index=False)
+        print('report3 done,save to',filename)
+
+def text3():
+    mediaList = ['bytedanceglobal','facebook','google']
+    for media in mediaList:
+        filename = getFilename(f'report3_{media}','csv')
+        mediaDf = pd.read_csv(filename)
+        # 备份一份，不改变格式
+        mediaDfCopy = mediaDf.copy()
+        mediaDf['ROI24H环比'] = mediaDf['ROI24H环比'].apply(lambda x:float(x[:-1])/100)
+        mediaDf['cost环比'] = mediaDf['cost环比'].apply(lambda x:float(x[:-1])/100)
+
+        ret1 = ''
+        ret2 = ''
+
+        for i in range(len(mediaDf)):
+            costOp = '下降' if mediaDf['cost环比'].iloc[i] < 0 else '上升'
+            if mediaDf['ROI24H环比'].iloc[i] > 0.5:
+                ret2 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比上升{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
+            if mediaDf['ROI24H环比'].iloc[i] < -0.5:
+                ret1 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比下降{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
+            
+        filename = getFilename(f'report3Text_{media}_1','txt')
+        with open(filename,'w') as f:
+            f.write(ret1)
+
+        filename = getFilename(f'report3Text_{media}_2','txt')
+        with open(filename,'w') as f:
+            f.write(ret2)
 
 import rpyc
 import json
@@ -489,7 +636,7 @@ def text1Fix():
     df['cost 2-1'] = df['cost2'] - df['cost1']
     df['花费环比'] = (df['cost 2-1'] - df['cost 1-0'])/df['cost 1-0']
     df['花费环比Str'] = df['花费环比'].apply(lambda x: '0%' if pd.isnull(x) else '%.2f%%' % (x*100))
-    print(df)
+    # print(df)
     LCBStartDateStr = df.columns[2][:8]
     LCBEndDateStr = df.columns[6][9:-2]
     range1 = df.columns[8][:-2]
@@ -514,7 +661,7 @@ def text1Fix():
     df2 = df.copy()
     # 花费环比 目前第12列 从类似 '0.9504%'，截取到 0.9504，再转换为float
     df2.iloc[:,12] = df2.iloc[:,12].apply(lambda x:float(x[:-1])/100)
-    if LCBDays > 14:
+    if LCBDays >= 14:
         if len(df2) > 1:
             ret2 += '达标花费环比变化较大的国家：\n'
             for i in range(len(df)):
@@ -607,9 +754,9 @@ def textOrganic():
         if df1.iloc[i,0] == '所有国家汇总':
             continue
         if df1.iloc[i,12] > threshold1 and dfO.iloc[i,4] < -1 * thresholdO:
-            ret1 += f'{df1.iloc[i,0]} 达标花费环比上升{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比下降{dfO.iloc[i,4]*100:.2f}%，媒体表现变好。\n'
+            ret2 += f'{df1.iloc[i,0]} 达标花费环比上升{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比下降{dfO.iloc[i,4]*100:.2f}%，媒体表现变好。\n'
         if df1.iloc[i,12] < -1 * threshold1 and dfO.iloc[i,4] > thresholdO:
-            ret2 += f'{df1.iloc[i,0]} 达标花费环比下降{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比上升{dfO.iloc[i,4]*100:.2f}%，媒体表现变差。\n'
+            ret1 += f'{df1.iloc[i,0]} 达标花费环比下降{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比上升{dfO.iloc[i,4]*100:.2f}%，媒体表现变差。\n'
     
     # print(ret)
     filename = getFilename('reportOrganicText_1','txt')
@@ -662,6 +809,91 @@ def text2():
         with open(filename,'w') as f:
             f.write(ret2)
 
+# 获得自然量占比的较大值与较小值
+# 按照国家，统计自然量占比的最大值与最小值
+# 目前的简单做法是直接获取上一周期和本周期数据，将较大的值作为最大值，较小的值作为最小值
+def getOrganicRateMaxMin():
+    df = pd.read_csv(getFilename('reportOrganic2','csv'))
+    c1 = df.columns[2]
+    c2 = df.columns[3]
+    # 将原本的类似 0.1% 的数据转换成 0.001
+    df[c1] = df[c1].apply(lambda x:float(x[:-1])/100)
+    df[c2] = df[c2].apply(lambda x:float(x[:-1])/100)
+
+    df['organic_rate_max'] = df[[c1,c2]].max(axis=1)
+    df['organic_rate_min'] = df[[c1,c2]].min(axis=1)
+    df = df[['国家','organic_rate_max','organic_rate_min']]
+    return df
+
+# 用标准KPI和自然量占比，推算出不含自然量的KPI的最大值与最小值
+# 基础公式：KPIMax = KPI*（1-自然量占比最小值）；KPIMin = KPI*（1-自然量占比最大值）
+def getKpiMaxMin():
+    kpiDf = pd.DataFrame(list(kpi.items()), columns=['国家', 'KPI'])
+    df = getOrganicRateMaxMin()
+
+    df = pd.merge(df,kpiDf,on='国家',how='left')
+
+    df['kpi_max'] = df['KPI'] * (1 - df['organic_rate_min'])
+    df['kpi_min'] = df['KPI'] * (1 - df['organic_rate_max'])
+    print(df)
+    df = df[['国家','kpi_max','kpi_min']]
+
+    return df
+
+def text2Fix():
+    kpiMaxMin = getKpiMaxMin()
+
+    mediaList = ['bytedanceglobal','facebook','google']
+    for media in mediaList:
+        mediaDf = pd.read_csv(getFilename(f'report2_{media}','csv'))
+
+        mediaDfCopy = mediaDf.copy()
+
+        mediaDf['ROI7D环比'] = mediaDf['ROI7D环比'].apply(lambda x:float(x[:-1])/100)
+        mediaDf['cost环比'] = mediaDf['cost环比'].apply(lambda x:float(x[:-1])/100)
+        mediaDf.iloc[:,1] = mediaDf.iloc[:,1].apply(lambda x:float(x[:-1])/100)
+        mediaDf.iloc[:,2] = mediaDf.iloc[:,2].apply(lambda x:float(x[:-1])/100)
+        mediaDf.iloc[:,8] = mediaDf.iloc[:,8].apply(lambda x:float(x[:-1])/100)
+        mediaDf.iloc[:,9] = mediaDf.iloc[:,9].apply(lambda x:float(x[:-1])/100)
+        
+        mediaDf = mediaDf.merge(kpiMaxMin,on='国家',how='left')
+
+        ret1 = ''
+        ret2 = ''
+
+        # 获得mediaDf中列kpi_min的列索引
+        kpi_min_index = mediaDf.columns.get_loc('kpi_min')
+        kpi_max_index = mediaDf.columns.get_loc('kpi_max')
+
+        # print(mediaDf)
+        for i in range(len(mediaDf)):
+            if mediaDf.iloc[i,0] == '所有国家汇总':
+                continue
+            costOp = '下降' if mediaDf.iloc[i,7] < 0 else '上升'
+            if mediaDf.iloc[i,1] < mediaDf.iloc[i,kpi_min_index] and mediaDf.iloc[i,2] < mediaDf.iloc[i,kpi_min_index]:
+                # 上周期与本周期 都不达标
+                ret1 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，存在风险。\n'
+            elif mediaDf.iloc[i,1] < mediaDf.iloc[i,kpi_min_index] and mediaDf.iloc[i,2] >= mediaDf.iloc[i,kpi_max_index]:
+                # 上周期不达标，本周期达标
+                ret2 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，有所好转。\n'
+            elif mediaDf.iloc[i,1] >= mediaDf.iloc[i,kpi_max_index] and mediaDf.iloc[i,2] < mediaDf.iloc[i,kpi_min_index]:
+                # 上周期达标，本周期不达标
+                ret1 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，表现变差，存在风险。\n'
+            elif mediaDf.iloc[i,1] >= mediaDf.iloc[i,kpi_max_index] and mediaDf.iloc[i,2] >= mediaDf.iloc[i,kpi_max_index]:
+                # 上周期与本周期 都达标
+                ret2 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，表现良好。\n'
+            else:
+                # 不做评价
+                pass
+
+        filename = getFilename(f'report2Text_{media}_1','txt')
+        with open(filename,'w') as f:
+            f.write(ret1)
+
+        filename = getFilename(f'report2Text_{media}_2','txt')
+        with open(filename,'w') as f:
+            f.write(ret2)
+
 
 from src.report.feishu.report2 import main as feishuMain
 from src.report.feishu.feishu import sendMessageDebug
@@ -677,19 +909,25 @@ def main(days = 7):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
+    
     retryMax = 3
     for _ in range(retryMax):
         try:
             report1Fix(days)
             text1Fix()
 
-            report2(days)
-            text2()
-
             reportOrganic(days)
             textOrganic()
+
+            report2(days)
+            # text2Fix 需要自然量占比数据，所以要在reportOrganic之后
+            text2Fix()
             
+            report3()
+            text3()
+
             feishuMain(directory)
+            break
         except Exception as e:
             print(e)
             sendMessageDebug('报告生成失败'+str(e))
