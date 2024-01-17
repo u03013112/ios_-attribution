@@ -698,28 +698,25 @@ def text1Fix():
     for i in range(len(df)):
         if df.iloc[i,0] == '所有国家汇总':
             continue
+
+        costOp = '下降' if df2.iloc[i,12] < 0 else '上升'
         # 本周期结束时ROI7D低于KPI
         if df2.iloc[i,7] < df2.iloc[i,1] :
             ret3 += f'{df.iloc[i,0]} '
             # 本周期ROI7D低于KPI
             if df2.iloc[i,11] < df2.iloc[i,1]:
-                if df2.iloc[i,12] > 0:
-                    ret3 += f'上周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}依旧不达标，花费环比上升{df.iloc[i,12]}，存在风险。\n'
-                else:
-                    ret3 += f'上周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}依旧不达标，花费环比下降{df.iloc[i,12]}，存在风险。\n'
+                ret3 += f'本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}依旧不达标，花费环比{costOp}了{df.iloc[i,12]}，存在风险。\n'
             else:
-                ret3 += f'上周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}达标，正在好转，但是仍旧有风险。\n'
+                ret3 += f'本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}达标，正在好转，但是仍旧有风险。\n'
         # 本周期结束时ROI7D高于KPI
         if df2.iloc[i,7] > df2.iloc[i,1] :
             # 但是不够高
-            if df2.iloc[i,7] < df2.iloc[i,1] * 1.1:
+            if df2.iloc[i,7] < df2.iloc[i,1] * 1.05:
+                kpiHB = (df2.iloc[i,7] - df2.iloc[i,1])/df2.iloc[i,1]
                 # 且本周期ROI7D低于KPI
                 if df2.iloc[i,11] < df2.iloc[i,1]:
-                    if df2.iloc[i,12] > 0:
-                        ret3 += f'{df.iloc[i,0]} 上周期结束的满7ROI为{df.iloc[i,7]}，勉强达标。本周期内ROI7D为{df.iloc[i,11]}不达标，花费环比上升{df.iloc[i,12]}，存在潜在风险。\n'
-                    else:
-                        ret3 += f'{df.iloc[i,0]} 上周期结束的满7ROI为{df.iloc[i,7]}，勉强达标。本周期内ROI7D为{df.iloc[i,11]}不达标，花费环比下降{df.iloc[i,12]}，存在潜在风险。\n'
-
+                    ret3 += f'{df.iloc[i,0]} 本周期结束的满7ROI为{df.iloc[i,7]}，比KPI高了{kpiHB*100:.2f}%。本周期内ROI7D为{df.iloc[i,11]}不达标，花费环比{costOp}了{df.iloc[i,12]}，存在潜在风险。\n'
+                    
     print(ret3)
     filename = getFilename('report1Text_3Fix','txt')
     with open(filename,'w') as f:
@@ -878,7 +875,7 @@ def text2Fix():
                 ret2 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，有所好转。\n'
             elif mediaDf.iloc[i,1] >= mediaDf.iloc[i,kpi_max_index] and mediaDf.iloc[i,2] < mediaDf.iloc[i,kpi_min_index]:
                 # 上周期达标，本周期不达标
-                ret1 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，表现变差，存在风险。\n'
+                ret1 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，存在风险。\n'
             elif mediaDf.iloc[i,1] >= mediaDf.iloc[i,kpi_max_index] and mediaDf.iloc[i,2] >= mediaDf.iloc[i,kpi_max_index]:
                 # 上周期与本周期 都达标
                 ret2 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，表现良好。\n'

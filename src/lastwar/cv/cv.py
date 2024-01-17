@@ -316,14 +316,14 @@ if __name__ == '__main__':
 
     
 
-    # main1()
+    main1()
 
     # main2()
 
     # check()
 
 
-    check2()
+    # check2()
 
     # check3()
 
