@@ -185,7 +185,7 @@ def checkCv(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='insta
     tmpDf = df.groupby([cv]).agg({'sumUsd':'sum','sumAvg':'sum'}).reset_index()
     tmpDf['真实花费占比'] = tmpDf['sumUsd']/tmpDf['sumUsd'].sum()
     tmpDf['cv均值花费占比'] = tmpDf['sumAvg']/tmpDf['sumAvg'].sum()    
-    # print(tmpDf)
+    print(tmpDf)
 
     df = df.groupby(['install_date']).agg({'sumUsd':'sum','sumAvg':'sum'}).reset_index()
     df['mape'] = abs(df['sumUsd'] - df['sumAvg']) / df['sumUsd']

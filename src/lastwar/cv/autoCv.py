@@ -155,12 +155,12 @@ def main():
     message += f'{levels}\n'
     message += f'{mape*100:.2f}%\n\n'
 
-    levels = makeLevels1(df,usd='revenue',N=33)
-    levels = [round(x,2) for x in levels]
-    mape = checkLevels(df,levels,usd='revenue',cv='cv')
-    message += 'makeLevels1\n'
-    message += f'{levels}\n'
-    message += f'{mape*100:.2f}%\n\n'
+    # levels = makeLevels1(df,usd='revenue',N=33)
+    # levels = [round(x,2) for x in levels]
+    # mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    # message += 'makeLevels1\n'
+    # message += f'{levels}\n'
+    # message += f'{mape*100:.2f}%\n\n'
 
     levels = makeLevels(df,usd='revenue',N=32)
     levels = [round(x,2) for x in levels]
