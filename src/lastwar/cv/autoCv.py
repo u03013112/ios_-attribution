@@ -5,6 +5,7 @@ import sys
 sys.path.append('/src')
 
 from src.maxCompute import execSql
+from src.tools.cvTools import makeLevels,makeLevelsByJenkspy,makeLevelsByKMeans,checkLevels
 
 import datetime
 import pandas as pd
@@ -136,39 +137,54 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 
 from src.report.feishu.feishu import sendMessageDebug
 def main():
-    df = getPayDataFromMC()
-    df.to_csv('/src/data/payData.csv',index=False)
+    # df = getPayDataFromMC()
+    # df.to_csv('/src/data/payData.csv',index=False)
     df = pd.read_csv('/src/data/payData.csv')
-    levels = makeLevels1(df,usd='revenue',N=33)
-    cvMapDf = makeCvMap(levels)
-    print(cvMapDf)
-    mape = checkCv(df,cvMapDf,usd='revenue')
+
+    message = 'Lastwar CV档位自动测试\n\n'
 
     # 计算旧版本的Mape
-    cvMapDfOld = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
-    cvMapDfOld = cvMapDfOld.loc[cvMapDfOld['conversion_value']<32][['conversion_value','min_event_revenue','max_event_revenue']].fillna(0)
-    cvMapDfOld['avg'] = (cvMapDfOld['min_event_revenue'] + cvMapDfOld['max_event_revenue'])/2
-    print(cvMapDfOld)
-    mapeOld = checkCv(df,cvMapDfOld,usd='revenue',cv='conversion_value')
+    cvMapDf = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
+    cvMapDf = cvMapDf.loc[
+        (cvMapDf['event_name'] == 'af_skad_revenue')
+        & (cvMapDf['conversion_value'] < 32)
+    ]
+    levels = cvMapDf['max_event_revenue'].tolist()
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    message += '旧版本\n'
+    message += f'{levels}\n'
+    message += f'{mape*100:.2f}%\n\n'
 
-    # 当前版本的Mape比旧版本的Mape小超过1%，就通知管理员
-    if mape < mapeOld - 0.01:
-        message = '当前版本的Mape比旧版本的Mape超过1%，请检查\n'
-        message += '当前版本的Mape为%f\n'%mape
-        message += '旧版本的Mape为%f\n'%mapeOld
-        message += cvMapDf.to_string()
+    levels = makeLevels1(df,usd='revenue',N=33)
+    levels = [round(x,2) for x in levels]
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    message += 'makeLevels1\n'
+    message += f'{levels}\n'
+    message += f'{mape*100:.2f}%\n\n'
 
-        sendMessageDebug(message)
-    else:
-        message = 'cv 自动计算任务完成\n'
-        message += '当前版本的Mape为%f\n'%mape
-        message += '旧版本的Mape为%f\n'%mapeOld
-        message += cvMapDf.to_string()
-        
-        sendMessageDebug(message)
+    levels = makeLevels(df,usd='revenue',N=32)
+    levels = [round(x,2) for x in levels]
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    message += 'makeLevels\n'
+    message += f'{levels}\n'
+    message += f'{mape*100:.2f}%\n\n'
 
+    # levels = makeLevelsByJenkspy(df,usd='revenue',N=32)
+    # levels = [round(x,2) for x in levels]
+    # mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    # message += 'makeLevelsByJenkspy\n'
+    # message += f'{levels}\n'
+    # message += f'{mape*100:.2f}%\n\n'
 
-
+    levels = makeLevelsByKMeans(df,usd='revenue',N=32)
+    levels = [round(x,2) for x in levels]
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    message += 'makeLevelsByKMeans\n'
+    message += f'{levels}\n'
+    message += f'{mape*100:.2f}%\n\n'
+    
+    print(message)
+    sendMessageDebug(message)
 
 if __name__ == '__main__':
     main()

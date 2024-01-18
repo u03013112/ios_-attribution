@@ -189,12 +189,13 @@ def checkCv(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='insta
 
     df = df.groupby(['install_date']).agg({'sumUsd':'sum','sumAvg':'sum'}).reset_index()
     df['mape'] = abs(df['sumUsd'] - df['sumAvg']) / df['sumUsd']
-    print('mape:',df['mape'].mean())
+    # print('mape:',df['mape'].mean())
+    return df['mape'].mean()
 
 
-def checkLevels(df,levels):
+def checkLevels(df,levels,usd='payUsd',cv='cv'):
     cvMapDf = makeCvMap(levels)
-    checkCv(df,cvMapDf,usd='payUsd',cv='cv')
+    return checkCv(df,cvMapDf,usd=usd,cv=cv)
 
 def main1():
     # df = pd.read_csv('/src/data/zk2/lastwar20230920_20231019_allPay.csv')
