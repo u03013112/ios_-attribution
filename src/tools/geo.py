@@ -179,6 +179,36 @@ def check(df,retList,revenue_d7='revenue_d7',revenue_d360='revenue_d360'):
     # print(dfG2)
     return dfG2['mape'].mean()
 
+def check2(df,retList,revenue_d7='revenue_d7',revenue_d360='revenue_d360'):
+    df = df.loc[(df['cost'] > 1) & (df['install'] > 1)].copy(deep=True)  
+    df['cluster'] = -1
+    for ret in retList:
+        cluster = ret['cluster']
+        countryList = ret['countryList']
+        df.loc[df['country_code'].isin(countryList),'cluster'] = cluster
+
+    df = df.groupby(['install_date','cluster'],as_index=False).agg({revenue_d7:'sum',revenue_d360:'sum'}).reset_index(drop=True)
+
+    trainDf = df.loc[(df['install_date'] >= '202201')&(df['install_date'] <= '202206')]
+    testDf = df.loc[(df['install_date'] >= '202207')&(df['install_date'] <= '202212')].copy(deep=True)   
+
+    # print('trainDf:',trainDf)
+    # print('testDf:',testDf)
+
+    trainDf = trainDf.groupby(['cluster'],as_index=False).agg({revenue_d7:'sum',revenue_d360:'sum'}).reset_index(drop=True)
+    trainDf['r360/r7'] = trainDf[revenue_d360]/trainDf[revenue_d7]
+    print(trainDf[['cluster','r360/r7']])
+
+    testDf = testDf.groupby(['cluster'],as_index=False).agg({revenue_d7:'sum',revenue_d360:'sum'}).reset_index(drop=True)
+    testDf['p'] = testDf[revenue_d7] * trainDf['r360/r7']
+
+    mape = abs(testDf[revenue_d360].sum() - testDf['p'].sum()) / testDf[revenue_d360].sum()
+
+    print('mape:',mape)
+
+
+    
+
 def k1(dfRaw,cols,N=4):
     df = dfRaw.copy(deep=True)
     data = df[cols].values
@@ -218,7 +248,8 @@ def main():
     # print(installDateGroupDf)
 
     # 为了获得360日收入，需要获取至少一年前的数据
-    df = df.loc[df['install_date'] < '20230101']
+    # df = df.loc[df['install_date'] < '20230101']
+    df = df.loc[(df['install_date'] >= '202201')&(df['install_date'] <= '202206')]
     df = df.groupby(['country_code'],as_index=False).sum().reset_index(drop=True)
     df = df.loc[(df['cost'] > 1000) & (df['install'] > 1000)]
 
@@ -230,17 +261,18 @@ def main():
 
     df['costRate'] = df['cost']/df['cost'].sum()
 
-    df = df[['country_code','costRate','roi30','roi360','cpi']]
+    df = df[['country_code','costRate','roi7','roi30','roi360','cpi','revenue_d360','revenue_d7','revenue_d30']]
     # print(df)
 
     # 使用k-means算法对数据进行聚类，分为N个簇
-    N = 5
+    N = 4
     
-    retList = k1(df,['cpi','roi30','roi360'],N)
-    print(retList)
+    revenue_d7 = 'revenue_d7'
 
-    # 验算
-    mape = check(df2,retList,revenue_d7='revenue_d30')
+    df['roi360/roi30'] = df['revenue_d360']/df[revenue_d7]
+    retList = k1(df,['roi360/roi30'],N)
+    print(retList)
+    mape = check2(df2,retList,revenue_d7=revenue_d7)
     print('mape:',mape)
 
     retList2 = [
@@ -259,7 +291,7 @@ def main():
         }
     ]
 
-    mape = check(df2,retList2,revenue_d7='revenue_d30')
+    mape = check2(df2,retList2,revenue_d7=revenue_d7)
     print('mape:',mape)
 
 def main2():
