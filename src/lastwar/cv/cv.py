@@ -76,8 +76,6 @@ def ssSql2(sql):
         # 查询太慢了，多等一会再尝试
         time.sleep(10)
 
-
-
 def getData1(sql,filename):
     # sql = '''select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."usd"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-12 and "#zone_offset"<=14, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('second', "#install_time", "#event_time")) as double) "#vp@life_time_second" from (select "#event_name","#event_time","usd","#zone_offset","#user_id","#install_time","$part_date","$part_event" from v_event_15)))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20230913)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay' ) ) )) and ((("$part_date" between '2023-09-19' and '2023-10-20') and ("@vpc_tz_#event_time" >= timestamp '2023-09-20' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-10-19'))) and (ta_ev."#vp@life_time_second" <= 8.64E+4)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC limit 10'''
 
@@ -103,7 +101,6 @@ def getData1(sql,filename):
         df.to_csv(filename,index=False)
 
     return df
-
 
 def makeLevels1(userDf, usd='r1usd', N=32):    
     # 过滤收入大于0的用户
