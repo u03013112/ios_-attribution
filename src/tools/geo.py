@@ -229,6 +229,12 @@ def k1(dfRaw,cols,N=4):
 
     return retList
 
+def printRetList(retList):
+    # 先按照cluster排序
+    retList = sorted(retList,key=lambda x:x['cluster'])
+    for ret in retList:
+        print(ret['cluster'],':',ret['countryList'])
+
 from sklearn.cluster import KMeans
 def main():
     startDayStr = '20210101'
@@ -249,9 +255,11 @@ def main():
 
     # 为了获得360日收入，需要获取至少一年前的数据
     # df = df.loc[df['install_date'] < '20230101']
+
     df = df.loc[(df['install_date'] >= '202201')&(df['install_date'] <= '202206')]
     df = df.groupby(['country_code'],as_index=False).sum().reset_index(drop=True)
-    df = df.loc[(df['cost'] > 1000) & (df['install'] > 1000)]
+    # df = df.loc[(df['cost'] > 18000) & (df['install'] > 1800)]
+    df = df.loc[(df['cost'] > 18000) & (df['install'] > 1800)]
 
     df['roi7'] = df['revenue_d7']/df['cost']
     df['roi30'] = df['revenue_d30']/df['cost']
@@ -265,13 +273,13 @@ def main():
     # print(df)
 
     # 使用k-means算法对数据进行聚类，分为N个簇
-    N = 4
+    N = 10
     
     revenue_d7 = 'revenue_d7'
 
     df['roi360/roi30'] = df['revenue_d360']/df[revenue_d7]
     retList = k1(df,['roi360/roi30'],N)
-    print(retList)
+    printRetList(retList)
     mape = check2(df2,retList,revenue_d7=revenue_d7)
     print('mape:',mape)
 
@@ -290,7 +298,7 @@ def main():
             'countryList':['SA','AE','KW','QA','OM','BH']
         }
     ]
-
+    printRetList(retList2)
     mape = check2(df2,retList2,revenue_d7=revenue_d7)
     print('mape:',mape)
 
