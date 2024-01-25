@@ -705,9 +705,9 @@ def text1Fix():
             ret3 += f'{df.iloc[i,0]} '
             # 本周期ROI7D低于KPI
             if df2.iloc[i,11] < df2.iloc[i,1]:
-                ret3 += f'本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}依旧不达标，花费环比{costOp}了{df.iloc[i,12]}，存在风险。\n'
+                ret3 += f'里程碑开始至本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}依旧不达标，花费环比{costOp}了{df.iloc[i,12]}，存在风险。\n'
             else:
-                ret3 += f'本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}达标，正在好转，但是仍旧有风险。\n'
+                ret3 += f'里程碑开始至本周期结束的满7ROI为{df.iloc[i,7]}，不达标。本周期内满7ROI为{df.iloc[i,11]}达标，正在好转，但是仍旧有风险。\n'
         # 本周期结束时ROI7D高于KPI
         if df2.iloc[i,7] > df2.iloc[i,1] :
             # 但是不够高
@@ -715,7 +715,7 @@ def text1Fix():
                 kpiHB = (df2.iloc[i,7] - df2.iloc[i,1])/df2.iloc[i,1]
                 # 且本周期ROI7D低于KPI
                 if df2.iloc[i,11] < df2.iloc[i,1]:
-                    ret3 += f'{df.iloc[i,0]} 本周期结束的满7ROI为{df.iloc[i,7]}，比KPI高了{kpiHB*100:.2f}%。本周期内ROI7D为{df.iloc[i,11]}不达标，花费环比{costOp}了{df.iloc[i,12]}，存在潜在风险。\n'
+                    ret3 += f'{df.iloc[i,0]} 里程碑开始至本周期结束的满7ROI为{df.iloc[i,7]}，比KPI高了{kpiHB*100:.2f}%。本周期内ROI7D为{df.iloc[i,11]}不达标，花费环比{costOp}了{df.iloc[i,12]}，存在潜在风险。\n'
                     
     print(ret3)
     filename = getFilename('report1Text_3Fix','txt')
