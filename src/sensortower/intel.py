@@ -127,7 +127,7 @@ def getAndroidDownloadAndRevenue(appid,countries='',startDate='2023-12-01',endDa
 
     # 其中date 是类似 2023-12-01T00:00:00Z 的字符串，改为 2023-12 的格式
     df['date'] = df['date'].apply(lambda x:x[:7])
-    df = df.groupby(['date']).agg({'downloads':'sum','revenues':'sum'}).reset_index()
+    df = df.groupby(['date','country']).agg({'downloads':'sum','revenues':'sum'}).reset_index()
 
     return df
 # 获得
@@ -155,7 +155,7 @@ def getAndroidTopApp(custom_fields_filter_id='6009d417241bc16eb8e07e9b',limit=10
 if __name__ == '__main__':
     # print(getAndroidCategoryRanking('com.topwar.gp'))
 
-    print(getAndroidFeaturedDownloads('com.topwar.gp'))
+    # print(getAndroidFeaturedDownloads('com.topwar.gp'))
 
     # print(getAndroidTopApp())
 
@@ -171,4 +171,4 @@ if __name__ == '__main__':
     #     ]
     # ))
 
-    # print(getAndroidDownloadAndRevenue('com.topwar.gp'))
+    print(getAndroidDownloadAndRevenue('com.gtarcade.ioe.global'))
