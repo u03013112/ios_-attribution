@@ -60,6 +60,41 @@ def getRevenueDataIOSGroupByGeo(startDayStr,endDayStr):
     print('存储在%s'%filename)
     return df
 
+def getRevenueDataAndroidGroupByGeo(startDayStr,endDayStr):
+    filename = '/src/data/revenue365_Android_%s_%s_GroupByGeo.csv'%(startDayStr,endDayStr)
+    if os.path.exists(filename):
+        print('已存在%s'%filename)
+        return pd.read_csv(filename, dtype={'install_date':str,'campaign_id':str})
+    else:
+        print('从MC获得数据')
+
+    sql = f'''
+        select
+            substring(install_day, 1, 6) AS install_date,
+            country as country_code,
+            sum(revenue_d7) as revenue_d7,
+            sum(revenue_d30) as revenue_d30,
+            sum(revenue_d60) as revenue_d60,
+            sum(revenue_d360) as revenue_d360
+        from dwb_overseas_revenue_allday_afattribution_realtime
+        where
+            app = 102
+            and zone = 0
+            and window_cycle = 9999
+            and app_package = 'com.topwar.gp'
+            and install_day between '{startDayStr}'and '{endDayStr}'
+        group by
+            install_date,
+            country_code
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+
+    df.to_csv(filename,index=False)
+    print('存储在%s'%filename)
+    return df
+
 def getAdDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr):
     filename = '/src/data/adData_%s_%s_GroupByGeo.csv'%(startDayStr,endDayStr)
 
@@ -149,6 +184,98 @@ def getAdDataIOSGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr):
     adCostDf['install_date'] = adCostDf['install_date'].astype(str)
     # adCostDf['campaign_id'] = adCostDf['campaign_id'].astype(str)
     return adCostDf
+
+def getAdDataAndroidGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr):
+    filename = '/src/data/adData_Android_%s_%s_GroupByGeo.csv'%(startDayStr,endDayStr)
+
+    print('getAdCostData:',filename)
+    if os.path.exists(filename):
+        print('已存在%s'%filename)
+        return pd.read_csv(filename, dtype={'install_date':str,'campaign_id':str})
+    else:
+        print('从MC获得数据')
+
+    sql = f'''
+        SELECT
+            substring(install_day, 1, 6) AS install_date,
+            mediasource,
+            country as country_code,
+            SUM(cost_value_usd) as cost,
+            SUM(install) as install
+        FROM
+            (
+                SELECT
+                    install_day,
+                    mediasource,
+                    country,
+                    cost_value_usd,
+                    ad_install as install
+                FROM
+                    rg_bi.dwd_overseas_cost_new
+                WHERE
+                    app = '102'
+                    AND zone = '0'
+                    AND app_package = 'com.topwar.gp'
+                    AND cost_value_usd > 0
+                    AND window_cycle = 9999
+                    AND facebook_segment in ('country', 'N/A')
+                    AND install_day >= '20230101'
+                UNION ALL
+                SELECT
+                    install_day,
+                    mediasource,
+                    country,
+                    cost_value_usd,
+                    ad_install as install
+                FROM
+                    rg_bi.dwd_overseas_cost_history
+                WHERE
+                    app = '102'
+                    AND zone = '0'
+                    AND app_package = 'com.topwar.gp'
+                    AND cost_value_usd > 0
+                    AND facebook_segment in ('country', 'N/A')
+                    AND install_day < '20230101'
+            ) AS ct
+        WHERE
+            ct.install_day BETWEEN '{startDayStr}'
+            AND '{endDayStr}'
+        GROUP BY
+            install_date,
+            mediasource,
+            country;
+    '''
+
+    print(sql)
+    adCostDf = execSql(sql)
+    print('已获得%d条数据'%len(adCostDf))
+    
+    # 这是为了去掉tiktokglobal_int，不知道为啥，用新表之后应该不需要了
+    adCostDf = adCostDf.loc[adCostDf.mediasource != 'tiktokglobal_int']
+
+    mediaGroupList = getIOSMediaGroup01()
+    adCostDf['media'] = 'other'
+    for mediaGroup in mediaGroupList:
+        adCostDf.loc[adCostDf.mediasource.isin(mediaGroup['codeList']),'media'] = mediaGroup['name']
+    
+    adCostDf = adCostDf.groupby(
+        ['install_date','country_code','media']
+        ,as_index=False
+    ).agg(
+        {    
+            'cost':'sum',
+            'install':'sum'
+        }
+    ).reset_index(drop=True)
+
+    adCostDf.to_csv(filename,index=False)
+    print('存储在%s'%filename)
+
+    adCostDf['install_date'] = adCostDf['install_date'].astype(str)
+    # adCostDf['campaign_id'] = adCostDf['campaign_id'].astype(str)
+    return adCostDf
+
+
 
 # 验算，df是df = revenueDf.merge(adDf,on=['install_date','country_code'],how='left')
 # retList是类似[{'cluster':0,'countryList':['US','JP']},{'cluster':1,'countryList':['CN','IN']}]
@@ -357,5 +484,64 @@ def main2():
     mape = check(df2,retList)
     print('mape:',mape)
 
+
+# 潜力国家发现，源自https://rivergame.feishu.cn/wiki/QcJYwxZKmiY31vkDwklcbYu5nrd
+# 将潜力国家数据在topwar中验证
+# 1、他们在topwar中花费排名
+# 2、他们的 ROI7 和 ROI360 以及 R360/R7    
+def f1(countryList):
+    startDayStr = '20230101'
+    endDayStr = '20231231'
+    revenueDf = getRevenueDataAndroidGroupByGeo(startDayStr,endDayStr)
+    adDf = getAdDataAndroidGroupByCampaignAndGeoAndMedia2(startDayStr,endDayStr)
+    adDf = adDf.groupby(['install_date','country_code'],as_index=False).sum().reset_index(drop=True)
+
+    df = revenueDf.merge(adDf,on=['install_date','country_code'],how='left')
+    
+    df = df.groupby(['country_code'],as_index=False).sum().reset_index(drop=True)
+
+    df['cost rate'] = df['cost']/df['cost'].sum()
+
+    # Initialize a dictionary to store country indices
+    country_indices = {country: {} for country in countryList}
+
+    # Sort by cost and store indices
+    df = df.sort_values(by=['cost'], ascending=False).reset_index(drop=True)
+    print(df.head(10))
+    for country in countryList:
+        index = df.index[df['country_code'] == country].tolist()[0]
+        country_indices[country]['cost_index'] = index
+
+    # Sort by ROI360 and store indices
+    df['roi360'] = df['revenue_d360'] / df['cost']
+    df = df.sort_values(by=['roi360'], ascending=False).reset_index(drop=True)
+    for country in countryList:
+        index = df.index[df['country_code'] == country].tolist()[0]
+        country_indices[country]['roi360_index'] = index
+
+    # Sort by revenue_d360/revenue_d7 and store indices
+    df['r360/r7'] = df['revenue_d360'] / df['revenue_d7']
+    df = df.sort_values(by=['r360/r7'], ascending=False).reset_index(drop=True)
+    for country in countryList:
+        index = df.index[df['country_code'] == country].tolist()[0]
+        country_indices[country]['r360/r7_index'] = index
+
+    # Merge indices into a single DataFrame
+    indices_df = pd.DataFrame.from_dict(country_indices, orient='index')
+
+    # Merge 'roi360' column into the DataFrame
+    roi360_df = df[['country_code', 'roi360']].set_index('country_code')
+    indices_df = indices_df.join(roi360_df)
+
+    indices_df.rename(columns={
+        'cost_index': '花费排名',
+        'roi360_index': 'roi360排名',
+        'r360/r7_index': 'r360/r7排名'
+    }, inplace=True)
+
+    print(indices_df)
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    f1(['RU','IT','UA','EG','CH', 'ES', 'AT', 'BR', 'BE'])

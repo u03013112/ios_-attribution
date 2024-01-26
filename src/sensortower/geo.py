@@ -113,38 +113,49 @@ def main():
         'and.onemt.boe.tr',
     ]
 
-    country_counts = defaultdict(int)
-    topwar_gp_countries = []
+    country_download_counts = defaultdict(int)
+    country_revenue_counts = defaultdict(int)
+    topwar_gp_download_countries = []
+    topwar_gp_revenue_countries = []
 
     N = 20
 
     for app in appList:
-        # df = getAndroidDownloadAndRevenue(app,startDate='2023-01-01',endDate='2023-12-31')
-        # df = df.groupby(['country']).agg({'downloads':'sum'}).reset_index()
-        # df = df.sort_values(['downloads'],ascending=False).reset_index(drop=True)
-        # df['rate'] = df['downloads']/df['downloads'].sum()
+        df = getAndroidDownloadAndRevenue(app, startDate='2023-01-01', endDate='2023-12-31')
+        df = df.groupby(['country']).agg({'downloads': 'sum', 'revenues': 'sum'}).reset_index()
 
-        # print(app)
-        # print(df)
+        print(app)
+        print(df)
 
-        # df.to_csv('/src/data/{}_downloads.csv'.format(app),index=False)
-        df = pd.read_csv('/src/data/{}_downloads.csv'.format(app))
+        df.to_csv('/src/data/{}_downloads.csv'.format(app),index=False)
+        # df = pd.read_csv('/src/data/{}_downloads.csv'.format(app))
         
-        # Update country counts and store top N countries for 'com.topwar.gp'
-        for index, row in df.head(N).iterrows():
-            country_counts[row['country']] += 1
+        # Sort by downloads and update counts
+        df_downloads = df.sort_values(['downloads'], ascending=False).reset_index(drop=True)
+        for index, row in df_downloads.head(N).iterrows():
+            country_download_counts[row['country']] += 1
             if app == 'com.topwar.gp':
-                topwar_gp_countries.append(row['country'])
+                topwar_gp_download_countries.append(row['country'])
 
-    # Find top N countries by count
-    top_countries = sorted(country_counts.items(), key=lambda x: x[1], reverse=True)[:N]
+        # Sort by revenues and update counts
+        df_revenues = df.sort_values(['revenues'], ascending=False).reset_index(drop=True)
+        for index, row in df_revenues.head(N).iterrows():
+            country_revenue_counts[row['country']] += 1
+            if app == 'com.topwar.gp':
+                topwar_gp_revenue_countries.append(row['country'])
+
+    # Find top N countries by download and revenue counts
+    top_download_countries = sorted(country_download_counts.items(), key=lambda x: x[1], reverse=True)[:N]
+    top_revenue_countries = sorted(country_revenue_counts.items(), key=lambda x: x[1], reverse=True)[:N]
 
     # Check if any top N countries are not in 'com.topwar.gp' top N countries
-    not_in_topwar_gp = [country for country, _ in top_countries if country not in topwar_gp_countries]
+    not_in_topwar_gp_downloads = [country for country, _ in top_download_countries if country not in topwar_gp_download_countries]
+    not_in_topwar_gp_revenues = [country for country, _ in top_revenue_countries if country not in topwar_gp_revenue_countries]
 
-    print("Top N countries:", top_countries)
-    print("Top N countries not in 'com.topwar.gp':", not_in_topwar_gp)
-
+    print("Top N countries by downloads:", top_download_countries)
+    print("Top N countries by downloads not in 'com.topwar.gp':", not_in_topwar_gp_downloads)
+    print("Top N countries by revenues:", top_revenue_countries)
+    print("Top N countries by revenues not in 'com.topwar.gp':", not_in_topwar_gp_revenues)
 
 
 if __name__ == '__main__':
