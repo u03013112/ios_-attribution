@@ -31,6 +31,7 @@ def getPayDataFromMC():
             app = 502
             and zone = 0
             and day between {oneMonthAgoStr} and {todayStr}
+            and app_package = 'id6448786147'
         group by
             install_day,
             game_uid
@@ -137,8 +138,8 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 
 from src.report.feishu.feishu import sendMessageDebug
 def main():
-    # df = getPayDataFromMC()
-    # df.to_csv('/src/data/payData.csv',index=False)
+    df = getPayDataFromMC()
+    df.to_csv('/src/data/payData.csv',index=False)
     df = pd.read_csv('/src/data/payData.csv')
 
     message = 'Lastwar CV档位自动测试\n\n'

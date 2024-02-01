@@ -79,5 +79,43 @@ def corr1():
 
 
 
+def debug():
+    sql = '''
+        select
+            count(distinct customer_user_id) as installs,
+            to_char(
+                to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
+                "yyyy-mm"
+            ) as install_date,
+            media_source as media
+        from
+            ods_platform_appsflyer_events
+        where
+            app_id = 'com.topwar.gp'
+            and event_name = 'install'
+            and zone = 0
+            and day >= 20230101
+            and day <= 20231231
+        group by
+            install_date,
+            media_source
+        ;
+    '''
+    df3 = execSql(sql)
+    df3.to_csv('/src/data/corr_debug.csv',index=False)
+
+    # media为空的，media2是0，其他非空的，media2是1
+    df3['media2'] = df3['media'].apply(lambda x:0 if pd.isnull(x) else 1)
+    df = df3.groupby(['install_date','media2']).agg({'installs':'sum'}).reset_index()
+    # df 打散成 media2=0 和 media2=1 变为两个列
+    df = df.pivot(index='install_date',columns='media2',values='installs').reset_index()
+    df.rename(columns={
+        0:'自然量下载',
+        1:'非自然量下载'
+    },inplace=True)
+
+    print(df.corr())
+
 if __name__ == '__main__':
-    corr1()
+    # corr1()
+    debug()
