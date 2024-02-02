@@ -893,7 +893,7 @@ def text2Fix():
 
 
 from src.report.feishu.report2 import main as feishuMain
-from src.report.feishu.feishu import sendMessageDebug
+from src.report.feishu.feishu import sendMessageDebug2
 def main(days = 7):
     # 获得目前的UTC0日期，格式20231018
     today = datetime.datetime.utcnow()

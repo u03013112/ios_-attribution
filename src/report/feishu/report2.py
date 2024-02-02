@@ -4,7 +4,7 @@ import os
 import sys
 sys.path.append('/src')
 
-from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,sendMessageDebug
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,sendMessageDebug2
 
 def main(dirFilePath):
     # 如果文件夹不存在，则退出
@@ -113,7 +113,7 @@ def main(dirFilePath):
     # # 发送消息
     message = f'海外iOS里程碑进度日报：https://rivergame.feishu.cn/docx/{docId}'
     # sendMessage(tenantAccessToken,message)
-    sendMessageDebug(message)
+    sendMessageDebug2(message)
     
     
 
