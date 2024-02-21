@@ -523,11 +523,12 @@ def text3():
         ret2 = ''
 
         for i in range(len(mediaDf)):
-            costOp = '下降' if mediaDf['cost环比'].iloc[i] < 0 else '上升'
+            # costOp = '下降' if mediaDf['cost环比'].iloc[i] < 0 else '上升'
+            costOp = '变化'
             if mediaDf['ROI24H环比'].iloc[i] > 0.5:
-                ret2 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比上升{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
+                ret2 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比变化{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
             if mediaDf['ROI24H环比'].iloc[i] < -0.5:
-                ret1 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比下降{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
+                ret1 += f'''{mediaDf["国家"].iloc[i]} ROI24H为{mediaDfCopy.iloc[i,2]},环比变化{mediaDfCopy['ROI24H环比'].iloc[i]}，花费{costOp}了{mediaDfCopy['cost环比'].iloc[i]}。\n'''
             
         filename = getFilename(f'report3Text_{media}_1','txt')
         with open(filename,'w') as f:
@@ -585,9 +586,9 @@ def text1():
             if df.iloc[i,0] == '所有国家汇总':
                 continue
             if df2.iloc[i,5] > threshold:
-                ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,3]}，环比上升{df.iloc[i,5]}。\n'
+                ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,3]}，环比变化{df.iloc[i,5]}。\n'
             if df2.iloc[i,5] < -1 * threshold:
-                ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,3]}，环比下降{df.iloc[i,5]}。\n'
+                ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,3]}，环比变化{df.iloc[i,5]}。\n'
     filename = getFilename('report1Text_2','txt')
     with open(filename,'w') as f:
         f.write(ret2)
@@ -668,9 +669,9 @@ def text1Fix():
                 if df.iloc[i,0] == '所有国家汇总':
                     continue
                 if df2.iloc[i,-2] > threshold:
-                    ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,-3]:.2f}，环比上升{df.iloc[i,-1]}。\n'
+                    ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,-3]:.2f}，环比变化{df.iloc[i,-1]}。\n'
                 if df2.iloc[i,12] < -1 * threshold:
-                    ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,-3]:.2f}，环比下降{df.iloc[i,-1]}。\n'
+                    ret2 += f'\t{df.iloc[i,0]}国家达标花费为{df.iloc[i,-3]:.2f}，环比变化{df.iloc[i,-1]}。\n'
     else:
         ret2 += '目前里程碑数据不足14天（满7日数据），暂时不细分国家环比变化。\n'
     print(ret2)
@@ -699,7 +700,8 @@ def text1Fix():
         if df.iloc[i,0] == '所有国家汇总':
             continue
 
-        costOp = '下降' if df2.iloc[i,12] < 0 else '上升'
+        # costOp = '下降' if df2.iloc[i,12] < 0 else '上升'
+        costOp = '变化'
         # 本周期结束时ROI7D低于KPI
         if df2.iloc[i,7] < df2.iloc[i,1] :
             ret3 += f'{df.iloc[i,0]} '
@@ -751,9 +753,9 @@ def textOrganic():
         if df1.iloc[i,0] == '所有国家汇总':
             continue
         if df1.iloc[i,12] > threshold1 and dfO.iloc[i,4] < -1 * thresholdO:
-            ret2 += f'{df1.iloc[i,0]} 达标花费环比上升{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比下降{dfO.iloc[i,4]*100:.2f}%，媒体表现变好。\n'
+            ret2 += f'{df1.iloc[i,0]} 达标花费环比变化{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比变化{dfO.iloc[i,4]*100:.2f}%，媒体表现变好。\n'
         if df1.iloc[i,12] < -1 * threshold1 and dfO.iloc[i,4] > thresholdO:
-            ret1 += f'{df1.iloc[i,0]} 达标花费环比下降{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比上升{dfO.iloc[i,4]*100:.2f}%，媒体表现变差。\n'
+            ret1 += f'{df1.iloc[i,0]} 达标花费环比变化{df1.iloc[i,12]*100:.2f}%，自然量回收占比环比变化{dfO.iloc[i,4]*100:.2f}%，媒体表现变差。\n'
     
     # print(ret)
     filename = getFilename('reportOrganicText_1','txt')
@@ -866,7 +868,8 @@ def text2Fix():
         for i in range(len(mediaDf)):
             if mediaDf.iloc[i,0] == '所有国家汇总':
                 continue
-            costOp = '下降' if mediaDf.iloc[i,7] < 0 else '上升'
+            # costOp = '下降' if mediaDf.iloc[i,7] < 0 else '上升'
+            costOp = '变化'
             if mediaDf.iloc[i,1] < mediaDf.iloc[i,kpi_min_index] and mediaDf.iloc[i,2] < mediaDf.iloc[i,kpi_min_index]:
                 # 上周期与本周期 都不达标
                 ret1 += f'{mediaDf.iloc[i,0]} 上周期ROI7D与KPI比较{mediaDfCopy.iloc[i,8]}，本周期ROI7D与KPI比较{mediaDfCopy.iloc[i,9]}，cost环比{costOp}{mediaDfCopy.iloc[i,7]}，存在风险。\n'
@@ -893,7 +896,7 @@ def text2Fix():
 
 
 from src.report.feishu.report2 import main as feishuMain
-from src.report.feishu.feishu import sendMessageDebug2
+from src.report.feishu.feishu import sendMessageDebug,sendMessageDebug2
 def main(days = 7):
     # 获得目前的UTC0日期，格式20231018
     today = datetime.datetime.utcnow()
