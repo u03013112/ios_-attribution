@@ -14,5 +14,5 @@ def androidIdToName(app_id):
         return "App not found."
 
 if __name__ == "__main__":
-    print(idToName("com.facebook.katana"))  # Facebook
+    print(androidIdToName("com.facebook.katana"))  # Facebook
     

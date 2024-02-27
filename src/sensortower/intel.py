@@ -153,14 +153,14 @@ def getAndroidTopApp(custom_fields_filter_id='6009d417241bc16eb8e07e9b',limit=10
     return df
 
 # 兼容ios
-def getTopApp(os='android',custom_fields_filter_id='6009d417241',time_range='year',limit=10,category='all',countries='US',startDate='2023-12-01',endDate='2023-12-31'):
+def getTopApp(os='android',custom_fields_filter_id='6009d417241',time_range='year',limit=10,category='all',countries='US',measure='units',startDate='2023-12-01',endDate='2023-12-31'):
     urlTail = ''
     if os == 'ios':
         urlTail = '&device_type=total'
         if category == 'all':
             category = '0'
 
-    url = 'https://api.sensortower.com/v1/{}/sales_report_estimates_comparison_attributes?comparison_attribute=absolute&time_range={}&measure=units&category={}&date={}&end_date={}&country={}&limit={}&custom_fields_filter_id={}&custom_tags_mode=exclude_unified_apps&auth_token={}'.format(os,time_range,category,startDate,endDate,countries,limit,custom_fields_filter_id,sensortowerToken)
+    url = 'https://api.sensortower.com/v1/{}/sales_report_estimates_comparison_attributes?comparison_attribute=absolute&time_range={}&measure={}&category={}&date={}&end_date={}&country={}&limit={}&custom_fields_filter_id={}&custom_tags_mode=exclude_unified_apps&auth_token={}'.format(os,time_range,measure,category,startDate,endDate,countries,limit,custom_fields_filter_id,sensortowerToken)
     url += urlTail
 
     r = requests.get(url)
@@ -232,6 +232,18 @@ def getDownloadAndRevenue(appid,os='android',countries='',date_granularity='dail
     return df
 
 
+def getRanking(platform='ios',category='7017',countries='KR',chartTypeIds='topfreeapplications',date='2024-02-27'):
+    url = 'https://api.sensortower.com/v1/{}/ranking?category={}&chart_type={}&country={}&date={}&auth_token={}'.format(platform,category,chartTypeIds,countries,date,sensortowerToken)
+    
+    r = requests.get(url)
+    if r.status_code != 200:
+        print('Error: getRanking failed, status_code:',r.status_code)
+        return None
+    
+    ret = r.json()
+    # print(ret)
+    return ret['ranking']
+
 if __name__ == '__main__':
     # print(getAndroidCategoryRanking('com.topwar.gp'))
 
@@ -256,5 +268,7 @@ if __name__ == '__main__':
     # print(getTopApp('android',custom_fields_filter_id='6009d417241bc16eb8e07e9b',limit=10,category='all',countries='US',startDate='2023-12-01',endDate='2023-12-31'))
     # print(getTopApp('ios',custom_fields_filter_id='6009d417241bc16eb8e07e9b',limit=10,countries='US',startDate='2023-12-01',endDate='2023-12-31'))
 
-    print(getDownloadAndRevenue(appid='com.topwar.gp',os='android',countries='US',date_granularity='monthly',startDate='2023-12-01',endDate='2023-12-31'))
+    # print(getDownloadAndRevenue(appid='com.topwar.gp',os='android',countries='US',date_granularity='monthly',startDate='2023-12-01',endDate='2023-12-31'))
     # print(getDownloadAndRevenue('1479198816',os='ios',countries='US',startDate='2023-12-01',endDate='2023-12-31',date_granularity='weekly'))
+
+    getRanking()

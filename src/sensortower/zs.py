@@ -213,6 +213,75 @@ def slgTopNDownloadsIndex(appId = 'com.topwar.gp',os = 'android',country = 'US',
     return appIdList
     
 
+# 添加可变化dateGranularity
+# 不再使用minDate，而是改为 stdStartDate, stdEndDate, indexStartDate, indexEndDate
+def slgTopNDownloadsIndex2(appId = 'com.topwar.gp',os = 'android',country = 'US',dateGranularity = 'weekly',N=10,downloadsOrRevenue='downloads',stdStartDate='',stdEndDate='',indexStartDate='',indexEndDate=''):
+    # 获取topwar的下载量，周为单位，从startDate到endDate
+    topwarDf = getDownloadAndRevenue(appId,os=os,countries=country,date_granularity=dateGranularity,startDate=indexStartDate,endDate=indexEndDate)
+    topwarDf = topwarDf[['date',downloadsOrRevenue]]
+    topwarDf['date'] = topwarDf['date'].apply(lambda x:x[:10])
+    
+    topwarDf['index'] = topwarDf[downloadsOrRevenue]
+
+    # 获取SLG top N的下载量的和，周为单位，从startDate到endDate
+    measure = 'units' if downloadsOrRevenue == 'downloads' else 'revenue'
+    topAppDf = getTopApp(os=os,custom_fields_filter_id='600a22c0241bc16eb899fd71',time_range='year',limit=N,category='all',measure = measure,countries=country,startDate=stdStartDate,endDate=stdEndDate)
+    appIdList = topAppDf['appId'].tolist()
+
+    # print(appIdList)
+    # 获得app名字
+    appNameList = []
+    for appId0 in appIdList:
+        if os == 'android':
+            appName = androidIdToName(appId0)
+        else:
+            appName = iOSIdToName(appId0)
+        appNameList.append(appName)
+    print(f'{os} {country} {downloadsOrRevenue} appNameList:',appNameList)
+
+    slgTopNDf = getDownloadAndRevenueSum(appIdList,os,country,dateGranularity,indexStartDate,indexEndDate)
+    slgTopNDf = slgTopNDf[['date',downloadsOrRevenue]]
+    slgTopNDf['date'] = slgTopNDf['date'].apply(lambda x:x[:10])
+
+    stdTopwarDf = topwarDf[(topwarDf['date'] >= stdStartDate) & (topwarDf['date'] <= stdEndDate)]
+    stdTopwarDownloadsMean = stdTopwarDf[downloadsOrRevenue].mean()
+    topwarDf['index'] = topwarDf[downloadsOrRevenue] / stdTopwarDownloadsMean * 1000
+
+    stdSlgTopNDf = slgTopNDf[(slgTopNDf['date'] >= stdStartDate) & (slgTopNDf['date'] <= stdEndDate)]
+    stdSlgTopNDfDownloadsMean = stdSlgTopNDf[downloadsOrRevenue].mean()
+    slgTopNDf['index'] = slgTopNDf[downloadsOrRevenue] / stdSlgTopNDfDownloadsMean * 1000
+
+    df = pd.merge(topwarDf,slgTopNDf,on='date',how='left',suffixes=('_topwar','_slg'))
+    # df = df[['date',f'{downloadsOrRevenue}_topwar',f'{downloadsOrRevenue}_slg','index_topwar','index_slg']]
+    df['date'] = pd.to_datetime(df['date'])
+    df.to_csv(f'/src/data/SLG_{downloadsOrRevenue}_{appId}_{os}_{country}_{indexStartDate}_{indexEndDate}_{N}.csv',index=False)
+
+    # 画
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(df['date'], df['index_topwar'],label='topwar')
+    ax1.plot(df['date'], df['index_slg'],label='slg')
+    ax1.set_xlabel('date')
+    ax1.set_ylabel('index')
+
+    # 添加中间竖线
+    stdStartDate_datetime = datetime.strptime(stdStartDate, '%Y-%m-%d')
+    stdEndDate_datetime = datetime.strptime(stdEndDate, '%Y-%m-%d')
+    plt.axvline(x=stdStartDate_datetime, color='r', linestyle='-', label='std start date')
+    plt.axvline(x=stdEndDate_datetime, color='r', linestyle='-', label='std end Date')
+
+    date_fmt = mdates.DateFormatter('%Y-%m-%d')
+    ax1.xaxis.set_major_formatter(date_fmt)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_{downloadsOrRevenue}_{appId}_{os}_{country}_{indexStartDate}_{indexEndDate}_{N}.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+
+    return appIdList
+    
+
 
 def corrTopNDownloadsIndex(appId = 'com.topwar.gp',os = 'android',country = 'US',startDate='',midDate='',endDate='',N=10):
     dateGranularity = 'weekly'
@@ -363,20 +432,242 @@ def slg2():
     slgTopNRevenuesIndex(os = 'ios',appId='1479198816',country = 'KR',startDate=startDate,midDate=midDate,endDate=endDate,N=20)
     slgTopNRevenuesIndex(os = 'ios',appId='1479198816',country = 'JP',startDate=startDate,midDate=midDate,endDate=endDate,N=20)
 
-# topwar长期指数，用2021年全年作为基准，单位是月
-# 指数统计 topwar所有时间的指数，目前2019年到2023年
-def slg3():
-    stdStartDate = '2021-01-01'
-    stdEndDate = '2021-12-31'
+def slg3(os = 'android',appId='com.topwar.gp'):
 
-    indexStartDate = '2019-01-01'
-    indexEndDate = '2023-12-31'
+    topwarDf = getDownloadAndRevenue(appId,os=os,countries='WW',date_granularity='monthly',startDate='2021-01-01',endDate='2023-12-31')
+    topwarDf['date'] = topwarDf['date'].apply(lambda x:x[:10])
+    # 取topwar的前12个月，即前12行的数据作为基准
+    # topwarDownloadsMean12 = topwarDf['downloads'].head(12).mean()
+    # 获取前12个数据
+    topwar_downloads_12 = topwarDf['downloads'].head(12)
+    # 获取最小值和最大值
+    min_value = topwar_downloads_12.nsmallest(1).iloc[0]
+    max_value = topwar_downloads_12.nlargest(1).iloc[0]
+    # 从数据中移除最小值和最大值
+    filtered_downloads = topwar_downloads_12[(topwar_downloads_12 != min_value) & (topwar_downloads_12 != max_value)]
+    # 计算剩余数据的均值
+    topwarDownloadsMean12 = filtered_downloads.mean()
 
-    # 获取stdStartDate到stdEndDate的Top 20 SLG id List
+    topwarDf['downloads index'] = topwarDf['downloads'] / topwarDownloadsMean12 * 1000 
+    # topwarRevenueMean12 = topwarDf['revenues'].head(12).mean()
+    topwar_revenues_12 = topwarDf['revenues'].head(12)
+    min_value = topwar_revenues_12.nsmallest(1).iloc[0]
+    max_value = topwar_revenues_12.nlargest(1).iloc[0]
+    filtered_revenues = topwar_revenues_12[(topwar_revenues_12 != min_value) & (topwar_revenues_12 != max_value)]
+    topwarRevenueMean12 = filtered_revenues.mean()
+    topwarDf['revenues index'] = topwarDf['revenues'] / topwarRevenueMean12 * 1000
+
+    topwarDf.drop(columns=['date'],inplace=True)
+    topwarDf.rename(columns={
+        'downloads':f'topwar downloads',
+        'revenues':f'topwar revenues',
+        'downloads index':f'topwar downloads index',
+        'revenues index':f'topwar revenues index'
+        },inplace=True)
+
+
+    dateList = [
+        {'stdStartDate':'2019-01-01','stdEndDate':'2019-12-31','indexStartDate':'2019-01-01','indexEndDate':'2022-12-31'},
+        {'stdStartDate':'2020-01-01','stdEndDate':'2020-12-31','indexStartDate':'2020-01-01','indexEndDate':'2023-12-31'},
+        {'stdStartDate':'2021-01-01','stdEndDate':'2021-12-31','indexStartDate':'2021-01-01','indexEndDate':'2023-12-31'},
+    ]
+
+    for date in dateList:
+        downloadsTop20Df = getTopApp(os=os,custom_fields_filter_id='600a22c0241bc16eb899fd71',time_range='year',limit=20,category='all',measure = 'units',countries='WW',startDate=date['stdStartDate'],endDate=date['stdEndDate'])
+        downloadsTop20AppIdList = downloadsTop20Df['appId'].tolist()
+
+        # 获得app名字
+        appNameList = []
+        for appId in downloadsTop20AppIdList:
+            if os == 'android':
+                appName = androidIdToName(appId)
+            else:
+                appName = iOSIdToName(appId)
+            appNameList.append(appName)
+        print(f'{date["stdStartDate"]} {os} WW downloads appNameList:',appNameList)
+
+        slgDownloadsTop20Df = getDownloadAndRevenueSum(downloadsTop20AppIdList,os,'WW','monthly',date['indexStartDate'],date['indexEndDate'])
+        slgDownloadsTop20Df['date'] = slgDownloadsTop20Df['date'].apply(lambda x:x[:10])
+        downloadsSLGTop20Mean12 = slgDownloadsTop20Df['downloads'].head(12).mean()
+        slgDownloadsTop20Df['downloads index'] = slgDownloadsTop20Df['downloads'] / downloadsSLGTop20Mean12 * 1000
+        slgDownloadsTop20Df = slgDownloadsTop20Df[['date','downloads','downloads index']]
+        yearStr = date['stdStartDate'][:4]
+        slgDownloadsTop20Df.rename(columns={
+            'downloads':f'{yearStr} downloads',
+            'downloads index':f'{yearStr} downloads index',
+            },inplace=True)
+        topwarDf = pd.concat([topwarDf.reset_index(drop=True), slgDownloadsTop20Df.reset_index(drop=True)], axis=1)
+
+        # revenue
+        revenuesTop20Df = getTopApp(os=os,custom_fields_filter_id='600a22c0241bc16eb899fd71',time_range='year',limit=20,category='all',measure = 'revenue',countries='WW',startDate=date['stdStartDate'],endDate=date['stdEndDate'])
+        revenuesTop20AppIdList = revenuesTop20Df['appId'].tolist()
+
+        # 获得app名字
+        appNameList = []
+        for appId in revenuesTop20AppIdList:
+            if os == 'android':
+                appName = androidIdToName(appId)
+            else:
+                appName = iOSIdToName(appId)
+            appNameList.append(appName)
+        print(f'{date["stdStartDate"]} {os} WW revenues appNameList:',appNameList)
+
+        slgRevenuesTop20Df = getDownloadAndRevenueSum(revenuesTop20AppIdList,os,'WW','monthly',date['indexStartDate'],date['indexEndDate'])
+        slgRevenuesTop20Df['date'] = slgRevenuesTop20Df['date'].apply(lambda x:x[:10])
+        revenuesSLGTop20Mean12 = slgRevenuesTop20Df['revenues'].head(12).mean()
+        slgRevenuesTop20Df['revenues index'] = slgRevenuesTop20Df['revenues'] / revenuesSLGTop20Mean12 * 1000
+        slgRevenuesTop20Df = slgRevenuesTop20Df[['date','revenues','revenues index']]
+        slgRevenuesTop20Df.rename(columns={
+            'revenues':f'{yearStr} revenues',
+            'revenues index':f'{yearStr} revenues index',
+            },inplace=True)
+        topwarDf = pd.concat([topwarDf.reset_index(drop=True), slgRevenuesTop20Df.reset_index(drop=True)], axis=1)
+
+    # 为topwarDf添加索引，就用行号做索引
+    topwarDf.index = range(1,len(topwarDf)+1)
+
+    topwarDf.to_csv(f'/src/data/SLG_topwar_{os}_WW_2019_2023.csv',index=False)
+    print(f'save to /src/data/SLG_topwar_{os}_WW_2019_2023.csv')
+
+    # 画图
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(topwarDf.index, topwarDf['topwar downloads index'],label='topwar downloads index')
+    ax1.plot(topwarDf.index, topwarDf['2019 downloads index'],label='2019 downloads index')
+    ax1.plot(topwarDf.index, topwarDf['2020 downloads index'],label='2020 downloads index')
+    ax1.plot(topwarDf.index, topwarDf['2021 downloads index'],label='2021 downloads index')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(topwarDf.index)
+    plt.tight_layout()
+    plt.legend()
     
+    filename = f'/src/data/SLG_topwar_{os}_WW_2019_2023_downloads.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(topwarDf.index, topwarDf['topwar revenues index'],label='topwar revenues index')
+    ax1.plot(topwarDf.index, topwarDf['2019 revenues index'],label='2019 revenues index')
+    ax1.plot(topwarDf.index, topwarDf['2020 revenues index'],label='2020 revenues index')
+    ax1.plot(topwarDf.index, topwarDf['2021 revenues index'],label='2021 revenues index')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(topwarDf.index)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_topwar_{os}_WW_2019_2023_revenues.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+def slg3p():
+    iosDf = pd.read_csv('/src/data/SLG_topwar_ios_WW_2019_2023.csv')
+    androidDf = pd.read_csv('/src/data/SLG_topwar_android_WW_2019_2023.csv')
+
+    N = 3
+
+    androidDf['topwar downloads index rolling3'] = androidDf['topwar downloads index'].rolling(window=N).mean()
+    androidDf['topwar revenues index rolling3'] = androidDf['topwar revenues index'].rolling(window=N).mean()
+    androidDf['2019 downloads index rolling3'] = androidDf['2019 downloads index'].rolling(window=N).mean()
+    androidDf['2019 revenues index rolling3'] = androidDf['2019 revenues index'].rolling(window=N).mean()
+    androidDf['2020 downloads index rolling3'] = androidDf['2020 downloads index'].rolling(window=N).mean()
+    androidDf['2020 revenues index rolling3'] = androidDf['2020 revenues index'].rolling(window=N).mean()
+    androidDf['2021 downloads index rolling3'] = androidDf['2021 downloads index'].rolling(window=N).mean()
+    androidDf['2021 revenues index rolling3'] = androidDf['2021 revenues index'].rolling(window=N).mean()
+    
+    # 画图
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(androidDf.index, androidDf['topwar downloads index rolling3'],label='topwar downloads index rolling3')
+    ax1.plot(androidDf.index, androidDf['2019 downloads index rolling3'],label='2019 downloads index rolling3')
+    ax1.plot(androidDf.index, androidDf['2020 downloads index rolling3'],label='2020 downloads index rolling3')
+    ax1.plot(androidDf.index, androidDf['2021 downloads index rolling3'],label='2021 downloads index rolling3')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(androidDf.index)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_topwar_android_WW_2019_2023_downloads_rolling3.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(androidDf.index, androidDf['topwar revenues index rolling3'],label='topwar revenues index rolling3')
+    ax1.plot(androidDf.index, androidDf['2019 revenues index rolling3'],label='2019 revenues index rolling3')
+    ax1.plot(androidDf.index, androidDf['2020 revenues index rolling3'],label='2020 revenues index rolling3')
+    ax1.plot(androidDf.index, androidDf['2021 revenues index rolling3'],label='2021 revenues index rolling3')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(androidDf.index)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_topwar_android_WW_2019_2023_revenues_rolling3.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+    iosDf['topwar downloads index rolling3'] = iosDf['topwar downloads index'].rolling(window=N).mean()
+    iosDf['topwar revenues index rolling3'] = iosDf['topwar revenues index'].rolling(window=N).mean()
+    iosDf['2019 downloads index rolling3'] = iosDf['2019 downloads index'].rolling(window=N).mean()
+    iosDf['2019 revenues index rolling3'] = iosDf['2019 revenues index'].rolling(window=N).mean()
+    iosDf['2020 downloads index rolling3'] = iosDf['2020 downloads index'].rolling(window=N).mean()
+    iosDf['2020 revenues index rolling3'] = iosDf['2020 revenues index'].rolling(window=N).mean()
+    iosDf['2021 downloads index rolling3'] = iosDf['2021 downloads index'].rolling(window=N).mean()
+    iosDf['2021 revenues index rolling3'] = iosDf['2021 revenues index'].rolling(window=N).mean()
+
+    # 画图
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(iosDf.index, iosDf['topwar downloads index rolling3'],label='topwar downloads index rolling3')
+    ax1.plot(iosDf.index, iosDf['2019 downloads index rolling3'],label='2019 downloads index rolling3')
+    ax1.plot(iosDf.index, iosDf['2020 downloads index rolling3'],label='2020 downloads index rolling3')
+    ax1.plot(iosDf.index, iosDf['2021 downloads index rolling3'],label='2021 downloads index rolling3')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(iosDf.index)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_topwar_ios_WW_2019_2023_downloads_rolling3.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+    fig, ax1 = plt.subplots(figsize=(16, 5))
+    ax1.plot(iosDf.index, iosDf['topwar revenues index rolling3'],label='topwar revenues index rolling3')
+    ax1.plot(iosDf.index, iosDf['2019 revenues index rolling3'],label='2019 revenues index rolling3')
+    ax1.plot(iosDf.index, iosDf['2020 revenues index rolling3'],label='2020 revenues index rolling3')
+    ax1.plot(iosDf.index, iosDf['2021 revenues index rolling3'],label='2021 revenues index rolling3')
+
+    ax1.set_xlabel('months count')
+    ax1.set_ylabel('index')
+    ax1.set_xticks(iosDf.index)
+    plt.tight_layout()
+    plt.legend()
+
+    filename = f'/src/data/SLG_topwar_ios_WW_2019_2023_revenues_rolling3.png'
+    plt.savefig(filename)
+    print(f'save to {filename}')
+    plt.close()
+
+
+
+
 
 if __name__ == '__main__':
     # slg()
     # corr()
-    slg2()
+    # slg2()
+    # slg3()
+    # slg3('ios',appId='1479198816')
+
+    slg3p()
     
