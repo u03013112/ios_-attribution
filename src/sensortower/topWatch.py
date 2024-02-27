@@ -8,6 +8,8 @@ from src.sensortower.intel import getRanking
 from src.sensortower.iosIdToName import iOSIdToNameWithCountry
 from src.sensortower.androidIdToName import androidIdToName
 
+import rpyc
+
 def topWatch():
     # N是榜单的前N名
     # days是一个阈值，当一个app在今天出现在topN中，并且过去days天内都不在topN中，就将这个app报上去
@@ -86,12 +88,23 @@ def topWatch():
                             'days':days
                         }
                         retList.append(ret)
-                        print(f"{platform} {country} {chartTypeName} {appName} {appId} 在{days}天内首次出现在top{N}中")
-                
-                
+                        print(f"{platform} {country} {chartTypeName} 《{appName}》 appID：{appId} 在过去{days}天内首次出现在top{N}中")
+
+    retStr = '' + today.strftime('%Y-%m-%d') + '策略游戏榜单监控结果：\n'
+    for ret in retList:
+        retStr += f"{ret['platform']} {ret['country']} {ret['chartTypeName']} 第{ret['index']}名 《{ret['appName']}》 appID：{ret['appId']} 在过去{ret['days']}天内首次出现在top{N}中\n"
+    
+    if len(retList) > 0:    
+        conn = rpyc.connect("192.168.40.62", 10001)
+        conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+
+def debug():
+    conn = rpyc.connect("192.168.40.62", 10001)
+    conn.root.sendMessageWithoutToken('测试','oc_1e418dff75881d2b0d85a5f701262cb8')
 
 if __name__ == '__main__':
     topWatch()
+    
     
 
     
