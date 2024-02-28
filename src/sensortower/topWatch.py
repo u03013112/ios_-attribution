@@ -10,7 +10,7 @@ from src.sensortower.androidIdToName import androidIdToName
 
 import rpyc
 
-def topWatch():
+def topWatch(isDebug=False):
     # N是榜单的前N名
     # days是一个阈值，当一个app在今天出现在topN中，并且过去days天内都不在topN中，就将这个app报上去
     N = 10
@@ -59,6 +59,9 @@ def topWatch():
                 lastAppIdList = []
 
                 today = datetime.datetime.now()
+                # 需要往前推一天，今天的榜单未完整，可能会导致漏过一些app
+                today = today - datetime.timedelta(days=1)
+
                 for day in range(days+1):
                     dayStr = (today - datetime.timedelta(days=day)).strftime('%Y-%m-%d')
                     # ranking 是类似 [6448786147, 6473006839, 6476766567, 1660160760,……] 的列表
@@ -88,21 +91,34 @@ def topWatch():
                             'days':days
                         }
                         retList.append(ret)
-                        print(f"{platform} {country} {chartTypeName} 《{appName}》 appID：{appId} 在过去{days}天内首次出现在top{N}中")
+                        # print(f"{platform} {country} {chartTypeName} 《{appName}》 appID：{appId} 在过去{days}天内首次出现在top{N}中")
 
-    retStr = '' + today.strftime('%Y-%m-%d') + '策略游戏榜单监控结果：\n'
-    for ret in retList:
-        retStr += f"{ret['platform']} {ret['country']} {ret['chartTypeName']} 第{ret['index']}名 《{ret['appName']}》 appID：{ret['appId']} 在过去{ret['days']}天内首次出现在top{N}中\n"
+    retStr = '' + today.strftime('%Y-%m-%d') + f' {days}天内首次出现在策略游戏类top{N}中的APPs：\n'
+    for chartTypeName in chartTypeNamesList:
+        retStr += chartTypeName + '：\n'
+        count = 0
+        for ret in retList:
+            if ret['chartTypeName'] == chartTypeName:
+                count += 1
+                retStr += f"{ret['platform']} {ret['country']} 第{ret['index']}名 《{ret['appName']}》 appID：{ret['appId']}\n"
+        if count == 0:
+            retStr += '无\n'
+        retStr += '\n'
     
-    if len(retList) > 0:    
-        conn = rpyc.connect("192.168.40.62", 10001)
-        conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
-
-def debug():
-    conn = rpyc.connect("192.168.40.62", 10001)
-    conn.root.sendMessageWithoutToken('测试','oc_1e418dff75881d2b0d85a5f701262cb8')
+    if len(retList) > 0:  
+        print(retStr)  
+        if not isDebug:
+            conn = rpyc.connect("192.168.40.62", 10001)
+            conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+    else:
+        retStr = today.strftime('%Y-%m-%d') + '没有发现新的app上榜\n'
+        print(retStr)
+        if not isDebug:
+            conn = rpyc.connect("192.168.40.62", 10001)
+            conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
 
 if __name__ == '__main__':
+    # topWatch(isDebug=True)
     topWatch()
     
     
