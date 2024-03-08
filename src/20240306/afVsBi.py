@@ -16,7 +16,7 @@ apps = [
 
 # 获得AF支付数据，按自然月汇总
 def getAfPurchaseData(app, startDate='20230601', endDate='20240301', platform = 'ios'):
-    filename = f'/src/data/afPurchase_{app}_{startDate}_{endDate}_{platform}.csv'
+    filename = f'/src/data/afPurchase_{app["name"]}_{startDate}_{endDate}_{platform}.csv'
     print(filename)
     if os.path.exists(filename):
         return pd.read_csv(filename)
@@ -29,7 +29,7 @@ def getAfPurchaseData(app, startDate='20230601', endDate='20240301', platform = 
 
         sql = f'''
             select
-                SUBSTRING(install_time, 1, 7) AS af_install_date,
+                SUBSTRING(install_time, 1, 10) AS af_install_date,
                 SUM(
                     case when event_timestamp - install_timestamp between 0 and 86400 
                         then event_revenue_usd else 0 
@@ -66,7 +66,7 @@ def getBiPurchaseData(app, startDate='20230601', endDate='20240301', platform = 
         if app['name'] == 'topwar':
             sql = f'''
                 select
-                    to_char(from_unixtime(cast(install_timestamp as bigint)),'yyyy-mm') as af_install_date,
+                    to_char(from_unixtime(cast(install_timestamp as bigint)),'yyyy-mm-dd') as af_install_date,
                     sum(
                         case when event_time - cast(install_timestamp as bigint) between 0 and 86400
                             then revenue_value_usd else 0
@@ -85,7 +85,7 @@ def getBiPurchaseData(app, startDate='20230601', endDate='20240301', platform = 
         else:
             sql = f'''
                 select
-                    to_char(from_unixtime(cast(install_timestamp as bigint)),'yyyy-mm') as af_install_date,
+                    to_char(from_unixtime(cast(install_timestamp as bigint)),'yyyy-mm-dd') as af_install_date,
                     sum(
                         case when event_time - cast(install_timestamp as bigint) between 0 and 86400
                             then revenue_value_usd else 0
@@ -120,12 +120,22 @@ def main():
 
         # 计算差异
         df['diff'] = (df['24hours_revenue_af'] - df['24hours_revenue_bi']) / df['24hours_revenue_bi']
-        print(df)
+        # 限制差异的范围
+        # df.loc[df['diff'] > 0.5, 'diff'] = 0.5
+        df = df[df['diff'] < 0.5]
+
+        df.to_csv(f'/src/data/afVsBi_{app["name"]}.csv', index=False)
+
+        # 计算diff的均值
+        print(f'{app["name"]} diff mean: {df["diff"].mean()}')
+        print(f'{app["name"]} diff 超过0.1的天数: {df[df["diff"] > 0.1].shape[0]}')
+        print(f'{app["name"]} diff 超过0.2的天数: {df[df["diff"] > 0.2].shape[0]}')
+
 
         # 画图
         fig, ax = plt.subplots(figsize=(16, 6))
-        
-        # 设置af_install_date为x轴
+
+        df['af_install_date'] = pd.to_datetime(df['af_install_date'])
         x = df['af_install_date']
 
         # 设置第一个Y轴显示af数据和bi数据
@@ -135,6 +145,10 @@ def main():
         # 创建第二个Y轴，显示diff数据
         ax2 = ax.twinx()
         ax2.plot(x, df['diff'], label='Difference', linestyle='--')
+
+        # 设置x轴的刻度，每7天显示一个刻度
+        ax.xaxis.set_major_locator(mdates.DayLocator(interval=7))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
 
         # 设置标题和标签
         ax.set_title('AF vs BI Revenue')
@@ -146,7 +160,13 @@ def main():
         ax.legend(loc='upper left')
         ax2.legend(loc='upper right')
 
+        # 隐藏第一个Y轴的刻度标签
+        ax.set_yticklabels([])
+        # 自动旋转日期标签以防止重叠
+        plt.gcf().autofmt_xdate()
+
         plt.savefig(f'/src/data/afVsBi_{app["name"]}.png')
+        print(f'save file: /src/data/afVsBi_{app["name"]}.png')
 
 if __name__ == '__main__':
     main()
