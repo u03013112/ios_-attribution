@@ -144,9 +144,103 @@ def debug1():
 # 可以保守一些，找到合法范围完全在这个时间段内的SKAN数据
 # 如果仍然有较大比例的CV缺失，可能是打点问题
 
+import os
+import sys
+sys.path.append('/src')
+from src.maxCompute import execSql
+
+def getDiffData(startDayStr,endDayStr):
+    filename1 = f'/src/data/zk/q1f1_{startDayStr}_{endDayStr}.csv'
+    filename2 = f'/src/data/zk/q1f2_{startDayStr}_{endDayStr}.csv'
+    if not os.path.exists(filename1):    
+        sql1 = f'''
+            select
+                campaign_id,
+                media,
+                cv,
+                sum(count) as count,
+                sum(usd) as usd
+            from lastwar_ios_rh_skan
+            where
+                day between '{startDayStr}' and '{endDayStr}'
+            group by
+                campaign_id,
+                media,
+                cv
+            ;
+        '''
+        print(sql1)
+        df1 = execSql(sql1)
+        df1.to_csv(filename1, index=False)
+    else:
+        print('read from file:',filename1)
+        df1 = pd.read_csv(filename1)
+
+    if not os.path.exists(filename2):    
+        sql2 = f'''
+            select
+                campaign_id,
+                media,
+                cv,
+                sum(count) as count,
+                sum(usd) as usd
+            from lastwar_ios_rh_skan_failed
+            where
+                day between '{startDayStr}' and '{endDayStr}'
+            group by
+                campaign_id,
+                media,
+                cv
+            ;
+        '''
+        print(sql2)
+        df2 = execSql(sql2)
+        df2.to_csv(filename2, index=False)
+    else:
+        print('read from file:',filename2)
+        df2 = pd.read_csv(filename2)
+
+    df = pd.merge(df1, df2, how='outer',on=['campaign_id','media','cv'], suffixes=('_skan', '_failed')).reindex()
+    df = df.fillna(0)
+    df.to_csv('/src/data/zk/q1f3.csv', index=False)
+
+    # 整体统计，失败的count占比，失败的usd占比
+    print('整体统计，失败的count占比，失败的usd占比')
+    count_failed_rate = df['count_failed'].sum() / df['count_skan'].sum()
+    usd_failed_rate = df['usd_failed'].sum() / df['usd_skan'].sum()
+    print(count_failed_rate,usd_failed_rate)
+
+    # 分媒体统计，失败的count占比，失败的usd占比
+    print('分媒体统计，失败的count占比，失败的usd占比')
+    groupByMediaDf = df.groupby(['media']).agg('sum').reset_index()
+    groupByMediaDf['count_failed_rate'] = groupByMediaDf['count_failed'] / groupByMediaDf['count_skan']
+    groupByMediaDf['usd_failed_rate'] = groupByMediaDf['usd_failed'] / groupByMediaDf['usd_skan']
+    print(groupByMediaDf[['media','cv','count_failed_rate','usd_failed_rate']])
+    
+    # 针对每个cv，失败的count占比，失败的usd占比
+    print('针对每个cv，失败的count占比，失败的usd占比')
+    groupByCvDf = df.groupby(['cv']).agg('sum').reset_index()
+    groupByCvDf['count_failed_rate'] = groupByCvDf['count_failed'] / groupByCvDf['count_skan']
+    groupByCvDf['usd_failed_rate'] = groupByCvDf['usd_failed'] / groupByCvDf['usd_skan']
+    print(groupByCvDf[['cv','count_failed_rate','usd_failed_rate']])
+
+    # 针对每个媒体，再分cv，失败的count占比，失败的usd占比
+    print('针对每个媒体，再分cv，失败的count占比，失败的usd占比')
+    mediaList = df['media'].unique()
+    for media in mediaList:
+        mediaDf = df[df['media'] == media]
+        mediaDf = mediaDf.groupby(['cv']).agg('sum').reset_index()
+        mediaDf['count_failed_rate'] = mediaDf['count_failed'] / mediaDf['count_skan']
+        mediaDf['usd_failed_rate'] = mediaDf['usd_failed'] / mediaDf['usd_skan']
+        print(media)
+        print(mediaDf[['cv','count_failed_rate','usd_failed_rate']])
+
+    
+
 if __name__ == '__main__':
     # dataStep1()
     # dataStep2()
     # dataStep3()
-    debug()
+    # debug()
     # debug1()
+    getDiffData('20240304','20240319')

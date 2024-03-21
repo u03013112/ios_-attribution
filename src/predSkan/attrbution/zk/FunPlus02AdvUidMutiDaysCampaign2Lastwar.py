@@ -1,3 +1,8 @@
+# 修改线上版本代码
+# 1. 记录SKAN到lastwar_ios_rh_skan
+# 2. 记录融合归因失败的SKAN到lastwar_ios_rh_skan_failed
+# 方便后续分析，后续分析代码在src/20240320/q1.py
+
 # FunPlus02AdvUidMutiDays Campaign版本2 lastwar 版本
 # 将国家分组成几个大区，分别是GCC、KR、US、JP、other，这是iOS海外KPI分组
 # 不再放宽国家限制，这样至少大范围上用户不会再出现KPI国家错误，即只投放了US的campaign缺匹配到一些别的国家的用户的情况
@@ -68,7 +73,8 @@ def getSKANDataFromMC(dayStr, days):
             ad_network_campaign_id as campaign_id,
             media_source as media,
             skad_conversion_value as cv,
-            timestamp as postback_timestamp
+            timestamp as postback_timestamp,
+            day
         FROM 
             ods_platform_appsflyer_skad_details
         WHERE
@@ -436,7 +442,7 @@ def meanAttributionFastv2(userDf, skanDf):
     skanDf['count'] = 1
     skanDf['usd'] = skanDf['usd'].fillna(0)
 
-    skanDf = skanDf.groupby(['campaign_id','cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','media','usd']).agg({'count': 'sum'}).reset_index(drop = False)
+    skanDf = skanDf.groupby(['campaign_id','media','cv', 'country_code_list', 'min_valid_install_timestamp', 'max_valid_install_timestamp','usd','day']).agg({'count': 'sum'}).reset_index(drop = False)
 
     skanDf['usd x count'] = skanDf['usd'] * skanDf['count']
 
@@ -579,6 +585,11 @@ def meanAttributionFastv2(userDf, skanDf):
             print('所有的skan都已经分配完毕')
             break
     
+
+    skanFailedDf = skanDf.loc[pending_skan_indices]
+    skanFailedDf['postback_timestamp'] = 0
+    writeSkanToDB(skanFailedDf,'lastwar_ios_rh_skan_failed')
+
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
     userDf = userDf.explode('customer_user_id')
@@ -615,6 +626,7 @@ def check(dayStr):
                 'af_skad_install',
                 'af_skad_redownload'
             )
+        limit 10
         ;
     '''
     print(sql)
@@ -643,6 +655,30 @@ def createTable():
     else:
         print('createTable failed, o is not defined')
 
+# 将处理好的skan存入表中
+def createSkanTable(table_name = 'lastwar_ios_rh_skan'):
+    if 'o' in globals():
+        columns = [
+            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
+            Column(name='media', type='string', comment='media,like Facebook Ads'),
+            Column(name='cv', type='string', comment='conversion value,like 1'),
+            Column(name='postback_timestamp', type='bigint', comment='postback time,like 1650000000'),
+            Column(name='min_valid_install_timestamp', type='bigint', comment='min valid install time,like 1650000000'),
+            Column(name='max_valid_install_timestamp', type='bigint', comment='max valid install time,like 1650000000'),
+            Column(name='usd', type='double', comment='usd,like 1.0'),
+            Column(name='count', type='bigint', comment='count,like 1'),
+        ]
+        
+        partitions = [
+            Partition(name='day', type='string', comment='postback time,like 20221018')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table = o.create_table(table_name, schema, if_not_exists=True)
+        return table
+    else:
+        print('createTable failed, o is not defined')
+
+
 def deleteTable(dayStr):
     print('try to delete table:',dayStr)
     if 'o' in globals():
@@ -662,6 +698,33 @@ def writeTable(df,dayStr):
         print('try to write csv file')
         df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
 
+def writeSkanTable(df,dayStr,table_name = 'lastwar_ios_rh_skan'):
+    # 格式整理
+    df['postback_timestamp'] = df['postback_timestamp'].astype('int64')
+    df['min_valid_install_timestamp'] = df['min_valid_install_timestamp'].astype('int64')
+    df['max_valid_install_timestamp'] = df['max_valid_install_timestamp'].astype('int64')
+    df['usd'] = df['usd'].astype('float64')
+
+    print('try to write table:')
+    print(df.head(5))
+    if 'o' in globals():
+        t = o.get_table(table_name)
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
+            writer.write(df)
+    else:
+        print('writeTable failed, o is not defined')
+        print('try to write csv file')
+        df.to_csv(f'/src/data/zk2/{table_name}_%s.csv'%(dayStr),index=False)
+
+def writeSkanToDB(skanDf,tabelName):
+    days = skanDf['day'].unique().tolist()
+    days.sort()
+    for dayStr in days:
+        # print('dayStr:',dayStr)
+        dayDf = skanDf[skanDf['day'] == dayStr]
+        writeSkanTable(dayDf,dayStr,tabelName)
+
 def main():
     print('dayStr:', dayStr)
     print('days:', days)
@@ -669,7 +732,7 @@ def main():
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr,days)
     # 将skanDf中media不属于mediaList的media改为other
-    skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
+    # skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
     # skanDf = skanDf[skanDf['media'].isin(mediaList)]
     # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
     skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
@@ -712,6 +775,10 @@ def main():
 
     # userDf = pd.read_csv('/src/data/zk/userDf2.csv',dtype={'customer_user_id':str})
     # skanDf = pd.read_csv('/src/data/zk/skanDf2.csv')
+
+    # 将skanDf2存档
+    skanDf['count'] = 1
+    writeSkanToDB(skanDf,'lastwar_ios_rh_skan')
 
     # 进行归因
     userDf = meanAttributionFastv2(userDf,skanDf)
@@ -771,6 +838,8 @@ def main():
 
 init()
 createTable()
+createSkanTable('lastwar_ios_rh_skan')
+createSkanTable('lastwar_ios_rh_skan_failed')
 
 main()
 
