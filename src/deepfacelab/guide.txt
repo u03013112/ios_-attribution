@@ -1,0 +1,850 @@
+DeepFaceLab 2.0 Guide
+
+READ ENTIRE GUIDE, AS WELL AS FAQS AND USE THE SEARCH OPTION BEFORE YOU POST A NEW QUESTION OR CREATE A NEW THREAD ABOUT AN ISSUE YOU'RE EXPERIENCING!
+IF YOU WANT TO MAKE YOUR OWN GUIDE BASED ON MINE OR ARE REPOSTING IT, PLEASE CREDIT ME, DON'T STEAL IT.
+IF YOU LEARNED SOMETHING USEFUL, CONSIDER A DONATION SO I CAN KEEP MAINTAINING THIS GUIDE, IT TOOK MANY HOURS TO WRITE.
+​
+DFL 2.0 DOWNLOAD (GITHUB, MEGA AND TORRENT): DOWNLOAD
+DEEP FACE LIVE: DOWNLOAD
+DFL 2.0 GITHUB PAGE (new updates, technical support and issues reporting): GITHUB
+
+Colab guide and link to original implementation: https://mrdeepfakes.com/forums/thread-guide-deepfacelab-google-colab-tutorial
+DFL paper (technical breakdown of the code): https://arxiv.org/pdf/2005.05535.pdf
+Other useful guides and threads: https://mrdeepfakes.com/forums/thread-making-deepfakes-guides-and-threads[/LEFT]
+
+STEP 0 - INTRODUCTION:
+​
+1. Requirements.
+
+Usage of Deep Face Lab 2.0 requires high performance PC with modern GPU, ample RAM, storage and fast CPU. Windows 10 is generally recommended for most users but more advanced users may want to use Linux to get better performance. Windows 11 also works.
+
+Minimum requirements for making very basic and low quality/resolution deepfakes:
+
+- modern 4 core CPU supporting AVX and SSE instructions
+- 16GB of RAM
+- modern Nvidia or AMD GPU with 8GB of VRAM
+- plenty of storage space and large pagefile
+
+Make sure to enable Hardware-Accelerated GPU Scheduling under Windows 10/11 and ensure your gpu drivers are up-to-date.
+
+2. Download correct build of DFL for your GPU (build naming scheme may change):
+
+- for Nvidia GTX 900-1000 and RTX 2000 series and other GPUs utilizing the same architectures as those series use "DeepFaceLab_NVIDIA_up_to_RTX2080Ti" build.
+- for Nvidia RTX 3000-4000 series cards and other GPUs utilizing the same architectures use "DeepFaceLab_NVIDIA_RTX3000_series" build.
+- for modern AMD cards use "DeepFaceLab_DirectX12" build (may not work on some older AMD GPUs).
+
+STEP 1 - DFL BASICS:
+​
+DeepFaceLab 2.0 consists of several .bat, these scripts are used to run various processes required to create a deepfakes, in the main folder you'll see them and 2 folders:
+_internal - internal files, stuff that makes DFL work, No Touchy!
+workspace - this is where your models, videos, frames, datasets and final video outputs are.
+Basic terminology:
+
+SRC - always refers to content (frames, faces) of the person whose face we are trying to swap into a target video or photo.
+
+SRC set/SRC dataset/Source dataset/SRC faces - extracted faces (square ratio image file of the source face that contains additional data like landmarks, masks, xseg labels, position/size/rotation on original frame) of the person we are trying to swap into a video.
+
+DST - always refers to content (frames, faces) from the target video (or DST/DST video) we are swapping faces in.
+
+DST set/DST dataset/Target dataset/DST faces - collection of extracted faces of the target person whose faces we will be replacing with likeness of SRC, same format and contains the same type of data as SRC faces.
+
+Frames - frames extracted from either source or target videos, after extraction of frames they're placed inside "data_src" or "data_dst" folders respectively.
+
+Faces - SRC/DST images of faces extracted from original frames derived from videos or photos used.
+
+Model - collection of files that make up SAEHD, AMP and XSeg models that user can create/train, all are placed inside the "model" folder which is inside the "workspace" folder, basic description models below (more detailed later in the guide):
+
+1. SAEHD - most popular and most often used model, comes in several different variants based on various architectures, each with it's own advantages and disadvantages however in general it's meant to swap faces when both SRC and DST share some similarities, particularly general face/head shape. Can be freely reused, pretrained and in general can offer quick results at decent quality but some architectures can suffer from low likeness or poor lighting and color matching.
+
+2. AMP - new experimental model that can adapt more to the source data and retain it's shape, meaning you can use it to swap faces that look nothing alike however this requires manual compositing as DFL does not have more advanced masking techniques such as background inpainting. Unlike SAEHD doesn't have different architectures to choose from and is less versatile when it comes to reusal and takes much longer to train, also doesn't have pretrain option but can offer much higher quality and results can look more like SRC.
+
+3. Quick 96 - Testing model, uses SAEHD DF-UD 96 resolution parameters and Full Face face type, meant for quick tests.
+
+4. XSeg - User trainable masking model used to generate more precise masks for SRC and DST faces that can exlcude various obstructions (depending on users labels on SRC and DST faces), DFL comes with generic trained Whole Face masking model you can use if you don't want to create your own labels right away.
+
+XSeg labels - labels created by user in the XSeg editor that define shapes of faces, may also include exclusions (or not include in the first place) obstructions over SRC and DST faces, used to train XSeg model to generate masks.
+
+Masks - generated by XSeg model, masks are needed to define areas of the face that are supposed to be trained (be it SRC or DST faces) as well as define shape and obstructions needed for final masking during merging (DST). A form of basic masks is also embeded into extracted faces by default which is derived from facial landmarks, it's a basic mask that can be used to do basic swaps using Full Face face type models or lower (more about face types and masks later in the guide)
+
+Now that you know some basic terms it's time to figure out what exactly you want to do.
+
+Depending on how complex the video you're trying to face swap is you'll either need just few interviews or you may need to collect way more source content to create your SRC dataset which may also include high resolution photos, movies, tv shows and so on, the idea is to build a set that covers as many angles, expressions and lighting conditions that are present in the target video as possible, as you may suspect this is the most important part of making a good deepfake, it's not always possible to find all required shots hence why you'll never be able to achieve 100% success with all videos you make, even once you learn all the tricks and techniques unless you focus only on very simple videos. And remember that's it's not about the number of faces, it's all about the variety of expressions, angles and lighting conditions while maintaining good quality across all faces, also the less different sources you'll end up using the better resemblance to the source will be as the model will have easier time learning faces that come from the same source as opposed to having to learn same amount of faces that come from more different sources.
+
+A good deepfake also requires that both your source and target person have similarly shaped heads, while it is possible to swap people that look nothing alike and the new AMP model promises to address the issue of diffrent face shapes a bit it's still imporant that the width and length of a head as well as shape of jawline, chin and the general proportions of a face are similar for optimal results. If both people also make similar expressions then that's even better.
+
+Let's assume you know what video you'll be using as a target, you collected plenty of source data to create a source set or at least made sure that there is enough of it and that it is good quality, both your source and target person have similarly shaped head, now we can move on to the process of actually creating the video, follow the steps below:
+
+STEP 2 - WORKSPACE CLEANUP/DELETION:​
+
+1) Clear Workspace - deletes all data from the "workspace" folder, there are some demo files by deafult in the "workspace" folder when you download new build of DFL that you can use to practise your first fake, you can delete them by hand or use this .bat to cleak your "workspace" folder but as you rarely just delete models and datasets after you finish working on a project this .bat is basically useless and dangerous since you can accidentally delete all your work hence why I recommend you delete this .bat.
+
+STEP 3 - SOURCE CONTENT COLLECTION AND EXTRACTION:​
+
+To create a good quality source dataset you'll need to find source material of your subject, that can be photos or videos, videos are preferred due to variety of expressions and angles that are needed to cover all possible appearances of face so that model can learn it correct, photos on the other hand often offer excelent detail and are prefect for simple frontal scenes and will provide much sharper results. You can also combine videos and photos. Below are some things that you need to ensure so that your source dataset is as good as it can be.
+
+1. Videos/photos should cover all or at least most of possible face/head angles - looking up, down, left, right, straight at camera and everything in between, the best way to achieve it is to use more than one interview and many movies instead of relying on single video (which will mostly feature one angle and some small variations and one lighting type).
+
+TIP: If your DST video does not contain certain angles (like side face profiles) or lighting conditions there is no need to include sources with such ligthing and angles, you can create a source set that works only with specific types of angles and lighting or create a bigger and more universal set that should work across multiple different target videos. It's up to you how many different videos you'll use but remember that using too many different sources that actually decrease resemblance of your results, if you can cover all angles and few required lighting conditions with less sources it's always better to actually use less content and thus keeping the SRC set smaller.
+
+2. Videos/photos should cover all different facial expressions - that includes open/closed mouths, open/closed eyes, smiles, frowns, eyes looking in different directions - the more variety in expressions you can get the better results will be.
+
+3. Source content should be consistent - you don't want blurry, low resolution and heavilly compressed faces next to crisp, sharp and high quality ones so you should only use the best quality videos and photos you can find, if however you can't or certain angles/expressions are present only in lower quality/blurry video/photo then you should keep those and attempt to upscaled them.
+
+Upscaling can be done directly on frames or video using software like Topaz or on faces (after extraction) like DFDNet, DFL Enhance, Remini, GPEN and many more (new upscalling methods are created all the time, machine learning is constantly evolving).
+
+TIP: Good consistency is especially important in the following cases:
+
+Faces with beards - try to only use single movie or photos and interviews that were shot on the same day, unless the face you're going to swap is small and you won't be able to tell individual hair apart, in that case mixing of source shot at different dates is allowed but only as long the beard stilll has similar appearance.
+
+Head swaps with short hair - due to more random nature of hair on heads you shoulld only be using content that was shot on the same (interviews, photos) and don't mix it with other content, or if you're using a movie then stick to one movie.
+
+Exception to above would be if hair and beard is always stylized in the same way or is fake and thus doesn't change, in that case mix as many sources as you wish to.
+
+Faces with makeup - avoid including sources where makeup differs significantly from the type given person typically has, if you must use videos or photos with specific makeup that doesn't go along with others try to color correct frames (after extraction on frames with batch image processing or before during video editing), this can be done after extraction too but requires one to save metadata first and restore it afteer editing faces, more about it in next step).
+
+4. Most of it should be high quality - as mentioned above, you can leave use some blurry photos/videos but only when you can't find certain expressions/face angles in others but make sure you upscale them to acceptable quality, too many upscaled conteent may have negative effect on quality so it's best to use it only on small portion of the dataset (if possible, in some cases close to 100% of your set may need to be enhanced in some way).
+
+5. Lighting should be consistent - some small shadows are OK but you shouldn't include content with harsh, directional lighting, if possible try to use only those where shadows are soft and light is diffused. For LIAE architectures it may not be as important as it can handle lighting better but for DF architectures it's important to have several lighting conditions for each face angle, preferably at least 3 (frontal diffuse, left and right with soft shadows, not too dark, details must still be visible in the shadowed area or no shadows, just diffused lighting that creates brigher areas on either left or right side of the face). Source faceset/dataset can contain faces of varying brightness but overly dark faces should not be included unless your DST is also dark.
+
+6. If you are using only pictures or they are a majority of the dataset - make sure they fill all the checks as mentioned above, 20 or so pictures is not enough. Don't even bother trying to make anything with so little pictures.
+
+7. Keep the total amount of faces in your source dataset around 3.000 - 8.000 - in some cases larger set may be required but I'd recommend to keep it under 12k for universal sets, 15k if really neecessary, larger sets then to produce more vague looking results, they also will take significantly longer to train but if your target video covers just about every imaginable angle then big SRC set willl be required to cover all those angles.
+
+Now that you've colllected your source content it's time to extract frames from videos (photos don't need much more work but you can look through them and delete any blurry/low res pictures, black and white pictures, etc).
+
+TIP: Re.gardles the method of extraction of frames you'll use prepare folders for all different sources in advance.
+
+You can place them anywhere bu I like to place them in the workspace folder next to data_src, data_dst and model folders, name those folders according to the sources used (movie title, interview title, event or date for photos) and then place corresponding frames in them after extraction is done and then rename each set of frames so that it's clear where given faces came from.
+
+These names get embedded into the faces after face extraction (step 4) so even if you then rename them (faces) or sort them, they retain original filename which you can restore using a .bat that you'll learn about in step 4.
+
+You can extract frames in few different ways:
+
+a) you extract each video separately by renaming each to as data_src (video should be in mp4 format but DFL uses FFMPEG so it potentialy should handle any format and codec) by using 2) Extract images from video data_src to extract frames from video file, after which they get outputted into "data_src" folder (it is created automatically), available options:
+
+- FPS - skip for videos default frame rate, enter numerical value for other frame rate (for example entering 5 will only render the video as 5 frames per second, meaning less frames will be extracted), depending on length I recommend 5-10FPS for SRC frames extraction regardless of how you're extracting your frames (method b and c)
+
+- JPG/PNG - choose the format of extracted frames, jpgs are smaller and have slightly lower quality, pngs are larger but extracted frames have better quality, there should be no loss of quality with PNG compared to original video.
+
+b) you import all videos into a video editing software of your choice, making sure you don't edit videos of different resolutions together but instead process 720p, 1080p, 4K videos separetely, at this point you can also cut down videos to keep just the best shots that have the best quality faces, so shots where faces are far away/small, are blurry (out of focus, severe motion blur), are very dark or lit with single colored lighting or just that the lighting isn't very natural or has very bright parts and dark shadows at the same time as well as shots where majority of the face is obstrcuted should be discarded unless it's a very unique expression that doesn't occur often or it's at an angle that is also rarely found (such as people looking directly up/down) or if your target video actually has such stylized lighting, sometimes you just have to these lower quality faces if you can't find given angle anywhere else, next render the videos directly into either jpg or png frames into your data_src folder (create it manually if you deleted it before) and either render whole batch of videos at given resolution or render each clip separately.
+
+c) use MVE and it's scene detection that does cuts for you, then use it to output just the scenes you selected into a folder at a specific frame rate and file format too and then also rename them so that all your aces have unique name that corresponds to the title of original video, very helpful in later stages, you can read more about MVE in this guide:
+
+https://mrdeepfakes.com/forums/thread-mve-machine-video-editor-guide
+
+3. Video cutting (optional): 3) cut video (drop video on me) - allows to quickly cut any video to desired length by dropping it onto that .bat file. Useful if you don't have video editing software and want to quickly cut the video, however with existence of MVE (which is free) it's usefullnes is questionable as it can only do a simply cut of a part of video from point A to B, cut the videos manually or use MVE.
+
+STEP 4 - FRAMES EXTRACTION FROM TARGET VIDEO (DATA_DST.MP4):​
+
+You also need to extract frames from you target video, after you edited it the way you want it to be, render it as data_dst.mp4 and extract frames using 3) extract images from video data_dst FULL FPS, frames will be place into "data_dst" folder, available options are JPG or PNG format output - select JPG if you want smaller size, PNG for best quality. There is no frame rate option because you want to extract video at original framerate.
+
+STEP 5 - DATA_SRC FACE/DATASET EXTRACTION:​
+
+Second stage of preparing SRC dataset is to extract faces from the extracted frames located inside "data_src" folder. Assuming you did rename all sets of frames inside their folders move them back into main "data_src" folder and run following 4) data_src faceset extract - automated extractor using S3FD algorithm, this will handle majority of faces in your set but is not perfect, it will fail to detect some faces and produce many false positives and detect other people which you will have to more or less manually delete.
+
+There is also 4) data_src faceset extract MANUAL - manual extractor, see 5.1 for usage. You can use it to manuallly align some faces, especially if you havee some pictures or small source from movies that feature some rare angles that tend to be hard for the automated extractor (such as looking directlly up or down).
+
+Available options for S3FD and MANUAL extractor are:
+
+- Which GPU (or CPU) to use for extraction - use GPU, it's almost always faster.
+
+- Face Type:
+
+a) Full Face/FF - for FF models or lower face types (Half Face/Hf and Mid-Half Face/MF, rarely used nowadays).
+
+b) Whole Face/WF - for WF models or lower, recommended as an universal/futureproof solution for working with both FF and WF models.
+
+c) Head - for HEAD models, can work with other models like WF or FF but requires very high resolution of extraction for faces to have the same level of detail (sharpness) as lower coverage face types, uses 3D landmarks instead of 2D ones as in the FF and WF but is still compatible with models using those face types.
+
+Remember that you can always change the facetype (and it's resolution) to lower one later using 4.2) data_src/dst util faceset resize or MVE (it can also turn lower res/facetype set into higher one but requires you to keep original frames and photos). Hence why I recommend using WF if you do primarlly face swaps with FF and WF models and HEAD for short haired sets used primarly for HEAD swaps but also ones that you may want at some point use for FF/WF face swaps.
+
+- Max number of faces from image - how many faces extractor should extract from a frame, 0 is recommended value as it extracts as many as it can find. Selecting 1 or 2 will only extract 1 or 2 faces from each frame.
+
+- Resolution of the dataset: This value will largerly depend on the resolution of your source frames, below are my personal recommendations depending on resolution of the source clip, you can of course use different values, you can even measure how big the biggest face in given source is and use that as a value (remember to use values in increments of 16).
+
+Resolution can be also changed later by using 4.2) data_src/dst util faceset resize or MVE, you can even use MVE to extract faces with estimated face size option which will use landmark data from your extracted faces, original frames and re-extract your entire set again at the actual size each face is on the frames. You can read more about changing facetypes, dataset resolutions and more in those two MVE guides threads:
+
+https://mrdeepfakes.com/forums/thread-how-to-fix-face-landmarks-with-mve
+
+https://mrdeepfakes.com/forums/thread-mve-machine-video-editor-guide
+
+I recommend following values for WF:
+
+720p or lower resolution sources - 512-768
+1080p sources - 768-1024
+4K sources - 1024-2048
+
+For HEAD extraction, add extra 256-512 just to be sure you aren't missing any details of the extracted faces or measure actual size of the head on a frame where it's closest to the camera. If in doubt, use MVE to extract faces with estimated face size option enabled.
+
+- Jpeg quality - use 100 for best quality. DFL can only extract faces in JPG format. No reason to go lower than 100, size difference won't be big but quality will decrease dramatically resulting in worse quality.
+
+- Choosing whether to generate "aligned_debug" images or not - can be generated afterwards, they're used to check if landmarks are correct however this can be done with MVE too and you can actually manually fix landmarks with MVE so in most cases this is not very useful for SRC datasets.
+
+STEP 6 - DATA_SRC SORTING AND CLEANUP:
+​
+After SRC dataset extraction is finished next step is to clean the SRC dataset of false positives and incorrectly aligned faces. To help in that you can sort your faces, if it's a small set and has only a couple videos using the provided sorting methods should be more than enough, if you're working with a larger set, use MVE for sorting (check the guide for more info).
+
+To perform sorting use 4.2) data_src sort - it allows you to sort your dataseet using various sorting algorithms, these are the available sort types:
+
+[0] blur - sorts by image blurriness (determined by contrast), fairly slow sorting method and unfortunately not perfect at detecting and correctly sorting blurry faces.
+[1] motion blur - sorts images by checking for motion blur, good for getting rid of faces with lots of motion blur, faster than [0] blur and might be used as an alternative but similarly to [0] not perfect.
+[2] face yaw direction - sorts by yaw (from faces looking to left to looking right).
+[3] face pitch direction - sorts by pitch (from faces looking up to looking down).
+[4] face rect size in source image - sorts by size of the face on the original frame (from biggest to smallest faces). Much faster than blur.
+[5] histogram similarity - sort by histogram similarity, dissimilar faces at the end, useful for removing drastically different looking faces, also groups them together.
+[6] histogram dissimilarity - as above but dissimilar faces are on the beginning.
+[7] brightness - sorts by overall image/face brightness.
+[8] hue - sorts by hue.
+[9] amount of black pixels - sorts by amount of completely black pixels (such as when face is cut off from frame and only partially visible).
+[10] original filename - sorts by original filename (of the frames from which faces were extracted). without _0/_1 suffxes (assuming there is only 1 face per frame).
+[11] one face in image - sorts faces in order of how many faces were in the original frame.
+[12] absolute pixel difference - sorts by absolute difference in how image works, useful to remove drastically different looking faces.
+[13] best faces - sorts by several factors including blur and removes duplicates/similar faces, has a target of how many faces we want to have after sorting, discard faces are moved to folder "aligned_trash".
+[14] best faces faster - similar to best faces but uses face rect size in source image instead blur to determine quality of faces, much faster than best faces.
+
+I recommend to start with simple histogram sorting [5], this will group faces together that look similar, this includes all the bad faces we want to delete so it makes the manual selection process much easier.
+
+When the initial sorting has finished, open up your aligned folder, you can either browse it with windows explorer or use external app that comes with DFL which can load images much faster, to open it up use 4.1) data_src view aligned result.
+
+After that you can do additional sorting by yaw and pitch to remove any faces that may look correct but that actually have bad landmarks.
+Next you can sort by hue and brightnees to remove any faces that are heavilly tinted or very dark assuming you didn't already do that after historgram sorting.
+Then you can use sort by blur, motion blur and face rect size to remove any blurry faces, faces with lots of motion blur and small faces. After that you should have relatively clean dataset.
+At the end you can either sort them with any other method you want, order and filenames of SRC faces doesn't matter at all for anything, however I always recommend to restore original filenames but not with sorting option 10 but instead use - 4.2.other) data_src util recover original filename.
+
+However if you have large dataset consisting on tens of interviews, thousands of high res pictures and many movies and tv show episodes you should consider a different approach to cleaning and sorting your sets.
+
+Most of people who are serious about making deepfakes and are working on large, complex source sets rarely use just DFL for sorting and instead also use external free (for now) software called Machine Video Editor, or simply MVE. MVE comes with it's own sorting methods and can be used in pretty much all steps of making a deepfake video. That also includes the automated scene cutting and frames export for obtaining frames from your source content as mentioned in step 2 - SRC data collection), dataset enhancing, labeling/masking, editing landmarks and much more.
+
+The thing to focus on here is the Nvidia Simillarity Sort option which works similarly to histogram sort but is a machine learning approach which groups faces together based on the identity, that way you get 99% faces of the person you want on the list in order and it's much faster to remove other faces (unwanted subjects you can either delete or keep for use with other facesets you may wish to make with those subjects in the future), it will often also group incorrect faces, faces with glasses, black and white faces or those with heavy tint together much more precisely and you get a face group preview where you can select or delete specific face groups and even cheeck which faces are in that group before you delete them but you also get to browse as you'd do in Windows Explorer or in XnViewMP.
+
+For more info about MVE check available guides here: https://mrdeepfakes.com/forums/forum-guides-and-tutorials
+
+MVE GITHUB: https://github.com/MachineEditor/MachineVideoEditor
+
+MVE also has a discord server (SFW, no adult deeepfake talk allowed there), you can find link to it on the github page. There are additional guides on that server, watch them first before asking questions.
+
+Regardless of whether you use MVE or DFL to sort the set there are few final steps you can perform at the end - DUPLICATE FACES REMOVAL:
+
+First thing you can do on all of the remaining faces is to use software like visipics or dupeguru (or any other software that can detect similar faces and duplicates) to detect very similar and duplicated faces in your whole set of faces, the two I mentioned have adjustable "power" setting so you can only remove basically exactly the same faces or increase the setting and remove more faces that are very similar but be careful to not remove too many similar faces and don't actually delete them, for example in visipics you have the option to move them and that's what I recommend, create few folders for different levels of similarity (the slider works in steps so you can delete everything detected with strength 0-1 and move faces detected at strength levels 2-3 to different folders). This will slightly reduce face count which will speed up training and just make the sets less full of unnecessarily similar faces and duplicates.
+
+Next (assuming you renamed frames before extraction) it's good to move faces into different folders based on where they came from:
+
+Create a folder structure that suits you, I recommend following structure:
+- main folders for movies, tv shows, interviews and photos (feel free to add additional categories based on type of footage)
+- inside each of those, more folders for each individual source (for photos you can categorize based on photo type or by year or have it all in one folder)
+- inside each individual folder for given source a folder for sharpest, best faces and what is left should be placed loosely in the base folder
+- folder for all of the blurry faces you plan on enhancing/upscaling (more about it in ADVANCED below)
+- folder for all of the upscaled faces
+- folder for all of the duplicates
+- and lastly the main folder which you can simply name aligned or main dataset where you combine best faces from all sources and upscaled faces.
+
+Remember that all data is in the images themselves, you are free to move them to different folders, make copies/backups, archive them on different drives, computers, in general you are free move them outside of DFL. RAID is not a backup - 2-3 copies, cold storage, additional copies on different mediums in different locations. Backup new data at least once a week or two depending on how much data you end up creating, at worst just a few portable hard drives (ssd based are better obviously).
+
+After you've done that you should have a bunch of folders in your "data_src" folder and your "aligned" folder should now be empty since you have moved all faces to different ones, delete it.
+
+ADVANCED - SRC dataset enahcement.​
+
+You may want or need to improve quality and sharpness/level of detail of some of your faces after extraction. Some people upscale entire datasets while some only move blurry faces they want to upscale to separate folder and upscale part of the dataset that way, that can be done before making the final set (upscale all blurry faces regardless of whether you'd using them during training or not) or after making final set (upscaling only those faces you actually need for training). You should however only upscale what you really need, for example if you already have few high quallity interviews and want to upscale another one that has similar lighitng, expressions and angles then skip it, it's better to use content that's already sharp and good quality than upscaling everything for the sake of it. Upscale rare faces, rare expressions, angles that you don't have any sharp faces for.
+
+First start by collecting all blurry faces you want to upscale and put them into a folder called "blurry" (example, name it however you want), next depending on upscaling method you may or may not have to save your metadata, some upscaling methods willl retrain this information but most won't hence why you need to do it. I also recommend to make a backup of your blurry folder in case some upscaling method you'd use would replace original images from the folder (most output to different folder). Rename your "blurry" as "aligned" and run:
+
+4.2) data_src util faceset metadata save - saves embeded metadata of your SRC dataset in the aligned folder as meta.dat file, this is required if you're gonna be upscaling faces or doing any kind of editing on them like for example color correction (rotation or horizontal/vertical flipping is not allowed).
+
+After you're done enahncing/upscaling/editing your faces you need to restore the metadata (in some cases), to do so rename your "upscaled" folder to "aligned" (or if you used Colab or did not upscale faces locally in general then simply copy them over to the new "aligned" folder), copy your meta.dat file from original "blurry" folder to the "aligned" folder and run: 4.2) data_src util faceset metadata restore - which will restore the metadata and now those faces are ready to be used.
+
+If you forgot to save the metadata as long as you have the original blurry folder you can do so later, however if you've lost the original folder and now only have the upscaled results with no metadata only thing you can do is extract faces from those faces.
+
+STEP 7 - DATA_DST FACE/DATASET EXTRACTION:​
+
+Here steps are pretty much the same as with source dataset, with few exceptions. Start by extracting faces from your DST frames using: 5) data_dst faceset extract - an automated face extractor utilizing S3FD face detection algorithm.
+
+In addition to it you'll also notice other extraction methods, don't use them now but you need to make yourself familiar with them:
+
+5) data_dst faceset extract MANUAL RE-EXTRACT DELETED ALIGNED_DEBUG - This one is also important, it is used to manualy re-extract missed faces after deleting their corresponding debug image from a folder "aligned_debug" that gets created along "aligned" folder after extraction, it is what makes it possible to get all faces to be swapped, more about it's use in step 5.1.
+5) data_dst faceset extract MANUAL - manual extractor, see 5.1 for usage.
+5) data_dst faceset extract + manual fix - S3FD + manual pass for frames where model didn't detect any faces, you can use this instead of 5) data_dst faceset extract - after initial exctraction finishes a window will open (same as with manual extraction or re-extraction) where you'll be able to extract faces from frames where extractor wasn't able to detect any faces, not even false positives, but this means extraction won't finish until you re-extract all faces so this is not recommended.
+
+Simply use the first method for now.
+
+Available options for all extractor modes are the same as for SRC except for lack of choice of how many faces we want to extract - it always tries to extract all, there is no choice for whether we want aligned_debug folder or not either, it is generated always since it's required for manual re-extraction.
+
+STEP 8 - DATA_DST SORTING, CLEANUP AND FACE RE-EXTRACTION:​
+
+After we aligned data_dst faces we have to clean that set.
+
+Run 5.2) data_dst sort - works the same as src sort, use [5] histogram similarity sorting option, next run 5.1) data_dst view aligned results - which willl allow you to view the contents of "aligned" folder using external app which offers quicker thumbnail generation than default windows explorer, here you can simply browse all faces and delete all bad ones (very small or large compared to others next to it as a result of bad rotation/scale caused by incorrect landmarks as well as false positives and other people's faces), after you're done run 5.2) data_dst util recover original filename - which works the same as one for source, it willl restore original filenames and order of all faces.
+
+Next we have to delete debug frames so that we can use the manual re-extractor to extract faces from just the frames where the extractor couldn't properly extract faces, to do so run 5.1) data_dst view aligned_debug results - which willl allow you to quickly browse contents of "aligned_debug", here you check all debug frames to find those where the landmarks over our target person's face are placed incorrectly (not lining up with edges of the face, eyes, nose, mouth, eyebrows) or missing, those frames have to be deleted and this will tell the manual re-extractor which frames to show to you so that you can manually re-extract them. You can select all debug frames for deletion manually, however this means going through pretty much all of them by hand, it's easy to miss some frames that way, a better way to go about this is to take advantage of the fact your aligned folder (after you've cleaned it up) should now contain only good faces, use that to your advantage (you can make a copy of the debug folder, remove all good frames from it using faces from aligned folder, then go through what's left and use that to remove those bad frames from original debug folder). Once you're done deleting all the debug frames with missing/bad faces are deleted run 5) data_dst faceset extract MANUAL RE-EXTRACT DELETED ALIGNED_DEBUG to manually re-extract faces from corresponding frames.
+
+Manual extractor usage:
+
+Upon starting the manual extractor a window will open up where you can manually locate faces you want to extract and command line window displaying your progress:
+
+- use yo.ur mouse to locate face
+- use mouse wheel to change size of the search area (rect size, you saw this option in sorting, you can sort faces based on how big their rect size was during extraction)
+- make sure all or at least most landmarks (in some cases depending on the angle, lighting or present obstructions it might not be possible to precisely align all landmarks so just try to find a spot that covers all. the visible bits the most and isn't too misaligned) land on important spots like eyes, mouth, nose, eyebrows and follow the face shape correctly, an up arrow shows you where is the "up" or "top" of the face
+- use key A to change the precision mode, now landmarks won't "stick" so much to detected faces and you may be able to position landmarks more correctly, it will also run faster
+- use < and > keys (or , and .) to move back and forwards, to confirm a detection either left mouse click and move to the next one or hit enter which both confirms selection and moves to the next face
+- right mouse button for aligning undetectable forward facing or non human faces (requires applying xseg for correct masking)
+- q to skip remaining faces, save the ones you did and quit extractor (it will also close down and save when you reach the last face and confirm it)
+
+Now you should have all faces extracted but in some cases you will have to run it few times (the cases I mentioned above, reflections, split scenes, transitions). In that case rename your "aligned" folder to something else, then repeat the steps with renaming of aligned faces, copying them to a copy of "aligned_debug", replacing, deleting selected, removing remaining aside from those you need to extract from, copying that to original "aligned_debug" folder, replacing, deleting highlighter, running manual re-extractor again and then combining both aligned folders, making sure to not accidentallly replace some faces.
+
+After you're done you have the same choice of additional .bats to use with your almost finished dst dataset:
+
+5.2) data_dst util faceset pack and 5.2) data_dst util faceset unpack - same as with source, let's you quickly pack entire dataset into one file.
+
+5.2) data_dst util faceset resize - works the same as one for SRC dataset.
+
+But before you can start training you also have to mask your datasets, both of them.
+
+STEP 9 - XSEG MODEL TRAINING, DATASET LABELING AND MASKING:​
+
+What is XSeg for? Some face types require an application of different mask than the default one that you get with the dataset after extraction, those default masks are derived from the landmarks and cover area similar to that of full face face type, hence why for full face or lower coverage face type XSeg is not required but for whole face and head it is. XSeg masks are also required to use Face and Background Style Power (FSP, BGSP) during training of SAEHD/AMP models regardless of the face type.
+
+XSeg allows you to define how you want your faces to be masked, which parts of the face will be trained on and which won't.
+
+It also is required to exclude obstructions over faces from being trained on and also so that after you merge your video a hand for example that is in front of the face is properly excluded, meaning the swapped face is masked in such way to make the hand visible and not cover it.
+
+XSeg can be used to exclude just about every obstruction: you have full control over what the model will think is a face and what is not.
+
+Please make yourself familiar with some terms first, it's important you understand a difference between an XSeg model, dataset, label and mask:
+
+XSeg model - user trainable model used to apply masks to SRC and DST datasets as well as to mask faces during the merging process.
+XSeg label - a polygon that user draws on the face to define the face area and what is used by XSeg model for training.
+XSeg mask - mask generated and applied to either SRC or DST dataset by a trained XSeg model.
+XSeg dataset - a collection of labeled faces (just one specific type or both SRC and DST dataset, labeled in similar manner), these are often shared on the forum by users and are a great way to start making your own set since you can download one and either pick specific faces you need or add your own labeled faces to it that are labeled in similar manner.
+
+Now that you know what each of those 4 things mean it's imporatnt you understand the main difference between labeling and masking SRC faces and DST faces.
+
+Masks define which area on the face sample is the face itself and what is a background or obstruction, for SRC it means that whatever you include will be trained by the model with higher priority, whereas everything else willl be trained with lower priority (or precision). For DST it is the same but also you need to exclude obstructions so that model doesn't treat them as part of the face and also so that later when merging those obtructions are visible and don't get covered by the final predicted face (not to be mistaken with predicted SRC and predicted DST faces).
+
+To use XSeg you have following .bats available for use:
+
+5.XSeg) data_dst mask - edit - XSeg label/polygon editor, this defines how you want the XSeg model to train masks for DST faces.
+5.XSeg) data_dst mask - fetch - makes a copy of labeled DST faces to folder "aligned_xseg" inside "data_dst".
+5.XSeg) data_dst mask - remove - removes labels from your DST faces. This doesn't remove trained MASKS you apply to the set after training, it removes LABELS you manually created, I suggest renaming this option so it's on the bottom of the list or removing it to avoid accidental removal of labels.
+
+5.XSeg) data_src mask - edit - XSeg label/polygon editor, this defines how you want the XSeg model to train masks for SRC faces.
+5.XSeg) data_src mask - fetch - makes a copy of labeled SRC faces to folder "aligned_xseg" inside "data_src".
+5.XSeg) data_src mask - remove - removes labels from your SRC faces. This doesn't remove trained MASKS you apply to the set after training, it removes LABELS you manually created, I suggest renaming this option so it's on the bottom of the list or removing it to avoid accidental removal of labels.
+
+XSeg) train.bat - starts training of the XSeg model.
+
+5.XSeg.optional) trained mask data_dst - apply - generates and applies XSeg masks to your DST faces.
+5.XSeg.optional) trained mask data_dst - remove - removes XSeg masks and restores default FF like landmark derived DST masks.
+
+5.XSeg.optional) trained mask data_src - apply - generates and applies XSeg masks to your SRC faces.
+5.XSeg.optional) trained mask data_src - remove - removes XSeg masks and restores default FF like landmark derived SRC masks.
+
+If you don't have time to label faces and train the model, you can use generic XSeg model that is included with DFL to quickly apply basic WF masks (may not exclude all obstructions) using following:
+
+5.XSeg Generic) data_dst whole_face mask - apply - applies WF masks to your DST dataset.
+5.XSeg Generic) data_src whole_face mask - apply - applies WF masks to your SRC dataset.
+
+XSeg Workflow:
+
+Step 1. Label your datasets.
+
+Start by labeling both SRC and DST faces using 5.XSeg) data_src mask - edit and 5.XSeg) data_dst mask - edit
+
+Each tool has a written description that's displayed when you go over it with your mouse (en/ru/zn languages are supported).
+
+Label 50 to 200 different faces for both SRC and DST, you don't need to label all faces but only those where the face looks significantly different, for example:
+
+- when facial expression changes (open mouth - closed mouth, big smile - frown)
+- when direction/angle of the face changes
+- or when lighting conditions/direction changes (usually together with face angle but in some cases the lighting might change while face still looks in the same direction)
+
+The more various faces you label, the better quality masks Xseg model will generate for you. In general the smaller the dataset is the less faces will have to be labeled and the same goes about the variety of angles, if you have many different angles and also expressions it will require you to label more faces.
+
+While labeling faces you will also probably want to exclude obstructions so that they are visible in the final video, to do so you can either:
+
+- not include obstructions within the main label that defines face area you want to be swapped by drawing around it.
+- or use exclude poly mode to draw additional label around the obstruction or part you want to be excluded (not trained on, visible after merging).
+
+What to exclude:
+
+Anything you don't want to be part of the face during training and you want to be visible after merging (not covered by the swapped face).
+
+When marking obstructions you need to make sure you label them on several faces according to the same rules as when marking faces with no obstructions, mark the obstruction (even if it doesn't change appearance/shape/position when face/head:
+
+- changes angle
+- facial expression changes
+- lighting conditions change
+
+If the obstruction is additionally changing shape and/or moving across the face you need to mark it few times, not all obstructions on every face need to be labeled though but still the more variety of different obstructions occur in various conditions - the more faces you will have to label.
+
+Label all faces in similar way, for example:
+
+- the same approximated jaw line if the edge is not clearly visible, look at how faces are shaded to figure out how to correctly draw the line, same applies for face that are looking up, the part underneath the chin
+- the same hair line (which means always excluding the hair in the same way, if you're doing full face mask and don't go over to the hairline the make sure the line you draw above eyebrows is always mostly at the same height above the eyebrows)
+
+Once you finish labeling/marking your faces scroll to the end of the list and hit Esc to save them and close down the editor, then you can move on to training your XSEG model.
+
+TIP: You can use MVE to label your faces with it's more advanced XSeg editor that even comes with it's own trained segmentation (masking) model that can selectively include/exclude many parts of the face and even turn applied masks (such as from a shared XSeg model you downloaded or generic WF XSeg model that you used to apply masks to your dataset) back into labels, improve them and then save into your faces.
+
+Step 2. Train your XSeg model.
+
+When starting training for the first time you will see an option to select face type of the XSeg model, use the same face type as your dataset.
+You will also be able to choose device to train on as well as batch size which will typically be much higher as XSeg model is not that demanding as training of the face swapping model (you can also start off at lower value and raise it later).
+You can switch preview modes using space (there are 3 modes, DST training, SRC training and SRC+DST (distorted).
+To update preview progress press P.
+Esc to save and stop training.
+
+During training check previews often, if some faces have bad masks after about 50k iterations (bad shape, holes, blurry), save and stop training, apply masks to your dataset, run editor, find faces with bad masks by enabling XSeg mask overlay in the editor, label them and hit esc to save and exit and then resume XSeg model training, when starting up an already trained model you will get a prompt if you want to restart training, select no as selecting yes will restart the model training from 0 instead of continuing. However in case your masks are not improving despite having marked many more faces and being well above 100k-150k iterations it might be necessary to label even more faces. Keep training until you get sharp edges on most of your faces and all obstructions are properly excluded.
+
+Step 3. Apply XSeg masks to your datasets.
+
+After you're done training or after you've already applied XSeg once and then fixed faces that had bad masks it's time for final application of XSeg masks to your datasets..
+
+Extra tips:
+
+1. Don't bother making 1000 point label, it will take too much time to label all the faces and won't affect the face vs if you use just 30-40 points to describe the face shape but also don't try to mark it with 10 points or the mask will not be smooth, the exception here would be marking hair for HEAD face type training where obviously some detail is needed to correctly resolve individual hair strands.
+2. Do not mark shadows unless they're pitch black.
+3. Don't mark out tongues or insides of the mouth if it's barely open.
+4. If obstruction or face is blurry mark as much as needed to cover everything that should or shouldn't be visible, do not make offsets too big
+5. Keep in mind that when you use blur the edge blurs both in and out, if you mark out a finger right on the edge it won't look bad on low blur but on higher one it will start to disappear and be replaced with the blurry version of what model learned, same goes for the mouth cavity, on low blur it will only show result face teeth but if you apply high blur then DST teeth will start to show and it will look bad (double teeth).
+
+This means:
+
+- when excluding obstructions like fingers - mark it on the edge or move the label few pixels away (but not too much). Both SRC and DST
+
+- when excluding mouth cavity - remember to keep the label away from teeth unless it's the teeth in the back that are blurry and dark, those can be excluded. DST, SRC is optional, if you exclude the back teeth on SRC faces XSeg model will train to not include them so they won't be trained as precisely as the included front teeth, but as teeth in the back are usually quite blurry and dark or not visible at all it shouldn't affect your results much, especially if you will decide to exclude them on DST too, in that case you will only see back teeth of DST only anyway, similar rules apply when excluding tongues, mark them on the edge, keep an offset from teeth if the tongue is inside the mouth or touching upper or bottom teeth. Both SRC and DST, if you want tongue of SRC be trained don't exclude it on SRC faces but if you exclude it on DST then you won't see SRC tongue at all, I suggest excluding tongue only when mouth is wide open and only on DST and never on SRC faces.
+
+Example of face with bad applied mask:
+
+mMSrUGJh.jpg
+
+Fixing the issue by marking the face correctly (you train XSeg model after that, just labeling it won't make the model better):
+
+e354c5Vh.jpg
+
+How to use shared marked faces to train your own XSeg model:
+
+Download, extract and place faces into "data_src/aligned" or "data_dst/aligned". Make sure to rename them to not overwrite your own faces (I suggest XSEGSRC and XSEGDST for easy removal afterwards).
+You can mix shared faces with your own labeled to give the model as much data to learn masks as possible, don't mix face types, make sure all faces roughly follow the same logic of masking.
+Then just start training your XSeg model (or shared one).
+
+How to use shared XSeg model and apply it to your dataset:
+
+Simply place it into the "model" folder and use apply .bat files to apply masks to SRC or DST.
+
+After you apply masks open up XSeg editor and check how masks look by enabling XSeg mask overlay view, if some faces don't have good looking masks, mark them, exit the editor and start the training of the XSeg model again to fix them. You can also mix in some of the shared faces as described above (how to use shared marked faces). You can reuse XSeg models (like SAEHD models).
+
+User shared SAEHD models can be found in the model sharing forum section:
+Trained Models
+Share your pre-trained deepfake models here to help others get started. Generally, models from different apps are NOT interchangeable.
+mrdeepfakes.com
+
+10. Training SAEHD/AMP:
+​
+If you don't want to actually learn what all the options do and only care about a simple workflow that should work in most cases scroll down to section 6.1 - Common Training Workflows.
+
+WARNING: there is no one right way to train a model, learn what all the options do, backtrack the guide to earlier steps if you encouter issues during training (masking issues, blurry/distorted faces with artifacts due to bad quality SRC set or lack of angles/expressions, bad color matching due to low variety of lighting conditions in your SRC set, bad DST alignments, etc).
+
+There are currently 3 models to choose from for training:
+
+SAEHD (6GB+): High Definition Styled Auto Encoder - for high end GPUs with at least 6GB of VRAM. Adjustable. Recommended for most users.
+
+AMP (6GB+): New model type, uses different architectur, morphs shapes (attempts to retain SRC shape), with adjustable morphing factor (training and merging) - for high end GPUs with at least 6GB of VRAM. Adjustable. AMP model is still in development, I recommend you learn making deepfakes with SAEHD first before using AMP. For AMP workflow scroll down to section 6.2.
+
+Quick96 (2-4GB): Simple mode dedicated for low end GPUs with 2-4GB of VRAM. Fixed parameters: 96x96 Pixels resolution, Full Face, Batch size 4, DF-UD architecture. Primarly used for quick testing.
+
+Model settings spreadsheet where you can check settings and performance of models running on various hardware: https://mrdeepfakes.com/forums/threads/sharing-dfl-2-0-model-settings-and-performance.4056/
+
+To start trainign process run one of these:
+
+6) train SAEHD
+6) train Quick96
+6) train AMP SRC-SRC
+6) train AMP
+
+You may have noticed that there are 2 separate training executables for AMP, ignore those for now and focus on learning SAEHD workflow first.
+
+Since Quick96 is not adjustable you will see the command window pop up and ask only 1 question - CPU or GPU (if you have more then it will let you choose either one of them or train with both).
+SAEHD however will present you with more options to adjust as will AMP since both models are fully adjustable.
+In both cases first a command line window will appear where you input your model settings.
+On a first start will you will have access to all setting that are explained below, but if you are using existing pretrained or trained model some options won't be adjustable.
+If you have more than 1 model in your "model" folder you'll also be prompted to choose which one you want to use by selecting corresponding number
+You will also always get a prompt to select which GPU or CPU you want to run the trainer on.
+After training starts you'll also see training preview.
+
+Here is a detailed explanation of all functions in order (mostly) they are presented to the user upon starting training of a new model.
+
+Note that some of these get locked and can't be changed once you start training due to way these models work, example of things that can't be changed later are:
+- model resolution (often shortended to "res")
+- model architecture ("archi")
+- models dimensions ("dims")
+- face type
+- morph factor (AMP training)
+
+Also not all options are available for all kinds of models:
+For LIAE there is no True Face (TF)
+For AMP there is no architecture choice or eye and mouth priority (EMP)
+As the software is developed more options may become available or unavailable for certain models, if you are on newest version and notice lack of some option that according to this guide is still available or notice lack of some options explained here that are present please message me via private message or post a message in this thread and I'll try to update the guide as soon as possible.
+
+Autobackup every N hour ( 0..24 ?:help ) : self explanatory - let's you enable automatic backups of your model every N hours. Leaving it at 0 (default) will disable auto backups. Default value is 0 (disabled).
+
+[n] Write preview history ( y/n ?:help ) : save preview images during training every few minutes, if you select yes you'll get another prompt: [n] Choose image for the preview history ( y/n ) : if you select N the model will pick faces for the previews randomly, otherwise selecting Y will open up a new window after datasets are loaded where you'll be able to choose them manually.
+
+Target iteration : will stop training after certain amount of iterations is reached, for example if you want to train you model to only 100.000 iterations you should enter a value of 100000. Leaving it at 0 will make it run until you stop it manually. Default value is 0 (disabled).
+
+[n] Flip SRC faces randomly ( y/n ?:help ) : Randomly flips SRC faces horizontally, helps to cover all angles present in DST dataset with SRC faces as a result of flipping them which can be helpful sometimes (especially if our set doesn't have many different lighting conditons but has most angles) however in many cases it will make results seem unnatural becasue faces are never perfectly symmetric, it will also copy facial features from one side of the face to the other one, they may then appear on either sides or on both at the same time. Recommended to only use early in the training or not at all if our SRC set is diverse enough. Default value is N.
+
+[y] Flip DST faces randomly ( y/n ?:help ) : Randomly flips DST faces horizontally, can improve generalization when Flip SRC faces randomly is diabled. Default value is Y.
+
+Batch_size ( ?:help ) : Batch size settings affects how many faces are being compared to each other every each iteration. Lowest value is 2 and you can go as high as your GPU will allow which is affected by VRAM. The higher your models resolution, dimensions and the more features you enable the more VRAM will be needed so lower batch size might be required. It's recommended to not use value below 4. Higher batch size will provide better quality at the cost of slower training (higher iteration time). For the intial stage it can be set lower value to speed up initial training and then raised higher. Optimal values are between 6-12. How to guess what batch size to use? You can either use trial and error or help yourself by taking a look at what other people can achieve on their GPUs by checking out DFL 2.0 Model Settings and Performance Sharing Thread.
+
+Resolution ( 64-640 ?:help ) : here you set your models resolution, bear in mind this option cannot be changed during training. It affects the resolution of swapped faces, the higher model resolution - the more detailed the learned face will be but also training will be much heavier and longer. Resolution can be increased from 64x64 to 640x640 by increments of:
+
+16 (for regular and -U architectures variants)
+32 (for -D and -UD architectures variants)
+
+Higher resolutions might require increasing of the model dimensions (dims) but it's not mandatory, you can get good results with default dims and you can get bad results with very high dims, in the ends it's the quality of your source dataset that has the biggest impact on quality so don't stress out if you can't run higher dims with your GPU, focus on creating a good source set, worry about dims and resolution later.
+
+Face type ( h/mf/f/wf/head ?:help ) : this option let's you set the area of the face you want to train, there are 5 options - half face, mid-half face, full face, whole face and head:
+
+a) Half face (HF) - only trains from mouth to eybrows but can in some cases cut off the top or bottom of the face (eyebrows, chin, bit of mouth).
+b) Mid-half face (MHF) - aims to fix HF issue by covering 30% larger portion of face compared to half face which should prevent most of the undesirable cut offs from occurring but they can still happen.
+c) Full face (FF) - covers most of the face area, excluding forehead, can sometimes cut off a little bit of chin but this happens very rarely (only when subject opens mouth wide open) - most recommended when SRC and/or DST have hair covering forehead.
+d) Whole face (WF) - expands that area even more to cover pretty much the whole face, including forehead and all of the face from the side (up to ears, HF, MHF and FF don't cover that much).
+e) Head (HEAD) - is used to do a swap of the entire head, not suitable for subjects with long hair, works best if the source faceset/dataset comes from single source and both SRC and DST have short hair or one that doesn't change shape depending on the angle.
+Examples of faces, front and side view when using all face types: [IMAGE MISSING, WORK IN PROGRESS]
+
+Architecture (df/liae/df-u/liae-u/df-d/liae-d/df-ud/liae-ud ?:help ) : This option let's you choose between 2 main architectures of SAEHD model: DF and LIAE as well as their variants:
+
+DF: This model architecture provides better SRC likeness at the cost of worse lighting and color match than LIAE, it also requires SRC set to be matched to all of the angles and lighting of the DST better and overall to be made better than a set that might be fine for LIAE, it also doesn't deal with general face shape and proportions mismatch between SRC and DST where LIAE is better but at the same time can deal with greater mismatch of actual appearance of facial features and is lighter on your GPU (lower VRAM usage), better at frontal shots, may struggle more at difficult angles if the SRC set doesn't cover all the required angles, expressions and lighting conditions of your DST.
+
+LIAE: This model is almost complete opposite of DF, it doesn't produce faces that are as SRC like compared to DF if the facial features and general appearance of DST is too different from SRC but at the same time deals with different face proportions and shapes better than DF, it also creates faces that match the lighting and color of DST better than DF and is more forgiving when it comes to SRC set but it doesn't mean it can create a good quality swap if you are missing major parts of the SRC set that are present in the DST, you still need to cover all the angles. LIAE is heavier on GPU (higher VRAM usage) and does better job at more complex angles.
+Also make sure you read "Extra training and reuse of trained LIAE/LIAE RTM models - Deleting inter_ab and inter_b files explained:" in Step 10.5 for how to deal with LIAE models when reusing them.
+
+Keep in mind that while these are general characteristics of both architectures it doesn't mean they will always behave like that, incorrectly trained DF model can have worse resembalnce to SRC than correctly trained LIAE model and you can also completely fail to create anything that looks close to SRC with LIAE and achieve near perfect color and lighting match with DF model. It all comes down to how well matched your SRC and DST is and how well your SRC set is made which even if you know all the basics can still take a lot of trial and error.
+
+Each model can be altered using flags that enable variants of the model architectures, they can also be combined in the order as presented below (all of them affect performance and VRAM usage):
+
+-U: this variant aims to improve similarity/likeness to the source faces and is in general recommended to be used always.
+-D: this variant aims to improve quality by roughly doubling possible resolution with no extra compute cost, however it requires longer training, model must be pretrained first for optimal results and resolution must be changed by the value of 32 as opposed to 16 in other variants. In general it too should be always used because of how much higher reslution model this architecture allows but if you have access to extremely high vram setup it might be worth to experiment with training models without it as that might yield in higher quality results.
+-T: this variant changes the model architecture in a different way than -U but with the same aim - to create even more SRC like results however it can affect how sharp faces are as it tends to cause slight loss of detail compared to just using -D/-UD variants. Recommended for LIAE only.
+-C: experimental variant, switches the activation function between ReLu and Leaky ReLu (use at your own risk).
+
+To combine architecture variants after DF/LIAEwrite a "-" symbol and then letters in the same order as presented above, examples: DF-UDTC, LIAE-DT, LIAE-UDT, DF-UD, DF-UT, etc
+
+DF vs LIAE vs AMP comparison (SFW):
+mrdeepfakes.com
+DF-UD vs LIAE-UD vs AMP - Public Version (Purchase this for full ver. or PM for BTC)
+Public version (blurred) of my big model test/report/comparison thingy. Full version includes: - DF-UD vs LIAE-UD vs AMP: Fresh vs Reused results (initial training - SRC: Portman, DST: Knightley, reused - SRC: Johansson, DST: Taylor-Joy) - Additional DF-UD results: Style Power, True Face, GAN...
+mrdeepfakes.com mrdeepfakes.com
+
+The next 4 options control models neural network dimensions which affect models ability to learn, modifying these can have big impact on performance and quality:
+
+Auto Encoder Dims ( 32-2048 ?:help ) : Auto encoder dims setting, affects overall ability of the model to learn faces.
+Inter Dims ( 32-2048 ?:help ) : Inter dims setting, affects overall ability of the model to learn faces, should be equal or higher than Auto Encoder dims, AMP ONLY.
+Encoder Dims ( 16-256 ?:help ) : Encoder dims setting, affects ability of the encoder to learn faces.
+Decoder Dims ( 16-256 ?:help ) : Decoder dims setting, affects ability of the decoder to recreate faces.
+Decoder Mask Dims ( 16-256 ?:help ) : Mask decoder dims setting, affects quality of the learned masks. May or may not affect some other aspects of training.
+
+The changes in performance when changing each setting can have varying effects on performance and it's not easy to measure effect of each one on performance and quality without extensive testing.
+
+Each one is set at certain default value that should offer optimal results and good compromise between training speed and quality.
+
+Also when changing one parameter the other ones should be changed as well to keep the relations between them similar, that means raising AE dims, E and D dims should be also raised and D Mask dims can be raised but it's optional and can be left at default or lowered to 16 to save some VRAM at the cost of lower quality of learned masks (not the same as XSeg masks, these are masks model learns during training and they help the model to train the face area efficiently, if you have XSeg applied those learned masks are based of shape of your XSeg masks, otherwise the default FF landmarks derived masks are learned upon). It's always best to raise them all when you're training higher model resolutions because it makes the model capable of learning more about the face which at higher resolution means potentially more expressive and realistic face with more detail captured from your source dataset and better reproduction of DST expressions and lighting.
+
+Morph factor ( 0.1 .. 0.5 ?:help ) : Affects how much the model will morph your predicted faces to look and express more like your SRC, typical and recommended value is 0.5. (I need to test this personally, didn't use AMP yet so don't know if higher or lower value is better).
+
+Masked training ( y/n ?:help ) : Prioritizes training of what's masked (default mask or applied xseg mask), available only for WF and HEAD face types, disabling it trains the whole sample area (including background) at the same priority as the face itself. Default value is y (enabled).
+
+Eyes and mouth priority ( y/n ?:help ) : Attempts to fix problems with eyes and mouth (including teeth) by training them at higher priority, can improve their sharpness/level of detail too.
+
+Uniform_yaw ( y/n ?:help ) : Helps with training of profile faces, forces model to train evenly on all faces depending on their yaw and prioritizes profile faces, may cause frontal faces to train slower, enabled by default during pretraining, can be used while RW is enabled to improve generalization of profile/side faces or when RW is disabled to improve quality and sharpness/detail of those faces. Useful when your source dataset doesn't have many profile shots. Can help lower loss values. Default value is n (disabled).
+
+Blur our mask ( y/n ?:help ) : Blurs area outside of the masked area to make it more smoother. With masked training enabled, background is trained with lower priority than face area so it's more prone to artifacts and noise, you can combine blur out mask with background style power to get background that is both closer to background of DST faces and also smoother due to the additional blurring this option provides. The same XSeg model must be used to apply masks to both SRC and DST dataset.
+
+Place models and optimizer on GPU ( y/n ?:help ) : Enabling GPU optimizer puts all the load on your GPU which greatly improves performance (iteration time) but will lead to higher VRAM usage, disabling this feature will off load some work of the optimizer to CPU which decreases load on GPU and VRAM usage thus letting you achieve higher batch size or run more demanding models at the cost of longer iteration times. If you get OOM (out of memory) error and you don't want to lower your batch size or disable some feature you should disable this feature and thus some work will be offloaded to your CPU and you will be able to run your model without OOM errors at the cost of lower speed. Default value is y (enabled).
+
+Use AdaBelief optimizer? ( y/n ?:help ) : AdaBelief (AB) is a new model optimizer which increases model accuracy and quality of trained faces, when this option is enabled it replaces the default RMSProp optimizer. However those improvements come at a cost of higher VRAM usage. When using AdaBelief LRD is optional but still recommended and should be enabled (LRD) before running GAN training. Default value is Y.
+
+Personal note: Some people say you can disable Adabelief on existing model and it will retrain fine, I don't agree with this completely and think the model never recoveres perfectly and forgets too much when you turn it on or off so I suggest to just stick with it being either enabled or disabled. Same for LRD, some people say it's optional, some that it's still necessary, some say it's not necessary, I still use it with AB, some people may not use it, draw conclusions yourself from the DFL's built in description.
+
+Use learning rate dropout ( y/n/cpu ?:help ) : LRD is used to accelerate training of faces and reduces sub-pixel shake (reduces face shaking and to some degree can reduce lighting flicker as well).
+It's primarly used in 3 cases:
+- before disabling RW, when loss values aren't improving by a lot anymore, this can help model to generalize faces a bit more
+- after RW has been disabled and you've trained the model well enough enabling it near the end of training will result in more detailed, stable faces that are less prone to flicker
+This option affects VRAM usage so if you run into OOM errors you can run it on CPU at the cost of 20% slower iteration times or just lower your batch size.
+For more detailed explanation of LRD and order of enabling main features during training please refer to FAQ Question 8
+
+Enable random warp of samples ( y/n ?:help ) : Random warp is used to generalize a model so that it correctly learns face features and expressions in the initial training stage but as long as it's enabled the model may have trouble learning the fine detail - because of it it's recommended to keep this feature enabled as long as your faces are still improving (by looking at decreasing loss values and faces in the preview window improving) and once all look correct (and loss isn't decreasing anymore) you should disable it to start learning details, from then you don't re-enable it unless you ruin the results by applying to high values for certain settings (style power, true face, etc) or when you want to reuse that model for training of new target video with the same source or when reusing with combination of both new SRC and DST, you always start training with RW enabled. Default value is y (enabled).
+
+Enable HSV power ( 0.0 .. 0.3 ?:help ) : Applies random hue, saturation and brightness changes to only your SRC dataset during training to improve color stability (reduce flicker) and may also affect color matching of the final result, this option has an effect of slightly averaging out colors of your SRC set as the HSV shift of SRC samples is based only on color information from SRC samples and it can be combined with color transfer (CT), power (quality) of which this option reduces or used without it if you happen to get better results without CT but need to just make the colors of the resulting face sligtly more stable and consistent, requires your SRC dataset to have lots of variety in terms of lighting conditions (direction, strenght and color tone), recommended value is 0.05.
+
+GAN power ( 0.0 .. 10.0 ?:help ) : GAN stands for Generative Adversarial Network and in case of DFL 2.0 it is implemented as an additional way of training to get more detailed/sharp faces. This option is adjustable on a scale from 0.0 to 10.0 and it should only be enabled once the model is more or less fully trained (after you've disabled random warp of samples and enabled LRD). It's recommended to use low values like 0.01. Make sure to backup your model before you start training (in case you don't like results, get artifcats or your model collapses). Once enabled two more settings will be presented to adjust internal parameters of GAN:
+
+[1/8th of RES] GAN patch size ( 3-640 ?:help ) : Improves quality of GAN training at the cost of higher VRAM usage, default value is 1/8th of your resolution.
+
+[16] GAN dimensions ( 4-64 ?:help ) : The dimensions of the GAN network. The higher the dimensions, the more VRAM is required but it can also improve quality, you can get sharp edges even at the lowest setting and because of thise default value of 16 is recommended but you can reduce it to 12-14 to save some performance if you need to.
+
+Before/after example of a face trained with GAN at value of 0.1 for 40k iterations:
+
+[img=650x400]
+
+'True face' power. ( 0.0000 .. 1.0 ?:help ) : True face training with a variable power settings let's you set the model discriminator to higher or lower value, what this does is it tries to make the final face look more like src, as a side effect it can make faces appear sharper but can also alter lighting and color matching and in extreme cases even make faces appear to change angle as the model will try to generate face that looks closer to the training sample, as with GAN this feature should only be enabled once random warp is disabled and model is fairly well trained. Consider making a backup before enabling this feature. Never use high values, typical value is 0.01 but you can use even lower ones like 0.001. It has a small performance impact. Default value is 0.0 (disabled).
+[img=500x200]
+
+Face style power ( 0.0..100.0 ?:help ) and Background style power ( 0.0..100.0 ?:help ) : This setting controls style transfer of either face (FSP) or background (BSP) part of the image, it is used to transfer the color information from your target/destination faces (data_dst) over to the final predicted faces, thus improving the lighting and color match but high values can cause the predicted face to look less like your source face and more like your target face. Start with small values like 0.001-0.1 and increase or decrease them depending on your needs. This feature has impact on memory usage and can cause OOM error, forcing you to lower your batch size in order to use it. For Background Style Power (BSP) higher values can be used as we don't care much about preserving SRC backgrounds, recommended value by DFL for BSP is 2.0 but you can also experiment with different values for the background. Consider making a backup before enabling this feature as it can also lead to artifacts and model collapse.
+Default value is 0.0 (disabled).
+
+Color transfer for src faceset ( none/rct/lct/mkl/idt/sot ?:help ) : this features is used to match the colors of your data_src to the data_dst so that the final result has similar skin color/tone to the data_dst and the final result after training doesn't change colors when face moves around, commonly reffered to as flickering/flicker/color shift/color change (which may happen if various face angles were taken from various sources that contained different light conditions or were color graded differently). There are several options to choose from:
+
+- none: because sometimes less is better and in some cases you might get better results without any color transfer during training.
+- rct (reinhard color transfer): based on: https://www.cs.tau.ac.il/~turkel/imagepapers/ColorTransfer.pdf
+- lct (linear color transfer): Matches the color distribution of the target image to that of the source image using a linear transform.
+- mkl (Monge-Kantorovitch linear): based on: http://www.mee.tcd.ie/~sigmedia/pmwiki/uploads/Main.Publications/fpitie07b.pdf
+- idt (Iterative Distribution Transfer): based on: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.158.1052&rep=rep1&type=pdf
+- sot (sliced optimal transfer): based on: https://dcoeurjo.github.io/OTColorTransfer/
+
+Most color transfers have little to no affect on performance or VRAM usage with exception of SOT which has performance effect during training and can severly slow down the merging process if used during merging, other color transfers like IDT may also have a performance impact during merging.
+
+Using color transfers is not always required but quite often helps and in some cases is absolutely mandatory, you should remember also that enabling them acts as an augmentation of the set, effectively creating new conditions for all of the SRC samples, thus increasing the complexity of the training data which can result in higher loss when enabled and naturally will mean the model will have to be trained longer to achieve the same state compared to training without color transfer where faces never change colors that much. This option can be combined with Random HSV Power which provides additional augmentation of the SRC set based of colors of just SRC set alone (unlike CT which augments SRC based of DST), effectively slightly averaging it's colors, providing additional color conditions CT methods may not achieve and it also reduces the effect of CT slightly (referred to as CT quality reduction by iperov in official notes).
+
+Enable gradient clipping ( y/n ?:help ) : This feature is implemented to prevent so called model collapse/corruption which may occur when using various features of DFL 2.0. It has small performance impact so if you really don't want to use it you must enable auto backups as a collapsed model cannot recover and must be scraped and training must be started all over. Default value is n (disabled) but since the performance impact is so low and it can save you a lot of time by preventing model collapse if you leave it enabled. Model collapse is most likely to happen when using Style Powers so if you're using them it's highly advised to enable gradient clipping or backups (you can also do them manually).
+
+Enable pretraining mode ( y/n ?:help ) : Enables pretraining process that uses a dataset of random people to initially pretrain your model, after training it to anywhere from 500.000 to 1.000.000 iterations such model can be then used when starting training with actual data_src and data_dst you want to train, it saves time because the model will already know how faces should look like and thus make it so it takes less time for faces to appear clearly when training (make sure to disable pretrain when you train on your actual data_src and data_dst). Models using -D architecture variants must be pretrained and it's also highly recommended to pretrain all models.
+User shared SAEHD models can be found in this thread: https://mrdeepfakes.com/forums/thre...eral-thread-for-user-made-models-and-requests
+
+1. What are pretrained models?
+
+Pretrained models are made by training them with random faces of various people. Using a model prepared in such a way significantly speeds up the initial training stage because model already knows how face should look so you don't have to wait as much for faces to start showing up and they'll become sharp faster compared to training on a fresh and non-pretrained model.
+You can now also share your custom pretraining sets (SFW/NSFW) for various face_types (full face, whole face and head).
+
+2. How to use pretrained models?
+
+Simply download it and place all the files directly into your model folder, start training, after selecting model for training (if you have more than one in your model folder) and device to train with (GPU/CPU) press any key within 2 seconds (you'll see a prompt that says this exact thing) to override model settings and make sure the pretrain option is set to disabled (N) so that you start training and not continue pretraining.
+If you leave pretrain option enabled (Y) the model will continue to pretrain using built-in pretrain dataset that comes with DFL (in this thread you will find models trained with both the old full face pretrain dataset set as well as with the new whole face FFHQ dataset).
+Note that the model will revert iteration count to 0 when you disable pretrain and start regular training, that's normal behavior for pretrained models. However if the model is described as "regular training" this means it was not pretrained but instead trained to certain amount of iterations where both SRC and DST dataset contained random faces of people, in this case model will carry on training and iteration count won't start at 0 but at the value it was when training was ended by the user who is sharing the model.
+
+3. How to create your own pretrained model?
+
+1. The official and recommended way to create one is to use pretrain option which will use DFL's built-in random celebrity faces dataset and train your model like this for 500k-1kk iterations.
+
+After model is sufficiently trained (most faces in the preview should look sharp by then, with well defined teeth, eyes but not necessarily with a lot of very fine detail).
+
+1.1 You can also change the default pretrain dataset to your own which you can make by placing random faces of people you're most likely to fake (it can be all male, female, mix of male and female, celebrities only, random people) and then packing it using util faceset pack.bat and then replacing the original file in \_internal\pretrain_CelebA with this new dataset.
+
+2. Alternative way to pretrain a model is to prepare data_src and data_dst datasets with faces of random people, from various angles and with different expressions and train models as if you would normally (pretrain disabled). For source dataset you can use faces of celebs you are most likely to swap in the future and for DST you can use any faces from types of videos you're most likely to use as your target videos.
+
+It should be noted however that preparing your model by simply training it on random faces can introduce some morphing and make result faces look slightly less like the source for a while. However after few retrains using the same source the src likeness of the predicted faces should improve. This method can be faster to adapt to new faces compared to training on pretrained model (because we are simply reusing a model, but instead of reusing one that was trained on specific src dataset we reuse a model that contains random faces, as mentioned above you can include faces of people you're most likely to fake as a part of your src and dst datasets).
+
+NOTE: If you're pretraining a HEAD model consider using your custom pretrain set as the included FFHQ dataset is of Whole Face type (WF). It's is strongly recommended to pretrain HEAD and any kind of AMP models, FF and WF SAEHD models are optional but it still helps to pretrain them to at least 300-500k and then use that as a base for you future project or do extra 500-600k of random training on top of your pretrain with SAEHD models.
+
+10.1 RTM Training Workflow:
+​
+With introduction of DeepFaceLive (DFLive) a new training workflow has been established, contrary to what some users think this isn't a new training method and does not differ significantly from regular training and this training method has been employed by some people in one way or another, you may have yourself create one by accident without even realizing it.
+
+RTM models (ReadyToMerge) are created by training an SRC set of the person we want to swap against large and varied DST set containing random faces of many people which covers all possible angles, expressions and lighting conditions. The SRC set must also have large variety of faces. The goal of RTM model training is to create a model that can apply our SRC face to any video, primarly for use with DeepFaceLive but also to speed up training process within DeepFaceLab 2.0 by creating a base model that can very quickly adapt to new target videos in less time compared to training a model from scratch.
+
+The recommended type of models for use with RTM workklow are SAEHD LIAE models, LIAE-UD or LIAE-UDT thanks to their superior color and lighting matching capabilities as well as being able to adapt better to different face shapes than DF architecture.
+AMP models can also be used to create RTM models, although they work a bit differently and as I lack know-how to explain AMP workflow yet I will only focus on LIAE RTM model training in this part of the guide.
+
+1. Start by preparing SRC set: make sure you cover all possible angles, each with as many different lighting conditions and expressions, the better the coverage of different possible faces, the better results will be.
+
+2. Prepare a DST set by collecting many random faces: this dataset must also have as much variety as possible, this dataset can be truly random, consisting of both masculine and femine faces of all sorts of skin colors or it can be specific to for example black masucline faces or feminine asian faces if that's the type of target face you plan on primarly use the model with, the more variety and more faces in the set the longer it will take to train a model but possibly better the model will be as it will be able to more correctly swap to more kinds of different faces.
+
+ALTERNATIVELY - USE RTM WF dataset from iperov: https://tinyurl.com/2p9cvt25
+If the link is dead go to https://github.com/iperov/DeepFaceLab and find torrent/magnet link to DFL builds as they contain the RTM WF dataset along them, the same dataset can be used to train an RTT model.
+
+3. Apply XSeg masks to both datasets: this will ensure model correctly trains and as with any other training is require in order to create WF model and while it's optional for FF models it's still recommended to apply XSeg mask of the correct type to both datasets, make sure you use the same XSeg model for both datasets.
+
+4. Use and existing RTT model or create a new one: RTT models as recommended by iperov are heavily re-trained models, upwards of 2-3kk iterations, hence why it may take a lot of time to create them, as an alternative you can pretrain a LIAE model for 600k-1kk iterations, more about making RTT in the next stage.
+
+5. Start training on your SRC and random DST using the workflows below, do note that some of these have been modified slightly compared to the iperov ones, use at your own risk.
+
+5.1 Iperov's new workflow:
+
+Settings: EMP Enabled, Blur Out Mask Enabled, UY Enabled, LRD Enabled, BS:8 (if you can't run your model with high enough BS lower it or run model optimizer and lrd on cpu).
+Others options should be left at default values (usually means disabled). Optionally use HSV at power 0.1 and CT mode that works best for you, usually RCT.
+Make a backup before every stage or enable auto backups.
+
+1. Train +2.000.000 iters with RW enabled and delete inter_AB.npy every 500k iters (save and stop model training, delete the file and resume training)
+2. After deleting inter_AB 4th time train extra +500k with RW enabled.
+3. If swapped face looks more like DST, delete inter_AB and repeat step 2.
+4. Disable RW and train for additional +500k iters.
+5. Enable GAN at power 0.1 with GAN_Dims:32 and Patch Size being 1/8th of your model resolution for +800.000k iters.
+
+5.2 Iperov's old workflow:
+
+1. Do 500k-1kk iterations with Random Warp: Y, Uniform Yaw: Y, LRD: N, Blur Out Mask: Y, Color Transfer: LCT, other settings leave at default values.
+2. Next do 500k iterations with LRD: Y, keep other settings as they are in step 1.
+3. After that do 500k iterations with Uniform Yaw: N
+4. Now do 500-800k iterations with Random Warp: N ,Uniform Yaw: N ,LRD: Y *
+5. And lastly do 200-300k iterations with Random Warp: N ,Uniform Yaw: N ,LRD: Y and GAN: 0.1, GAN PATCH SIZE: (1/8th of model resolution), GAN DIMS: 32
+
+10.2 Using RTM models:​
+
+Once you've finished training your models you can either use them in DFL or export as DFM model for use in DFLive.
+
+To export a model for use in DFLive use 6) export SAEHD as dfm or 6) export AMP as dfm, you'll have the choice of quantizing the model which can make it run faster but some models, particularly large ones with high resolution and high network dimensions (dims) values may not work well if you export them with this option enabled so make sure you test it in DFLive, the process doesn't delete original models, only creates additional DFM file in your "model" folder. If your model doesn't work well export it again with quantize option disabled.
+
+If you want to use your RTM model in DFL you can either start extracting new scenes and merge them with this model without any additional training or do some extra training.
+
+Extra training and reuse of trained LIAE/LIAE RTM models - Deleting inter_ab and inter_b files explained:
+
+What are inter_ab and _b files? These are parts of SAEHD models that use LIAE architecture (regardless of additional -U, -D, -T and -C variations), unlike DF architecture which has one commong inter file for both SRC and DST, LIAE features two inter files, inter_ab which contains latent code (representation) of both SRC and DST faces and additional inter_b that contains latent code of DST faces.
+
+1. Delete inter_b file from your model folder when you want to reuse RTM model as a regular LIAE model on new DST and train the model all over starting with RW enabled (train as a regular model).
+Applies to reusing trained LIAE model and changing DST but not SRC.
+
+2. Delete inter_ab file when you want to create a new RTM model for different celebrity, replace SRC with new one, add random DST set and proceed with the same workflow as when creating new RTM model.
+Applies to reusing trained LIAE model and changing SRC but not DST
+
+3. Don't delete either inter_ab or inter_b when you want to perform additional training on target DST using your trained RTM model.
+Doesn't apply to regular trained LIAE model reusal (may run into issue where your final predicted faces looks just like DST or have very low resemblance to SRC)
+
+4. Delete both inter_ab and inter_b when you are reusing trained LIAE model in regular scenarios, both src/dst change or you run into issue where results look like DST, do note that this has similar effect to what happens when you disable pretraining, only encoders/decoders remain trained, all other data is removed, this means model in a way returns to a state as if it was just pretrained (not quite but closer to that than a trained state) which may cause training to take a bit longer.
+
+In that case simply replace random DST with specific taget DST, start training with RW disabled:
+
+If you want to train using old iperov workflow start at step 4 of the OLD WORKFLOW.
+If you want to to train using new iperov workflow start at step 4 of the NEW WORKFLOW.
+
+RTM models sharing thread: https://mrdeepfakes.com/forums/thread-sharing-dfl-2-0-readytomerge-rtm-models-sharing
+
+11. Merging:​
+
+After you're done training your model it's time to merge learned face over original frames to form final video.
+
+For that we have 3 converters corresponding to 3 available models:
+
+7) merge SAEHD
+7) merge AMP
+7) merge Quick96
+
+Upon selecting any of those a command line window will appear with several prompts.
+1st one will ask you if you want to use an interactive converter, default value is y (enabled) and it's recommended to use it over the regular one because it has all the features and also an interactive preview where you see the effects of all changes you make when changing various options and enabling/disabling various features
+Use interactive merger? ( y/n ) :
+
+2nd one will ask you which model you want to use:
+Choose one of saved models, or enter a name to create a new model.
+[r] : rename
+[d] : delete
+[0] : df192 - latest
+
+3rd one will ask you which GPU/GPUs or CPU you want to use for the merging (conversion) process:
+Choose one or several GPU idxs (separated by comma).
+[CPU] : CPU
+[0] : Your GPU
+[0] Which GPU indexes to choose? :
+
+Pressing enter will use default value (0).
+
+After that's done you will see a command line window with current settings as well as preview window which shows all the controls needed to operate the interactive converter/merger:
+
+[IMAGE MISSING, WORK IN PROGRESS]
+
+Here is the list of all merger/converter features explained:
+
+Please check the help screen by pressing tab to see which keys correspond to which option in case they change or you are using different layout keyboard, they may also change over time.
+
+Also not that merging AMP may not feature all of the options SAEHD merging has, however once you understand SAEHD merging then AMP is very similar, most options have the same name and work in similar way. I will not be expanding the guide with AMP specific merging info since it's all pretty much the same with few missing or added, the help screen (tab) exists for a reason.
+
+1. Main overlay modes:
+
+- original: displays original frame without swapped face
+- overlay: simple overlays learned face over the frame - this is the recommended overlay mode to use as it's most stable and preserves most of the original trained look to faces.
+- hist-match: overlays the learned face and tires to match it based on histogram, it has 2 modes: normal and masked that can be switched with Z - normal is recommended.
+- seamless: uses opencv poisson seamless clone function to blend new learned face over the head in the original frame
+- seamless hist match: combines both hist-match and seamless.
+- raw-rgb: overlays raw learned face without any masking
+
+2. Hist match threshold: controls strength of the histogram matching in hist-match and seamless hist-match overlay mode.
+Q - increases value
+A - decreases value
+
+3. Erode mask: controls the size of a mask.
+W - increases mask erosion (smaller mask)
+S - decreases mask erosion (bigger mask)
+
+4. Blur mask: blurs/feathers the edge of the mask for smoother transition
+E - increases blur
+D - decreases blur
+
+5. Motion blur: after entering initial parameters (converter mode, model, GPU/CPU) merger loads all frames and data_dst aligned data, while it's doing it, it calculates motion vectors that are being used to create effect of motion blur which this setting controls, it let's you add it in places where face moves around but high values may blur the face even with small movement. The option only works if one set of faces is present in the "data_dst/aligned" folder - if during cleanup you had some faces with _1 prefixes (even if only faces of one person are present) the effect won't work, same goes if there is a mirror that reflects target persons face, in such case you cannot use motion blur and the only way to add it is to train each set of faces separately.
+R - increases motion blur
+F - decreases motion blur
+
+6. Super resolution: uses similar algorithm as data_src dataset/faceset enhancer, it can add some more definitions to areas such as teeth, eyes and enhance detail/texture of the learned face.
+T - increases the enhancement effect
+G - decreases the enhancement effect
+
+7. Blur/sharpen: blurs or sharpens the learned face using box or gaussian method.
+Y - sharpens the face
+H - blurs the face
+N - box/gaussian mode switch
+
+8. Face scale: scales learned face to be larger or smaller.
+U - scales learned face down
+J - scales learned face up
+
+9. Mask modes: there are 6 masking modes:
+dst: uses masks derived from the shape of the landmarks generated during data_dst faceset/dataset extraction.
+learned-prd: uses masks learned during training. Keep shape of SRC faces.
+learned-dst: uses masks learned during training. Keep shape of DST faces.
+learned-prd*dst: combines both masks, smaller size of both.
+learned-prd+dst: combines both masks, bigger size of both.
+XSeg-prd: uses XSeg model to mask using data from source faces.
+XSeg-dst: uses XSeg model to mask using data from destination faces - this mode is one you'll most likely use as it will mask the face according to shape of DST and exclude all obstructions (assuming you did label your DST faces correctly).
+
+XSeg-prd*dst: combines both masks, smaller size of both.
+learned-prd*dst*XSeg-dst*prd: combines all 4 mask modes, smaller size of all.
+
+10. Color transfer modes: similar to color transfer during training, you can use this feature to better match skin color of the learned face to the original frame for more seamless and realistic face swap. There are 8 different modes:
+
+RCT - Most often used and recommend.
+LCT - 2nd most often use option, stronger effect than RCT.
+MKL
+MKL-M - Good alternative for RCT, quite similar in some regards.
+IDT
+IDT-M
+SOT-M
+MIX-M
+
+11. Image degrade modes: there are 3 settings that you can use to affect the look of the original frame (without affecting the swapped face):
+Denoise - denoises image making it slightly blurry (I - increases effect, K - decrease effect)
+Bicubic - blurs the image using bicubic method (O - increases effect, L - decrease effect)
+Color - decreases color bit depth (P - increases effect, ; - decrease effect)
+
+AMP Specific options:
+
+Morph Factor: higher value will result in pure predicted results, lowering it will smoothly morph between it and your DST face and at the very end it simply shows DST face.
+
+Additional controls:
+TAB button - switches between main preview window and help screen.
+For complete list of keys (and what they control, such as moving forward/backward, starting merging) check the help screen.
+Bear in mind these will only work in the main preview window, pressing any button while on the help screen won't do anything.
+
+12. Conversion of frames back into video:​
+
+After you merged/convert all the faces and you will have a folder named "merged" inside your "data_dst" folder containing all frames as well as "merged_masked" which contains mask frames.
+Last step is to convert them back into video and combine with original audio track from data_dst.mp4 file.
+
+To do so you will use one of 4 provided .bat files that will use FFMPEG to combine all the frames into a video in one of the following formats - avi, mp4, loseless mp4 or loseless mov:
+
+- 8) merged to avi
+- 8) merged to mov lossless
+- 8) merged to mp4 lossless
+- 8) merged to mp4
+
+Alternatively if you want to have more control, further refine masks in some portions of the video, adjust colors of the face or do something else you can manually composite your video by taking audio from data_dst, your original frames, merged frames and mask frames, importing it into a video editing software you know and manually create the final video, this lets you do the things I already mentioned, adjust masks by further blurring or sharpening them (commonly reffered to as mask feathering), slightly enlarge or decrease size of the mask (thus revealing more or less of the DST face underneath it, apply additional color correction and color matching to your face (by using the mask to just display face portion of your merged frame), add sharpening, film grain/noise, etc.
+
+Look up video compositing guides on youtube as it's too complex of a topic to cover it in this guide. Alternatively check out video compositing/editing thread on our forum, link to which you can find in the beginning of the guide (useful links) or by simply visiting this link: https://mrdeepfakes.com/forums/thread-guide-compositing-post-processing-video-editing-guides There is not much there at the moment but what is there covers some basics to help you start out.
+
+And that's it!
+
+If you have more questions that weren't covered in this thread use the search option and check other threads and guides for more info on the process (or use google), alternatively PM me for more info, I offer paid assistance and can teach you everything there is about to DFL, MVE and other related things so you can start making perfect deepfakes in no time.
+
+Current issues/bugs:
+
+Github page for issues reports: https://github.com/iperov/DeepFaceLab/issues
+If you can't find the exact issue in existing forum threads, it wasn't mentioned on github and you believe no one else discovered it yet create a new thread here:
+https://mrdeepfakes.com/forums/forum-questions
+
+If your issue is common your thread will be deleted without a notice. Use search feature, if you search for errors by copying them directly from command line window remember to only copy key errors parts as directories names will differ between various users. When reporting issues make sure to include your full PC specs (CPU, GPU, RAM amount, OS) as well as your DFL version and model settings, describe what leads to the issues you're experiencing.
