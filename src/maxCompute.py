@@ -6,7 +6,10 @@ sys.path.append('/src')
 from src.config import accessId,secretAccessKey,defaultProject,bjProject,endPoint,bjEndPoint
 
 # ODPS.options.tunnel.use_instance_tunnel =True
-options.sql.settings = {'odps.sql.timezone':'Africa/Accra'}
+options.sql.settings = {
+    'odps.sql.timezone':'Africa/Accra',
+    "odps.sql.submit.mode" : "script"
+}
 # 执行odps sql，返回pandas的dataFrame
 def execSql(sql):
     o = ODPS(accessId, secretAccessKey, defaultProject,

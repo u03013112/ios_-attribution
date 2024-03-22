@@ -59,3 +59,31 @@
 
 
 # 预计结论应该是，高cv的付费张张能力更好。不同媒体间的同cv付费能力差不多。主要差异体现在不同媒体的cv分布上。
+
+
+
+import pandas as pd
+
+def debug():
+    df = pd.read_csv('/src/data/zk2/userDfRet0322.csv')
+    # 选择列名以'rate'结尾的列
+    rate_cols = df.filter(regex='rate$')
+
+    # 计算所有数据的和
+    total = rate_cols.sum().sum()
+
+    print(total)
+    return total
+
+def debug2():
+    df = pd.read_csv('/src/data/zk2/userDfRet0322.csv')
+
+    # df['install_date'] 是类似2024-02-06 12:00:00的字符串，取日期部分
+    df['install_date'] = df['install_date'].str.split(' ').str[0]
+    install_date = df['install_date'].unique().tolist()
+    install_date.sort()
+
+    print(install_date)
+
+if __name__ == '__main__':
+    debug2()

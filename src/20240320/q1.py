@@ -215,7 +215,7 @@ def getDiffData(startDayStr,endDayStr):
     groupByMediaDf = df.groupby(['media']).agg('sum').reset_index()
     groupByMediaDf['count_failed_rate'] = groupByMediaDf['count_failed'] / groupByMediaDf['count_skan']
     groupByMediaDf['usd_failed_rate'] = groupByMediaDf['usd_failed'] / groupByMediaDf['usd_skan']
-    print(groupByMediaDf[['media','cv','count_failed_rate','usd_failed_rate']])
+    print(groupByMediaDf[['media','count_failed_rate','usd_failed_rate']])
     
     # 针对每个cv，失败的count占比，失败的usd占比
     print('针对每个cv，失败的count占比，失败的usd占比')
@@ -243,4 +243,4 @@ if __name__ == '__main__':
     # dataStep3()
     # debug()
     # debug1()
-    getDiffData('20240304','20240319')
+    getDiffData('20240215','20240229')

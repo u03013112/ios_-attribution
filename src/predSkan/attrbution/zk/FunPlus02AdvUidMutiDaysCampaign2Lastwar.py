@@ -3,6 +3,10 @@
 # 2. 记录融合归因失败的SKAN到lastwar_ios_rh_skan_failed
 # 方便后续分析，后续分析代码在src/20240320/q1.py
 
+# 2024-03-22修改：
+# 1、缩短扩大时间范围的时间，从5天改为2天
+# 2、更新时间范围缩小，只取更加可信的数据，这里比较难以用语言描述，可以看代码，主要关键词uploadDateStartStr
+
 # FunPlus02AdvUidMutiDays Campaign版本2 lastwar 版本
 # 将国家分组成几个大区，分别是GCC、KR、US、JP、other，这是iOS海外KPI分组
 # 不再放宽国家限制，这样至少大范围上用户不会再出现KPI国家错误，即只投放了US的campaign缺匹配到一些别的国家的用户的情况
@@ -24,6 +28,8 @@ def init():
     global execSql
     global dayStr
     global days
+    # 指定上传开始日期
+    global uploadDateStartStr
 
     if 'o' in globals():
         print('this is online version')
@@ -56,6 +62,7 @@ def init():
 
     # 如果days不是整数，转成整数
     days = int(days)
+    uploadDateStartStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=(days - 7))).strftime('%Y%m%d')
 
 # 只针对下面媒体进行归因，其他媒体不管
 mediaList = [
@@ -450,7 +457,7 @@ def meanAttributionFastv2(userDf, skanDf):
     # print(skanDf.head(10))
 
     pending_skan_indices = skanDf.index.tolist()
-    N = 10
+    N = 12
     attributeDf = pd.DataFrame(columns=['user index', 'campaignId', 'skan index', 'rate'])
 
     campaignList = skanDf.loc[~skanDf['campaign_id'].isnull()]['campaign_id'].unique().tolist()
@@ -473,7 +480,7 @@ def meanAttributionFastv2(userDf, skanDf):
         # 在每次循环开始时，预先计算每一行的media rate的总和
         userDf['total media rate'] = userDf.apply(lambda x: sum([x[campaignId + ' rate'] for campaignId in campaignList]), axis=1)
         
-        print('第%d次分配，时间范围向前推%d小时'%(i+1,i*12))
+        print('第%d次分配，时间范围向前推%d小时'%(i+1,i*4))
         
         for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
             campaignId = str(item['campaign_id'])
@@ -481,7 +488,7 @@ def meanAttributionFastv2(userDf, skanDf):
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
             
-            min_valid_install_timestamp -= i*12*3600
+            min_valid_install_timestamp -= i*4*3600
             item_country_code_list = item['country_code_list']
             # 最后两次分配，忽略国家限制
             if i == N-1 or i == N-2:
@@ -705,7 +712,7 @@ def writeSkanTable(df,dayStr,table_name = 'lastwar_ios_rh_skan'):
     df['max_valid_install_timestamp'] = df['max_valid_install_timestamp'].astype('int64')
     df['usd'] = df['usd'].astype('float64')
 
-    print('try to write table:')
+    print('try to write table:',table_name,dayStr)
     print(df.head(5))
     if 'o' in globals():
         t = o.get_table(table_name)
@@ -718,16 +725,17 @@ def writeSkanTable(df,dayStr,table_name = 'lastwar_ios_rh_skan'):
         df.to_csv(f'/src/data/zk2/{table_name}_%s.csv'%(dayStr),index=False)
 
 def writeSkanToDB(skanDf,tabelName):
+    skanDf = skanDf[skanDf['day'] >= uploadDateStartStr].copy()
     days = skanDf['day'].unique().tolist()
     days.sort()
     for dayStr in days:
-        # print('dayStr:',dayStr)
         dayDf = skanDf[skanDf['day'] == dayStr]
         writeSkanTable(dayDf,dayStr,tabelName)
 
 def main():
     print('dayStr:', dayStr)
     print('days:', days)
+    print('写入开始日期:',uploadDateStartStr)
     check(dayStr)
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr,days)
@@ -789,11 +797,8 @@ def main():
     print('asaDf:')
     print(asaDf.head(5))
 
-    # 分天处理，解决内存问题
-    # 这里计算所有可以更新的安装日期，简单的说就是获取最小skan的前一天，在至少获取5天的前提下，这一天是完整的
-    dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days+1)).strftime('%Y%m%d')
-    print('写入开始日期:',dayBeforeStr)
-    userDf = userDf[userDf['day'] >= dayBeforeStr]
+    
+    userDf = userDf[userDf['day'] >= uploadDateStartStr]
     # 要按照day分区，所以要先按照day分组，然后再写入表
     # 先找到所有的day，升序排列
     daysInUserDf = userDf['day'].unique()
