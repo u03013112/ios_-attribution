@@ -62,7 +62,7 @@ def init():
 
     # 如果days不是整数，转成整数
     days = int(days)
-    uploadDateStartStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=(days - 7))).strftime('%Y%m%d')
+    uploadDateStartStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=(days - 14))).strftime('%Y%m%d')
 
 # 只针对下面媒体进行归因，其他媒体不管
 mediaList = [
@@ -457,7 +457,7 @@ def meanAttributionFastv2(userDf, skanDf):
     # print(skanDf.head(10))
 
     pending_skan_indices = skanDf.index.tolist()
-    N = 12
+    N = 10
     attributeDf = pd.DataFrame(columns=['user index', 'campaignId', 'skan index', 'rate'])
 
     campaignList = skanDf.loc[~skanDf['campaign_id'].isnull()]['campaign_id'].unique().tolist()
@@ -480,7 +480,7 @@ def meanAttributionFastv2(userDf, skanDf):
         # 在每次循环开始时，预先计算每一行的media rate的总和
         userDf['total media rate'] = userDf.apply(lambda x: sum([x[campaignId + ' rate'] for campaignId in campaignList]), axis=1)
         
-        print('第%d次分配，时间范围向前推%d小时'%(i+1,i*4))
+        print('第%d次分配，时间范围向前推%d小时'%(i+1,i*12))
         
         for index, item in tqdm(skanDf_to_process.iterrows(), total=len(skanDf_to_process)):
             campaignId = str(item['campaign_id'])
@@ -488,7 +488,7 @@ def meanAttributionFastv2(userDf, skanDf):
             min_valid_install_timestamp = item['min_valid_install_timestamp']
             max_valid_install_timestamp = item['max_valid_install_timestamp']
             
-            min_valid_install_timestamp -= i*4*3600
+            min_valid_install_timestamp -= i*12*3600
             item_country_code_list = item['country_code_list']
             # 最后两次分配，忽略国家限制
             if i == N-1 or i == N-2:
@@ -705,7 +705,8 @@ def writeTable(df,dayStr):
         print('try to write csv file')
         df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
 
-def writeSkanTable(df,dayStr,table_name = 'lastwar_ios_rh_skan'):
+def writeSkanTable(df1,dayStr,table_name = 'lastwar_ios_rh_skan'):
+    df = df1.copy()
     # 格式整理
     df['postback_timestamp'] = df['postback_timestamp'].astype('int64')
     df['min_valid_install_timestamp'] = df['min_valid_install_timestamp'].astype('int64')
