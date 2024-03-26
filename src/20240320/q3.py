@@ -311,7 +311,7 @@ def df1CvUserRate(startDayStr,endDayStr):
 
     mediaList = groupByMediaDf['mediasource'].unique()
     for media in mediaList:
-        mediaDf = groupByMediaDf[groupByMediaDf['mediasource'] == media]
+        mediaDf = groupByMediaDf[groupByMediaDf['mediasource'] == media].copy()
         mediaDf['uid_count rate'] = mediaDf['uid_count'] / mediaDf['uid_count'].sum()
         mediaDf['r1usd rate'] = mediaDf['r1usd'] / mediaDf['r1usd'].sum()
         mediaDf['r7usd rate'] = mediaDf['r7usd'] / mediaDf['r7usd'].sum()
@@ -437,15 +437,25 @@ def userCount(startDayStr,endDayStr):
         count = mediaDf['uid_count'].sum()
         print(f'{media} 用户数:{count}')
     
+
+def cvFenBu():
+    totalDf = pd.read_csv('/src/data/zk/q3_d2_20240215_20240229.csv')
+    mediaList = [
+        {'name':'FB','csvFilename':'/src/data/zk/q3_Facebook\ Ads_20240215_20240229.csv'},
+        {'name':'Google','csvFilename':'/src/data/zk/q3_googleadwords_int_20240215_20240229.csv'},
+        {'name':'bytedance','csvFilename':'/src/data/zk/q3_bytedanceglobal_int_20240215_20240229.csv'},
+        {'name':'applovin','csvFilename':'/src/data/zk/q3_applovin_int_20240215_20240229.csv'},
+    ]
+    
 if __name__ == '__main__':
     startDayStr = '20240215'
     endDayStr = '20240229'
     # startDayStr = '20240304'
     # endDayStr = '20240306'
 
-    # R0R7(startDayStr,endDayStr)
-    userCount(startDayStr,endDayStr)
-    
+    R0R7(startDayStr,endDayStr)
+    # userCount(startDayStr,endDayStr)
+
     # df1CvUserRate(startDayStr,endDayStr)
     # df1CvGroupUserRate(startDayStr,endDayStr)
     # df2CvUserRate(startDayStr,endDayStr)

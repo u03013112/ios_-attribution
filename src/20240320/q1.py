@@ -222,6 +222,7 @@ def getDiffData(startDayStr,endDayStr):
     groupByCvDf = df.groupby(['cv']).agg('sum').reset_index()
     groupByCvDf['count_failed_rate'] = groupByCvDf['count_failed'] / groupByCvDf['count_skan']
     groupByCvDf['usd_failed_rate'] = groupByCvDf['usd_failed'] / groupByCvDf['usd_skan']
+    groupByCvDf = groupByCvDf.sort_values(by='cv',ascending=True)
     print(groupByCvDf[['cv','count_failed_rate','usd_failed_rate']])
 
     # 针对每个媒体，再分cv，失败的count占比，失败的usd占比
