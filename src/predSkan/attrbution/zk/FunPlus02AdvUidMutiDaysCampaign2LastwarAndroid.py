@@ -1,130 +1,89 @@
-# FunPlus02AdvUidMutiDays Campaign版本2 topheros 版本
+# 沿用线上算法代码，用安卓数据进行验证
+
+# FunPlus02AdvUidMutiDays Campaign版本2 lastwar 版本
 # 将国家分组成几个大区，分别是GCC、KR、US、JP、other，这是iOS海外KPI分组
 # 不再放宽国家限制，这样至少大范围上用户不会再出现KPI国家错误，即只投放了US的campaign缺匹配到一些别的国家的用户的情况
 # 为了增加匹配率，将时间范围向前推5天，分10次匹配，每次向前推12小时。之前版本是只匹配3次，每次向前推24小时。
 
 import io
+import os
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from datetime import datetime, timedelta
+import sys
+sys.path.append('/src')
+from src.maxCompute import execSql
 
-# 参数dayStr，是业务日期，格式为'20210404'
-# 参数days，是要处理多少天的数据，是一个整数，至少要大于等于5
+def makeLevels1(userDf, usd='r1usd', N=32):
+    filtered_df = userDf[userDf[usd] > 0]
+    df = filtered_df.sort_values([usd])
+    levels = [0] * (N - 1)
+    total_usd = df[usd].sum()
+    target_usd = total_usd / (N)
+    current_usd = 0
+    group_index = 0
+    for index, row in df.iterrows():
+        current_usd += row[usd]
+        if current_usd >= target_usd:
+            levels[group_index] = row[usd]
+            current_usd = 0
+            group_index += 1
+            if group_index == N - 1:
+                break
+    return levels
 
-# 为了兼容本地调试，要在所有代码钱调用此方法
-def init():
-    global execSql
-    global dayStr
-    global days
-    # 指定上传开始日期
-    global uploadDateStartStr
+def makeCvMap(levels):
+    mapData = {
+        'cv':[0],
+        'min_event_revenue':[-1],
+        'max_event_revenue':[0],
+        'avg':[0]
+    }
+    for i in range(len(levels)):
+        mapData['cv'].append(len(mapData['cv']))
+        min = mapData['max_event_revenue'][len(mapData['max_event_revenue'])-1]
+        max = levels[i]
+        mapData['min_event_revenue'].append(min)
+        mapData['max_event_revenue'].append(max)
+        mapData['avg'].append((min+max)/2)
 
-    if 'o' in globals():
-        print('this is online version')
+    cvMapDf = pd.DataFrame(data=mapData)
+    return cvMapDf
 
-        from odps import options
-        # UTC+0
-        options.sql.settings = {'odps.sql.timezone':'Africa/Accra'}
 
-        def execSql_online(sql):
-            with o.execute_sql(sql).open_reader(tunnel=True, limit=False) as reader:
-                pd_df = reader.to_pandas()
-                print('获得%d行数据' % len(pd_df))
-                return pd_df
 
-        execSql = execSql_online
+def makeSKAN(df):
+    levels = makeLevels1(df,usd='r1usd',N=32)
+    cvMapDf = makeCvMap(levels)
+    cvDf = addCv(df,cvMapDf,usd='r1usd',cv='cv')
+    
+    # print(cvDf.head(10))
 
-        # 线上版本是有args这个全局变量的，无需再判断
-        dayStr = args['dayStr']
-        days = args['days']
-    else:
-        print('this is local version')
-        import sys
-        sys.path.append('/src')
-        from src.maxCompute import execSql as execSql_local
+    # 添加postback_timestamp
+    # 如果用户的r1usd == 0，postback_timestamp = install_timestamp + 24小时 + 0~24小时之间随机时间
+    # 如果用户的r1usd > 0，postback_timestamp = last_timestamp + 24小时 + 0~24小时之间随机时间
+    # 添加postback_timestamp
+    zero_r1usd_mask = cvDf['r1usd'] == 0
+    non_zero_r1usd_mask = cvDf['r1usd'] > 0
 
-        execSql = execSql_local
+    cvDf.loc[zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[zero_r1usd_mask, 'install_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=zero_r1usd_mask.sum())
+    cvDf.loc[non_zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[non_zero_r1usd_mask, 'install_timestamp'] + 24 * 3600 + np.random.uniform(0, 2 * 24 * 3600, size=non_zero_r1usd_mask.sum())
 
-        dayStr = '20240125'
-        days = '15'
+    # print(cvDf.head(30))
 
-    # 如果days不是整数，转成整数
-    days = int(days)
-    uploadDateStartStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=(days - 14))).strftime('%Y%m%d')
+    skanDf = cvDf[['postback_timestamp','media','campaign_id','cv']]
 
-# 只针对下面媒体进行归因，其他媒体不管
-mediaList = [
-    'Facebook Ads',
-    'googleadwords_int',
-    'bytedanceglobal_int',
-    'other'
-]
+    # postback_timestamp 转成 int
+    # cv转成 int
+    skanDf['postback_timestamp'] = skanDf['postback_timestamp'].astype(int)
+    skanDf['cv'] = skanDf['cv'].astype(int)
 
-def getSKANDataFromMC(dayStr, days):
-    dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days)).strftime('%Y%m%d')
+    return skanDf
 
-    sql = f'''
-        SELECT
-            ad_network_campaign_id as campaign_id,
-            media_source as media,
-            skad_conversion_value as cv,
-            timestamp as postback_timestamp,
-            day
-        FROM 
-            ods_platform_appsflyer_skad_details
-        WHERE
-            day between '{dayBeforeStr}' and '{dayStr}'
-            AND app_id = 'id6450953550'
-            AND event_name in (
-                'af_skad_install',
-                'af_skad_redownload'
-            )
-        ;
-    '''
-    print(sql)
-    df = execSql(sql)
-    # 在这里做一些过滤处理
-    # 其中postback_timestamp应该最大值小于dayStr的23:59:59，但是目前发现有个别的大于这个值
-    # 所以将大于这个值的postback_timestamp改为dayStr的23:59:59
-    # 这里原来认为postback_timestamp是unix时间戳，其实是类似'2023-09-01 15:54:22'这样的字符串，另外他的时区不是utc0
-    # 需要先将他转成utc0的unix时间戳，然后最大值过滤，然后再转回原来的字符串格式
-    # 为时间字符串添加UTC时区标识
-    # 在新列中进行操作
-    df['temp_timestamp'] = df['postback_timestamp'] + '+00:00'
-    df['temp_timestamp'] = pd.to_datetime(df['temp_timestamp'], utc=True)
-    df['temp_timestamp'] = df['temp_timestamp'].view(np.int64) // 10 ** 9
 
-    max_timestamp_str = dayStr + '235959' + '+00:00'
-    max_timestamp = pd.to_datetime(max_timestamp_str, utc=True)
-    print('max_timestamp:', max_timestamp)
-    max_timestamp = max_timestamp.to_pydatetime().timestamp()
-    print('max_timestamp:', max_timestamp)
-
-    affected_rows = df[df['temp_timestamp'] > max_timestamp]
-    print('尝试纠正postback_timestamp，影响到的行数：', len(affected_rows))
-
-    # 显示修改前的示例数据
-    print('\n修改前的示例数据:')
-    print(affected_rows.head(5))
-
-    df.loc[df['temp_timestamp'] > max_timestamp, 'temp_timestamp'] = max_timestamp
-
-    # 将修改后的值赋回到 'postback_timestamp' 列
-    # df['postback_timestamp'] = pd.to_datetime(df['temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
-    # 只对影响到的行做 'postback_timestamp' 的覆盖
-    df.loc[affected_rows.index, 'postback_timestamp'] = pd.to_datetime(df.loc[affected_rows.index, 'temp_timestamp'], unit='s', utc=True).dt.strftime('%Y-%m-%d %H:%M:%S')
-
-    # 显示修改后的示例数据
-    print('\n修改后的示例数据:')
-    print(df.loc[affected_rows.index].head(5))
-
-    # 删除临时列
-    df.drop(columns=['temp_timestamp'], inplace=True)
-
-    return df
 
 # 计算合法的激活时间范围
 def skanAddValidInstallDate(skanDf):
@@ -151,7 +110,6 @@ def skanAddValidInstallDate(skanDf):
 
     return skanDf
 
-
 def getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp):
     # minValidInstallTimestamp 向前推8天，为了让出广告的转化窗口
     minValidInstallTimestamp -= 24 * 8 * 3600
@@ -171,8 +129,8 @@ def getCountryFromCampaign(minValidInstallTimestamp, maxValidInstallTimestamp):
         FROM
             rg_bi.dwd_overseas_cost_allproject
         WHERE
-            app = 116
-            AND app_package = 'id6450953550'
+            app = 502
+            AND app_package = 'com.fun.lastwar.gp'
             AND cost_value_usd >= 1 
             AND install_day BETWEEN '{minValidInstallTimestampDayStr}' AND '{maxValidInstallTimestampDayStr}'
         group by
@@ -287,168 +245,142 @@ def skanAddGeo(skanDf,campaignGeo2Df):
 
     return skanDf
     
-def getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
-    # 修改后的SQL语句，r1usd用来计算cv，r2usd可能可以用来计算48小时cv，暂时不用r7usd，因为这个时间7日应该还没有完整。
-    sql = f'''
-        SELECT
-            game_uid as customer_user_id,
-            install_timestamp,
-            COALESCE(
-                SUM(
+def getAfDataFromMC(startDayStr, endDayStr):
+    filename = f'/src/data/zk/lw_android_userDf_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        print('read from file:',filename)
+        return pd.read_csv(filename)
+    else:
+        sql1 = f'''
+            SELECT
+                game_uid as customer_user_id,
+                install_timestamp,
+                COALESCE(
+                    SUM(
                     CASE
-                        WHEN event_timestamp <= install_timestamp + 24 * 3600 THEN revenue_value_usd
+                        WHEN event_time - install_timestamp between 0
+                        and 24 * 3600 THEN revenue_value_usd
                         ELSE 0
                     END
-                ),
-                0
-            ) as r1usd,
-            TO_CHAR(
-                TO_DATE(install_timestamp, "yyyy-mm-dd hh:mi:ss"),
-                "yyyy-mm-dd"
-            ) as install_date,
-            country as country_code
-        FROM
-            rg_bi.ads_topheros_ios_purchase_adv
-        WHERE
-            install_timestamp BETWEEN '{minValidInstallTimestamp}'
-            AND '{maxValidInstallTimestamp}'
-            AND game_uid IS NOT NULL
-            AND mediasource <> 'Apple Search Ads'
-        GROUP BY
-            game_uid,
-            install_timestamp,
-            country;
-    '''
+                    ),
+                    0
+                ) as r1usd,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 2 * 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r2usd,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 7 * 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r7usd,
+                TO_CHAR(
+                    from_unixtime(cast (install_timestamp as bigint)),
+                    "yyyy-mm-dd"
+                ) as install_date,
+                country as country_code
+            FROM
+                rg_bi.dwd_overseas_revenue_allproject
+            WHERE
+                zone = '0'
+                and app = 502
+                and app_package = 'com.fun.lastwar.gp'
+                and day BETWEEN {startDayStr}
+                AND {endDayStr}
+                AND game_uid IS NOT NULL
+            GROUP BY
+                game_uid,
+                install_timestamp,
+                country
+            ;
+        '''
 
-    print(sql)
-    df = execSql(sql)
-    return df
 
-
-# 获得ASA用户数据，这里直接从二次归因表中获得，只需要uid，安装时间
-def getAsaDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp):
-    sql = f'''
+        sql = f'''
         SELECT
-            game_uid as customer_user_id,
-            campaign_id,
+            appsflyer_id as customer_user_id,
+            install_timestamp,
+            COALESCE(
+            SUM(
+                CASE
+                WHEN event_time - install_timestamp between 0
+                and 24 * 3600 THEN event_revenue_usd
+                ELSE 0
+                END
+            ),
+            0
+            ) as r1usd,
+            COALESCE(
+            SUM(
+                CASE
+                WHEN event_time - install_timestamp between 0
+                and 2 * 24 * 3600 THEN event_revenue_usd
+                ELSE 0
+                END
+            ),
+            0
+            ) as r2usd,
+            COALESCE(
+            SUM(
+                CASE
+                WHEN event_time - install_timestamp between 0
+                and 7 * 24 * 3600 THEN event_revenue_usd
+                ELSE 0
+                END
+            ),
+            0
+            ) as r7usd,
             TO_CHAR(
-            from_unixtime(install_timestamp),
-            "yyyymmdd"
-            ) as day,
-            TO_CHAR(
-            from_unixtime(install_timestamp),
-            "yyyy-mm-dd hh:mi:ss"
-            ) as install_date
+            from_unixtime(cast (install_timestamp as bigint)),
+            "yyyy-mm-dd"
+            ) as install_date,
+            country_code as country_code,
+            media_source as media,
+            campaign_id
         FROM
-            rg_bi.dws_overseas_topheros_unique_uid
+            rg_bi.ods_platform_appsflyer_events
         WHERE
-            app_package = 'id6450953550'
-            AND install_timestamp BETWEEN {minValidInstallTimestamp}
-            AND {maxValidInstallTimestamp}
-            AND game_uid IS NOT NULL
-            AND mediasource = 'Apple Search Ads'
+            zone = '0'
+            and app = 502
+            and app_id = 'com.fun.lastwar.gp'
+            and day BETWEEN '{startDayStr}'
+            AND '{endDayStr}'
         GROUP BY
-            game_uid,
-            campaign_id,
-            day,
-            install_date
+            appsflyer_id,
+            install_timestamp,
+            country_code,
+            media_source,
+            campaign_id
         ;
-    '''
+'''
+        print(sql)
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+        return df
 
-    print(sql)
-    df = execSql(sql)
-    return df
-
-def getCvMap():
-    csv_str = '''
-app_id,conversion_value,event_name,min_event_counter,max_event_counter,min_event_revenue,max_event_revenue,min_time_post_install,max_time_post_install,last_config_change,postback_sequence_index,coarse_conversion_value,lock_window_type,lock_window_time
-id6450953550,0,,,,,,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,1,af_skad_revenue,0,1,0,1.94,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,2,af_skad_revenue,0,1,1.94,1.99,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,3,af_skad_revenue,0,1,1.99,2.03,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,4,af_skad_revenue,0,1,2.03,2.07,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,5,af_skad_revenue,0,1,2.07,2.17,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,6,af_skad_revenue,0,1,2.17,2.19,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,7,af_skad_revenue,0,1,2.19,2.39,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,8,af_skad_revenue,0,1,2.39,3.37,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,9,af_skad_revenue,0,1,3.37,5.97,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,10,af_skad_revenue,0,1,5.97,7.7,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,11,af_skad_revenue,0,1,7.7,9.89,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,12,af_skad_revenue,0,1,9.89,11.98,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,13,af_skad_revenue,0,1,11.98,12.37,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,14,af_skad_revenue,0,1,12.37,13.07,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,15,af_skad_revenue,0,1,13.07,13.21,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,16,af_skad_revenue,0,1,13.21,14.95,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,17,af_skad_revenue,0,1,14.95,16.98,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,18,af_skad_revenue,0,1,16.98,18.51,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,19,af_skad_revenue,0,1,18.51,19.96,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,20,af_skad_revenue,0,1,19.96,22.06,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,21,af_skad_revenue,0,1,22.06,23.69,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,22,af_skad_revenue,0,1,23.69,25.29,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,23,af_skad_revenue,0,1,25.29,27.42,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,24,af_skad_revenue,0,1,27.42,29.63,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,25,af_skad_revenue,0,1,29.63,31.32,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,26,af_skad_revenue,0,1,31.32,33.93,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,27,af_skad_revenue,0,1,33.93,36.33,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,28,af_skad_revenue,0,1,36.33,38.61,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,29,af_skad_revenue,0,1,38.61,41.95,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,30,af_skad_revenue,0,1,41.95,44.93,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,31,af_skad_revenue,0,1,44.93,47.88,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,32,af_skad_revenue,0,1,47.88,52.3,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,33,af_skad_revenue,0,1,52.3,56.66,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,34,af_skad_revenue,0,1,56.66,62.14,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,35,af_skad_revenue,0,1,62.14,67.09,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,36,af_skad_revenue,0,1,67.09,71.75,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,37,af_skad_revenue,0,1,71.75,77.93,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,38,af_skad_revenue,0,1,77.93,85.94,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,39,af_skad_revenue,0,1,85.94,92.47,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,40,af_skad_revenue,0,1,92.47,103.79,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,41,af_skad_revenue,0,1,103.79,107.89,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,42,af_skad_revenue,0,1,107.89,114.47,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,43,af_skad_revenue,0,1,114.47,123.71,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,44,af_skad_revenue,0,1,123.71,131.89,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,45,af_skad_revenue,0,1,131.89,143.1,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,46,af_skad_revenue,0,1,143.1,155.86,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,47,af_skad_revenue,0,1,155.86,170.61,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,48,af_skad_revenue,0,1,170.61,184.13,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,49,af_skad_revenue,0,1,184.13,203.16,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,50,af_skad_revenue,0,1,203.16,226.78,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,51,af_skad_revenue,0,1,226.78,244.75,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,52,af_skad_revenue,0,1,244.75,265.39,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,53,af_skad_revenue,0,1,265.39,282.05,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,54,af_skad_revenue,0,1,282.05,310.77,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,55,af_skad_revenue,0,1,310.77,337.73,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,56,af_skad_revenue,0,1,337.73,385.3,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,57,af_skad_revenue,0,1,385.3,443.66,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,58,af_skad_revenue,0,1,443.66,547.3,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,59,af_skad_revenue,0,1,547.3,630.49,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,60,af_skad_revenue,0,1,630.49,836.92,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,61,af_skad_revenue,0,1,836.92,1354.95,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,62,af_skad_revenue,0,1,1354.95,1706.24,0,24,2023-12-29 09:39:55,0,,,
-id6450953550,63,af_skad_revenue,0,1,1706.24,2000,0,24,2023-12-29 09:39:55,0,,,
-    '''
-    csv_file_like_object = io.StringIO(csv_str)
-    # 加载CV Map
-    cvMapDf = pd.read_csv(csv_file_like_object)
-    # cvMapDf = cvMapDf.loc[(cvMapDf['event_name'] == 'af_skad_revenue') & (cvMapDf['conversion_value']<32)]
-    cvMapDf = cvMapDf[['conversion_value','min_event_revenue','max_event_revenue']]
-    
-    return cvMapDf
-
-def addCv(df, cvMapDf):
-    # 将数据类型转换为数值类型，无法解析的字符串转换为NaN
-    df['r1usd'] = pd.to_numeric(df['r1usd'], errors='coerce')
-    cvMapDf['min_event_revenue'] = pd.to_numeric(cvMapDf['min_event_revenue'], errors='coerce')
-    cvMapDf['max_event_revenue'] = pd.to_numeric(cvMapDf['max_event_revenue'], errors='coerce')
-    cvMapDf['conversion_value'] = pd.to_numeric(cvMapDf['conversion_value'], errors='coerce')
-
-    df.loc[:, 'cv'] = 0
-    for index, row in cvMapDf.iterrows():
-        df.loc[(df['r1usd'] > row['min_event_revenue']) & (df['r1usd'] <= row['max_event_revenue']), 'cv'] = row['conversion_value']
-    
-    # 如果r1usd > 最大max_event_revenue，则取最大值
-    df.loc[df['r1usd'] > cvMapDf['max_event_revenue'].max(), 'cv'] = cvMapDf['conversion_value'].max()
-    return df# 暂时就只关心这3个媒体
+def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
+    userDfCopy = userDf.copy(deep=True).reset_index(drop=True)
+    for cv1 in cvMapDf['cv'].values:
+        min = cvMapDf['min_event_revenue'][cv1]
+        max = cvMapDf['max_event_revenue'][cv1]
+        userDfCopy.loc[
+            (userDfCopy[usd]>min) & (userDfCopy[usd]<=max),cv
+        ] = cv1
+        
+    # 将userDfCopy[usd]>max的用户的cv1和max设置为最后一档
+    userDfCopy.loc[userDfCopy[usd]>max,cv] = cv1
+    return userDfCopy
 
 import gc
 def meanAttributionFastv2(userDf, skanDf):
@@ -615,9 +547,10 @@ def meanAttributionFastv2(userDf, skanDf):
             print('所有的skan都已经分配完毕')
             break
     
+
     skanFailedDf = skanDf.loc[pending_skan_indices]
     skanFailedDf['postback_timestamp'] = 0
-    writeSkanToDB(skanFailedDf,'topheros_ios_rh_skan_failed')
+    writeSkanToDB(skanFailedDf,'lastwar_ios_rh_skan_failed')
 
     # 拆分customer_user_id
     userDf['customer_user_id'] = userDf['customer_user_id'].apply(lambda x: x.split('|'))
@@ -641,134 +574,24 @@ def meanAttributionFastv2(userDf, skanDf):
 
     return userDf.reset_index(drop=True)
 
-# 检查是否已经获得了af数据
-def check(dayStr):
-    sql = f'''
-        select
-            *
-        from 
-            ods_platform_appsflyer_skad_details
-        where
-            day = '{dayStr}'
-            AND app_id = 'id6450953550'
-            AND event_name in (
-                'af_skad_install',
-                'af_skad_redownload'
-            )
-        limit 10
-        ;
-    '''
-    print(sql)
-    df = execSql(sql)
-    if len(df) <= 0:
-        raise Exception('没有有效的获得af skan数据，请稍后重试')
-    return
-
-# 下面部分就只有线上环境可以用了
-from odps.models import Schema, Column, Partition
-def createTable():
-    if 'o' in globals():
-        columns = [
-            Column(name='customer_user_id', type='string', comment='from ods_platform_appsflyer_events.customer_user_id'),
-            Column(name='install_date', type='string', comment='install date,like 2023-05-31'),
-            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
-            Column(name='rate', type='double', comment='rate,lile 0.1'),
-        ]
-        
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('topheros_ios_funplus02_adv_uid_mutidays_campaign2', schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
-# 将处理好的skan存入表中
-def createSkanTable(table_name = 'topheros_ios_rh_skan'):
-    if 'o' in globals():
-        columns = [
-            Column(name='campaign_id', type='string', comment='campaign_id,like 1772649174232113'),
-            Column(name='media', type='string', comment='media,like Facebook Ads'),
-            Column(name='cv', type='string', comment='conversion value,like 1'),
-            Column(name='postback_timestamp', type='bigint', comment='postback time,like 1650000000'),
-            Column(name='min_valid_install_timestamp', type='bigint', comment='min valid install time,like 1650000000'),
-            Column(name='max_valid_install_timestamp', type='bigint', comment='max valid install time,like 1650000000'),
-            Column(name='usd', type='double', comment='usd,like 1.0'),
-            Column(name='count', type='bigint', comment='count,like 1'),
-        ]
-        
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table(table_name, schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
-
-def deleteTable(dayStr):
-    print('try to delete table:',dayStr)
-    if 'o' in globals():
-        t = o.get_table('topheros_ios_funplus02_adv_uid_mutidays_campaign2')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-
-def writeTable(df,dayStr):
-    print('try to write table:')
-    print(df.head(5))
-    if 'o' in globals():
-        t = o.get_table('topheros_ios_funplus02_adv_uid_mutidays_campaign2')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
-    else:
-        print('writeTable failed, o is not defined')
-        print('try to write csv file')
-        df.to_csv('/src/data/zk2/funplus02AdvUidMutiDaysCampaignId_%s.csv'%(dayStr),index=False)
-
-def writeSkanTable(df1,dayStr,table_name = 'topheros_ios_rh_skan'):
-    df = df1.copy()
-    # 格式整理
-    df['postback_timestamp'] = df['postback_timestamp'].astype('int64')
-    df['min_valid_install_timestamp'] = df['min_valid_install_timestamp'].astype('int64')
-    df['max_valid_install_timestamp'] = df['max_valid_install_timestamp'].astype('int64')
-    df['usd'] = df['usd'].astype('float64')
-
-    print('try to write table:',table_name,dayStr)
-    print(df.head(5))
-    if 'o' in globals():
-        t = o.get_table(table_name)
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
-    else:
-        print('writeTable failed, o is not defined')
-        print('try to write csv file')
-        df.to_csv(f'/src/data/zk2/{table_name}_%s.csv'%(dayStr),index=False)
-
-def writeSkanToDB(skanDf,tabelName):
-    skanDf = skanDf[skanDf['day'] >= uploadDateStartStr].copy()
-    days = skanDf['day'].unique().tolist()
-    days.sort()
-    for dayStr in days:
-        dayDf = skanDf[skanDf['day'] == dayStr]
-        writeSkanTable(dayDf,dayStr,tabelName)
 
 def main():
-    print('dayStr:', dayStr)
-    print('days:', days)
-    print('写入开始日期:',uploadDateStartStr)
-    check(dayStr)
-    # 1、获取skan数据
-    skanDf = getSKANDataFromMC(dayStr,days)
-    # 将skanDf中media不属于mediaList的media改为other
-    # skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
-    # skanDf = skanDf[skanDf['media'].isin(mediaList)]
     
-    skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
-    skanDf['cv'] = skanDf['cv'].fillna(-1)
-    # 目前采用64个单位，所以不需要减32
-    # skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+    startDayStr = '20240201'
+    endDayStr = '20240315'
 
+    userDf = getAfDataFromMC(startDayStr, endDayStr)
+
+    # 为了获得完整的7日回收，需要将最后7天的注册用户去掉
+    userDf = userDf.loc[
+        (userDf['install_date'] >= '2024-02-01') &
+        (userDf['install_date'] <= '2024-03-07')
+    ]
+
+    skanDf = makeSKAN(userDf)
+    skanDf.to_csv('/src/data/zk/lw_android_skanDf.csv',index=False)
+    return
+    skanDf = pd.read_csv('/src/data/zk/lw_android_skanDf.csv')
     # 2、计算合法的激活时间范围
     skanDf = skanAddValidInstallDate(skanDf)
     # 3、获取广告信息
@@ -783,8 +606,10 @@ def main():
     skanDf = skanAddGeo(skanDf,campaignGeo2Df)
     print('skanDf (head 5):')
     print(skanDf.head(5))
-    # 5、获取af数据
-    afDf = getAfDataFromMC(minValidInstallTimestamp, maxValidInstallTimestamp)
+    skanDf.to_csv('/src/data/zk/lw_android_skanDf2.csv',index=False)
+    return
+
+    afDf = userDf[['customer_user_id','install_timestamp','r1usd','country_code']]
     userDf = addCv(afDf,getCvMap())
 
     userDf['geo'] = 'other'
@@ -809,7 +634,7 @@ def main():
 
     # 将skanDf2存档
     skanDf['count'] = 1
-    writeSkanToDB(skanDf,'topheros_ios_rh_skan')
+    writeSkanToDB(skanDf,'lastwar_ios_rh_skan')
 
     # 进行归因
     userDf = meanAttributionFastv2(userDf,skanDf)
@@ -820,6 +645,7 @@ def main():
     print('asaDf:')
     print(asaDf.head(5))
 
+    
     userDf = userDf[userDf['day'] >= uploadDateStartStr]
     # 要按照day分区，所以要先按照day分组，然后再写入表
     # 先找到所有的day，升序排列
@@ -863,13 +689,7 @@ def main():
 
     return
 
-init()
-createTable()
-createSkanTable('topheros_ios_rh_skan')
-createSkanTable('topheros_ios_rh_skan_failed')
+if __name__ == '__main__':
+    main()
 
 
-main()
-
-# 删除额外的分区，为了确保AF修改postback时间不会导致任何提前数据，双保险，与上面的postback时间戳过滤一起使用
-deleteTable(dayStr)

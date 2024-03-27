@@ -33,21 +33,32 @@ def check(tableName):
 import rpyc
 def main():
     retryMax = 10
+    reported = {'topwar': False, 'lastwar': False, 'topheros': False}
+    tableNames = {
+        'topwar': 'topwar_ios_funplus02_adv_uid_mutidays_campaign2',
+        'lastwar': 'lastwar_ios_funplus02_adv_uid_mutidays_campaign2',
+        'topheros': 'topheros_ios_funplus02_adv_uid_mutidays_campaign2'
+    }
+
     for retry in range(retryMax):
-        topwarCnt = check('topwar_ios_funplus02_adv_uid_mutidays_campaign2')
-        lastwarCnt = check('lastwar_ios_funplus02_adv_uid_mutidays_campaign2')
-        if topwarCnt > 0 and lastwarCnt > 0:
-            conn = rpyc.connect("192.168.40.62", 10001)
-            conn.root.sendMessageDebug("融合归因今日完成!")
+        for prefix, tableName in tableNames.items():
+            if not reported[prefix]:
+                cnt = check(tableName)
+                if cnt > 0:
+                    conn = rpyc.connect("192.168.40.62", 10001)
+                    conn.root.sendMessageDebug(f"{prefix} 融合归因今日完成!")
+                    reported[prefix] = True
+
+        if all(reported.values()):
             break
         else:
             if retry == retryMax - 1:
+                not_reported = [k for k, v in reported.items() if not v]
                 conn = rpyc.connect("192.168.40.62", 10001)
-                conn.root.sendMessageDebug("融合归因今日失败，已达到最大重试次数!")
+                conn.root.sendMessageDebug(f"{', '.join(not_reported)} 融合归因今日失败，已达到最大重试次数!")
                 break
-        # 20分钟检测一次
-        time.sleep(60*20)
-    
+
+        time.sleep(60 * 20)    
 
 if __name__ == '__main__':
     main()
