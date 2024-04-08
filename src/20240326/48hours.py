@@ -79,61 +79,190 @@ GROUP BY
     return df
 
 # 抽样，抽样比例rand<1
-def getLwIosPayDataRAND(startDayStr,endDayStr,rand = 0.1):
+def getLwIosPayDataRAND(startDayStr,endDayStr,rand = 0.1,readDb = False):
     filename = f'/src/data/lwIosPayData_48hours_{startDayStr}_{endDayStr}_rand{rand}.csv'
-    if not os.path.exists(filename):    
+    if readDb or not os.path.exists(filename):    
         sql = f'''
+SET
+  odps.sql.timezone = Africa / Accra;
+
+set
+  odps.sql.hive.compatible = true;
+
+set odps.sql.executionengine.enable.rand.time.seed=true;
+
+@t1 :=
 SELECT
-    install_day,
-    COALESCE(
-        SUM(
-            CASE
-                WHEN event_timestamp - install_timestamp between 0
-                and 24 * 3600 THEN revenue_value_usd
-                ELSE 0
-            END
-        ),
-        0
-    ) as 24h_revenue_usd,
-    COALESCE(
-        SUM(
-            CASE
-                WHEN event_timestamp - install_timestamp between 0
-                and 48 * 3600 THEN revenue_value_usd
-                ELSE 0
-            END
-        ),
-        0
-    ) as 48h_revenue_usd,
-    COALESCE(
-        SUM(
-            CASE
-                WHEN event_timestamp - install_timestamp between 0
-                and 7 * 24 * 3600 THEN revenue_value_usd
-                ELSE 0
-            END
-        ),
-        0
-    ) as 168h_revenue_usd,
-    COALESCE(
-        SUM(
-            CASE
-                WHEN event_timestamp - install_timestamp between 0
-                and 14 * 24 * 3600 THEN revenue_value_usd
-                ELSE 0
-            END
-        ),
-        0
-    ) as 336h_revenue_usd
+  install_day,
+  game_uid as uid,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 24h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 48 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 48h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 7 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 168h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 14 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 336h_revenue_usd
 FROM
-    rg_bi.ads_lastwar_ios_purchase_adv
+  rg_bi.ads_lastwar_ios_purchase_adv
 WHERE
-    install_day between {startDayStr} and {endDayStr}
-    and rand() < {rand}
+  install_day between {startDayStr}
+  and {endDayStr}
 GROUP BY
-    install_day;
+  game_uid,
+  install_day;
+
+@t2 := SELECT
+    *,
+    rand() as r
+FROM
+    @t1
+;
+
+
+select
+  install_day,
+  count(distinct uid) as uid_cnt,
+  sum(24h_revenue_usd) as 24h_revenue_usd,
+  sum(48h_revenue_usd) as 48h_revenue_usd,
+  sum(168h_revenue_usd) as 168h_revenue_usd,
+  sum(336h_revenue_usd) as 336h_revenue_usd
+FROM
+  @t2
+where
+  r < {rand}
+group by
+  install_day;
         '''
-        print(sql)
+        # print(sql)
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+    else:
+        print('read from file:',filename)
+        df = pd.read_csv(filename)
+    return df
+
+# 抽样，抽样num个用户，num是整体用户数
+def getLwIosPayDataRANDNum0(startDayStr,endDayStr,num = 1000,readDb = False):
+    filename = f'/src/data/lwIosPayData_48hours_{startDayStr}_{endDayStr}_randNum{num}.csv'
+    if readDb or not os.path.exists(filename):    
+        sql = f'''
+SET
+  odps.sql.timezone = Africa / Accra;
+
+set
+  odps.sql.hive.compatible = true;
+
+set 
+  odps.sql.executionengine.enable.rand.time.seed=true;
+
+@t1 :=
+SELECT
+  install_day,
+  game_uid as uid,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 24h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 48 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 48h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 7 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 168h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 14 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 336h_revenue_usd
+FROM
+  rg_bi.ads_lastwar_ios_purchase_adv
+WHERE
+  install_day between {startDayStr}
+  and {endDayStr}
+GROUP BY
+  game_uid,
+  install_day;
+
+@t2 := SELECT
+    *,
+    ROW_NUMBER() OVER(ORDER BY RAND()) AS row_num
+FROM
+    @t1
+;
+
+select
+  install_day,
+  count(*) as user_num,
+  sum(24h_revenue_usd) as 24h_revenue_usd,
+  sum(48h_revenue_usd) as 48h_revenue_usd,
+  sum(168h_revenue_usd) as 168h_revenue_usd,
+  sum(336h_revenue_usd) as 336h_revenue_usd
+FROM
+  @t2
+where
+  row_num <= {num}
+group by
+  install_day;
+'''
+        # print(sql)
         df = execSql(sql)
         df.to_csv(filename, index=False)
     else:
@@ -143,9 +272,133 @@ GROUP BY
 
 
 
-def corr(startDayStr,endDayStr):
+# 抽样，抽样num个用户，num是每天的用户数
+def getLwIosPayDataRANDNum(startDayStr,endDayStr,num = 1000,readDb = False):
+    filename = f'/src/data/lwIosPayData_48hours_{startDayStr}_{endDayStr}_randNum{num}.csv'
+    if readDb or not os.path.exists(filename):    
+        sql = f'''
+SET
+  odps.sql.timezone = Africa / Accra;
+
+set
+  odps.sql.hive.compatible = true;
+
+set 
+  odps.sql.executionengine.enable.rand.time.seed=true;
+
+@t1 :=
+SELECT
+  install_day,
+  game_uid as uid,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 24h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 48 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 48h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 7 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 168h_revenue_usd,
+  COALESCE(
+    SUM(
+      CASE
+        WHEN event_timestamp - install_timestamp between 0
+        and 14 * 24 * 3600 THEN revenue_value_usd
+        ELSE 0
+      END
+    ),
+    0
+  ) as 336h_revenue_usd
+FROM
+  rg_bi.ads_lastwar_ios_purchase_adv
+WHERE
+  install_day between {startDayStr}
+  and {endDayStr}
+GROUP BY
+  game_uid,
+  install_day;
+
+@t2 := SELECT
+    *,
+    ROW_NUMBER() OVER(PARTITION BY install_day ORDER BY RAND()) AS row_num
+FROM
+    @t1
+;
+
+select
+  install_day,
+  count(*) as user_num,
+  sum(24h_revenue_usd) as 24h_revenue_usd,
+  sum(48h_revenue_usd) as 48h_revenue_usd,
+  sum(168h_revenue_usd) as 168h_revenue_usd,
+  sum(336h_revenue_usd) as 336h_revenue_usd
+FROM
+  @t2
+where
+  row_num <= {num}
+group by
+  install_day;
+'''
+        # print(sql)
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+    else:
+        print('read from file:',filename)
+        df = pd.read_csv(filename)
+    return df
+
+def debug(startDayStr,endDayStr,rand=0.1):
+    for i in range(10):
+        df = getLwIosPayDataRAND(startDayStr,endDayStr,rand=rand,readDb = True)
+        print(df.corr()[['24h_revenue_usd','48h_revenue_usd']])
+        df.to_csv(f'/src/data/lwIosPayData_48hours_20240101_20240310_debug{i}_{rand}.csv', index=False)
+        print('save to file:',f'/src/data/lwIosPayData_48hours_20240101_20240310_debug{i}_{rand}.csv')
+
+def debug1(startDayStr,endDayStr):
+    for i in range(10):
+        df = getLwIosPayDataRANDNum0(startDayStr,endDayStr,num=700000,readDb = True)
+        print(df.corr()[['24h_revenue_usd','48h_revenue_usd']])
+        df.to_csv(f'/src/data/lwIosPayData_48hours_20240101_20240310_debug1{i}.csv', index=False)
+
+def debug2(startDayStr,endDayStr,num=10000):
+    for i in range(10):
+        df = getLwIosPayDataRANDNum(startDayStr,endDayStr,num=num,readDb = True)
+        print(df.corr().loc[['168h_revenue_usd', '336h_revenue_usd'], ['24h_revenue_usd', '48h_revenue_usd']])
+        df.to_csv(f'/src/data/lwIosPayData_48hours_20240101_20240310_debug2{i}_{num}.csv', index=False)
+        print('save to file:',f'/src/data/lwIosPayData_48hours_20240101_20240310_debug2{i}_{num}.csv')
+
+def debug2_1(filename = '/src/data/lwIosPayData_48hours_20240101_20240310_debug20_10000.csv'):
+    df = pd.read_csv(filename)
+    print(df.corr().loc[['168h_revenue_usd', '336h_revenue_usd'], ['24h_revenue_usd', '48h_revenue_usd']])
+    df['168h_revenue_usd/24h_revenue_usd'] = df['168h_revenue_usd'] / df['24h_revenue_usd']
+    print(df)
+    df.to_csv(filename, index=False)
+
+def corr(startDayStr,endDayStr,df = None):
+    if df is None:
     # df = getLwIosPayData(startDayStr,endDayStr)
-    df = getLwIosPayDataRAND(startDayStr,endDayStr,rand=0.1)
+        df = getLwIosPayDataRAND(startDayStr,endDayStr,rand=0.1)
     # 计算相关性
     print(df.corr()[['24h_revenue_usd','48h_revenue_usd']])
 
@@ -313,5 +566,13 @@ def corr(startDayStr,endDayStr):
 if __name__ == '__main__':
     startDayStr = '20240101'
     endDayStr = '20240310'
-    corr(startDayStr,endDayStr)
+    # debug(startDayStr,endDayStr)
+    # debug1(startDayStr,endDayStr)
+    # debug2(startDayStr,endDayStr,10000)
+    # debug2(startDayStr,endDayStr,30000)
+    # debug2(startDayStr,endDayStr,300000)
+    # corr(startDayStr,endDayStr,df = pd.read_csv('/src/data/lwIosPayData_48hours_20240101_20240310_debug20_10000.csv'))
+    corr(startDayStr,endDayStr,df = pd.read_csv('/src/data/lwIosPayData_48hours_20240101_20240310_debug20_30000.csv'))
+
+    # debug2_1('/src/data/lwIosPayData_48hours_20240101_20240310_debug23_10000.csv')
     
