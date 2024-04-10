@@ -117,7 +117,9 @@ def getDataFromMC():
 
 def loadData():
     # 加载数据
+    print('loadData from file:',getFilename('androidFp07'))
     df = pd.read_csv(getFilename('androidFp07'))
+    print('loadData done')
     # 列 media_source 改名 media
     df = df.rename(columns={'media_source':'media'})
     # 列 media 中 'restricted' 改为 'Facebook Ads'
@@ -900,6 +902,59 @@ def checkRet(retDf,prefix='attCampaign24_'):
 
     return df
 
+# 按照Media进行分组
+def checkRetByMedia(retDf,prefix='attCampaign24_'):
+    # 读取原始数据
+    rawDf = loadData()
+
+    campaignDf = pd.read_csv(getFilename('campaignGeo'), converters={'campaign_id':str})
+    campaignDf = campaignDf.groupby(['media_source','campaign_id']).agg('sum').reset_index()
+    campaignDf = campaignDf[['campaign_id','media_source']]
+    campaignList = getChooseCampaignList()
+    rawDf = rawDf[rawDf['campaign_id'].isin(campaignList)]
+    rawDf = rawDf.merge(campaignDf, on='campaign_id', how='left')
+    # 将install_timestamp转为install_date
+    rawDf['install_date'] = pd.to_datetime(rawDf['install_timestamp'], unit='s').dt.date
+    rawDf['user_count'] = 1
+    # 按照media和install_date分组，计算r7usd的和
+    rawDf = rawDf.groupby(['campaign_id', 'media_source','install_date']).agg(
+        {
+            'r1usd': 'sum',
+            'r2usd': 'sum',
+            'r7usd': 'sum',
+            'user_count':'sum'
+        }).reset_index()
+
+    # rawDf 和 retDf 进行合并
+    # retDf.rename(columns={'r7usd':'r7usdp'}, inplace=True)
+    # 为了防止merge不成功，将install_date转成字符串
+    rawDf['install_date'] = rawDf['install_date'].astype(str)
+    retDf['install_date'] = retDf['install_date'].astype(str)
+    rawDf = rawDf.merge(retDf, on=['campaign_id', 'install_date'], how='left',suffixes=('', 'p'))
+    # 按照media_source进行分组
+    rawDf = rawDf.groupby(['media_source','install_date']).agg({'r7usd': 'sum','r7usdp': 'sum'}).reset_index()
+    # 计算MAPE
+    rawDf['MAPE'] = abs(rawDf['r7usd'] - rawDf['r7usdp']) / rawDf['r7usd']
+    rawDf.loc[rawDf['r7usd'] == 0,'MAPE'] = 0
+    # rawDf = rawDf.loc[rawDf['install_date']<'2023-02-01']
+    rawDf = rawDf.loc[rawDf['MAPE']>0]
+    rawDf.to_csv(getFilename(prefix+'attribution24RetCheckByMedia'), index=False)
+
+    for media in rawDf['media_source'].unique():
+        mediaDf = rawDf[rawDf['media_source'] == media].copy()
+        MAPE = mediaDf['MAPE'].mean()
+        print(f"\nmedia:{media}:")
+        print(f"MAPE: {MAPE}")
+
+        # 计算r7usd和r7usdp的7日均线的MAPE
+        mediaDf['r7usd7'] = mediaDf['r7usd'].rolling(7).mean()
+        mediaDf['r7usdp7'] = mediaDf['r7usdp'].rolling(7).mean()
+        mediaDf['MAPE7'] = abs(mediaDf['r7usd7'] - mediaDf['r7usdp7']) / mediaDf['r7usd7']
+        MAPE7 = mediaDf['MAPE7'].mean()
+        print(f"MAPE7: {MAPE7}")
+        
+    return 
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1060,6 +1115,7 @@ def main24(fast = False,onlyCheck = False):
 
     userDf = pd.read_csv(getFilename('meanAttributionResult24'), converters={'campaign_id':str})
     df = checkRet(userDf)
+    checkRetByMedia(userDf)
     draw24(df,prefix='attCampaign24_')
 
 def main48(fast = False,onlyCheck = False):
@@ -1111,6 +1167,7 @@ def main48(fast = False,onlyCheck = False):
 
     userDf = pd.read_csv(getFilename('meanAttributionResult48'), converters={'campaign_id':str})
     df = checkRet(userDf,prefix='attCampaign48_')
+    checkRetByMedia(userDf,prefix='attCampaign48_')
     draw24(df,prefix='attCampaign48_')
 
 def debug():
@@ -1154,7 +1211,8 @@ if __name__ == '__main__':
     # print('main24')
     # main24(fast = False,onlyCheck = False)
     # main24(fast = True,onlyCheck = True)
-    print('main48')
-    main48(fast = False,onlyCheck = False)
+    # print('main48')
+    # main48(fast = False,onlyCheck = False)
+    main48(fast = True,onlyCheck = True)
 
     # debug()
