@@ -5,12 +5,33 @@ import sys
 sys.path.append('/src')
 
 from src.sensortower.intel import getRanking
-from src.sensortower.iosIdToName import iOSIdToNameWithCountry
-from src.sensortower.androidIdToName import androidIdToName
+from src.sensortower.iosIdToName import iOSIdToNameWithCountry2
+from src.sensortower.androidIdToName import androidIdToName2
 
 import rpyc
+import json
 
-def topWatch(isDebug=False):
+def toGpt(text):
+    content = '''
+请读下面文本，如果里面没有在书名号中的韩文或者日文，那么请直接将下面文本原样返回。
+如果有韩文或者日文，那么请在原有的书名号周免添加"(翻译：中文翻译内容)"。
+比如原文中提到 “ ios KR 第8名 《집, 행성 & 사냥꾼》 [跳转至商店](https://apps.apple.com/kr/app/%EC%A7%91-%ED%96%89%EC%84%B1-%EC%82%AC%EB%83%A5%EA%BE%BC/id6478843819?uo=4) ”
+那么就将这一行改为 “ ios KR 第8名 《집, 행성 & 사냥꾼》（翻译：家园、星球和猎人） [跳转至商店](https://apps.apple.com/kr/app/%EC%A7%91-%ED%96%89%EC%84%B1-%EC%82%AC%EB%83%A5%EA%BE%BC/id6478843819?uo=4) ”
+    '''
+    content += text
+
+    message = [
+        {"role":"user","content":content}
+    ]
+
+    conn = rpyc.connect("192.168.40.62", 10002,config={"sync_request_timeout": 120})
+    message_str = json.dumps(message)  # 将message转换为字符串
+    x = conn.root.getAiResp(message_str)
+    # print(x)
+    return x
+    
+
+def topWatch(isDebug=False,gpt=False):
     # N是榜单的前N名
     # days是一个阈值，当一个app在今天出现在topN中，并且过去days天内都不在topN中，就将这个app报上去
     N = 10
@@ -77,9 +98,9 @@ def topWatch(isDebug=False):
                     appId = todayAppIdList[j]
                     if appId not in lastAppIdList:
                         if platform == 'ios':
-                            appName = iOSIdToNameWithCountry(appId,country)
+                            appName,url = iOSIdToNameWithCountry2(appId,country)
                         else:
-                            appName = androidIdToName(appId)
+                            appName,url = androidIdToName2(appId)
 
                         ret = {
                             'platform':platform,
@@ -88,7 +109,8 @@ def topWatch(isDebug=False):
                             'index':j+1,
                             'appName':appName,
                             'appId':appId,
-                            'days':days
+                            'days':days,
+                            'url':url,
                         }
                         retList.append(ret)
                         # print(f"{platform} {country} {chartTypeName} 《{appName}》 appID：{appId} 在过去{days}天内首次出现在top{N}中")
@@ -100,26 +122,60 @@ def topWatch(isDebug=False):
         for ret in retList:
             if ret['chartTypeName'] == chartTypeName:
                 count += 1
-                retStr += f"{ret['platform']} {ret['country']} 第{ret['index']}名 《{ret['appName']}》 appID：{ret['appId']}\n"
+                retStr += f"{ret['platform']} {ret['country']} 第{ret['index']}名 《{ret['appName']}》 [跳转至商店]({ret['url']})\n"
         if count == 0:
             retStr += '无\n'
         retStr += '\n'
     
+    conn = rpyc.connect("192.168.40.62", 10001)
     if len(retList) > 0:  
         print(retStr)  
+        if gpt:
+            retStr = toGpt(retStr)
         if not isDebug:
-            conn = rpyc.connect("192.168.40.62", 10001)
             conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+        else:
+            conn.root.sendMessageDebug(retStr)
     else:
         retStr = today.strftime('%Y-%m-%d') + '没有发现新的app上榜\n'
         print(retStr)
         if not isDebug:
-            conn = rpyc.connect("192.168.40.62", 10001)
             conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+        else:
+            conn.root.sendMessageDebug(retStr)
+
+def test():
+    retStr = '''
+2024-04-10 7天内首次出现在策略游戏类top10中的APPs：
+免费榜：
+ios KR 第8名 《집, 행성 & 사냥꾼》 [跳转至商店](https://apps.apple.com/kr/app/%EC%A7%91-%ED%96%89%EC%84%B1-%EC%82%AC%EB%83%A5%EA%BE%BC/id6478843819?uo=4)
+android KR 第8名 《Raid Rush: Tower Defense TD》 [跳转至商店](https://play.google.com/store/apps/details?id=com.wireless.defenseland)
+android KR 第9名 《Age of Apes》 [跳转至商店](https://play.google.com/store/apps/details?id=com.tap4fun.ape.gplay)
+android JP 第9名 《Raid Rush: Tower Defense TD》 [跳转至商店](https://play.google.com/store/apps/details?id=com.wireless.defenseland)
+
+付费榜：
+无
+
+畅销榜：
+ios KR 第8名 《랑그릿사》 [跳转至商店](https://apps.apple.com/kr/app/%EB%9E%91%EA%B7%B8%EB%A6%BF%EC%82%AC/id1450127722?uo=4)
+android KR 第10名 《Rise of Castles: Ice and Fire》 [跳转至商店](https://play.google.com/store/apps/details?id=com.im30.ROE.gp)
+    '''
+    retStr = toGpt(retStr)
+    print(retStr)
+    print(type(retStr))
+
+    conn = rpyc.connect("192.168.40.62", 10001)
+    conn.root.sendMessageDebug(retStr)
+
 
 if __name__ == '__main__':
-    # topWatch(isDebug=True)
-    topWatch()
+    # topWatch(isDebug=True,gpt=True)
+    topWatch(gpt=True)
+
+    # test()
+
+
+    
     
     
 

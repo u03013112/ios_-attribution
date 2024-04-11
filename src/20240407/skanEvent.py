@@ -44,7 +44,7 @@ def getAF24HoursRevenue(startDayStr,endDayStr):
         df.to_csv(filename, index=False)
     else:
         print('read from file:',filename)
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype={'install_day':str})
     return df
 
 def getSKAN24HoursRevenue(startDayStr,endDayStr):
@@ -76,7 +76,7 @@ def getSKAN24HoursRevenue(startDayStr,endDayStr):
         df.to_csv(filename, index=False)
     else:
         print('read from file:',filename)
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype={'install_day':str})
     return df
 
 def getBI24HoursRevenue(startDayStr,endDayStr):
@@ -107,7 +107,7 @@ def getBI24HoursRevenue(startDayStr,endDayStr):
         df.to_csv(filename, index=False)
     else:
         print('read from file:',filename)
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename, dtype={'install_day':str})
     return df
 
 def main(startDayStr,endDayStr):
@@ -240,9 +240,9 @@ def debug2():
 
 if __name__ == '__main__':
     # af_sdk_update_skan 打点是20240402开始增加的，为了数据完整，从20240403开始
-    startDayStr = '20240403'
-    endDayStr = '20240408'
+    startDayStr = '20240325'
+    endDayStr = '20240409'
 
-    # main(startDayStr,endDayStr)
-    debug(startDayStr,endDayStr)
+    main(startDayStr,endDayStr)
+    # debug(startDayStr,endDayStr)
     # debug2()
