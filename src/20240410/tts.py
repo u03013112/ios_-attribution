@@ -14,24 +14,49 @@ import pandas as pd
 
 def tts(chn, duration, speaker, outfileName):
     # 调用say命令生成音频
-    temp_file = "temp.aiff"
-    r = "180"
-    cmd = ["say", "-v", speaker, chn, "-r", r,"-o", temp_file]
+    temp_file = f"{outfileName}_raw.aiff"
+
+    # 计算语速
+    count = len(chn)
+    r = 60 * count / duration
+
+    print(chn)
+    print('count:',count)
+    print('duration:',duration)
+    print('rate:',r)
+
+    cmd = ["say", "-v", speaker, chn, "-r", str(r),"-o", temp_file]
     subprocess.run(cmd)
 
     # 获取原始音频长度
     cmd = ["soxi", "-D", temp_file]
     original_duration = float(subprocess.check_output(cmd).strip())
+    print('original_duration:',original_duration)
 
     # 计算拉伸因子
     stretch_factor = duration / original_duration
+
+    r = int(r/stretch_factor)
+    print('stretch_factor:',stretch_factor)
+    print('new rate:',r)
+
+    cmd = ["say", "-v", speaker, chn, "-r", str(r),"-o", temp_file]
+    subprocess.run(cmd)
+
+    # 获取原始音频长度
+    cmd = ["soxi", "-D", temp_file]
+    original_duration = float(subprocess.check_output(cmd).strip())
+    print('original_duration2:',original_duration)
+
 
     # 使用sox命令校准音频长度
     cmd = ["sox", temp_file, outfileName, "stretch", str(stretch_factor)]
     subprocess.run(cmd)
 
     # 删除临时文件
-    os.remove(temp_file)
+    # os.remove(temp_file)
+
+    print('----------------------')
 
 def generate_silence(duration, output_file):
     cmd = ["sox", "-n", "-r", "22050", "-c", "1", output_file, "trim", "0.0", str(duration)]
