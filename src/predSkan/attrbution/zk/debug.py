@@ -261,6 +261,13 @@ def debug05():
     # 使用print函数打印这个字符串，并使用replace函数将所有的换行符替换为一个空格
     print(df_str)
 
+from datetime import datetime, timedelta
+def debugMedia():
+    df = pd.read_csv('/src/data/zk/userDf3.csv')
+    df['day'] = df['install_timestamp'].apply(lambda x: datetime.utcfromtimestamp(x).strftime('%Y%m%d'))
+    days = df['day'].unique()
+    days.sort()
+    print(days)
 
 if __name__ == '__main__':
     # df1 = debug01()
@@ -280,8 +287,10 @@ if __name__ == '__main__':
 
     # debug03()
 
-    debug04()
+    # debug04()
 
     # debug05()
 
     # draw03()
+
+    debugMedia()
