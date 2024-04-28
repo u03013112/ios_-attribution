@@ -1,17 +1,12 @@
-import requests
-from bs4 import BeautifulSoup
+import rpyc
+import json
 
-def getTitle(url):
-    response = requests.get(url, allow_redirects=True)
-    if response.history:
-        print("Request was redirected")
-        for resp in response.history:
-            print(resp.status_code, resp.url)
-        print("Final destination:")
-        print(response.status_code, response.url)
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-    return soup.title.string
-
-# 使用示例
-print(getTitle("http://google.com"))
+conn = rpyc.connect("192.168.40.62", 10002,config={"sync_request_timeout": 120})
+message = [
+    {"role":"system","content":"You are an AI assistant that helps people find information."},
+    {"role":"user","content":"你好"}
+]
+# x = conn.root.getAiResp(message)
+message_str = json.dumps(message)  # 将message转换为字符串
+x = conn.root.getAiResp(message_str)  # 传递字符串而非原始对象
+print(x)

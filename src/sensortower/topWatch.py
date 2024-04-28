@@ -24,7 +24,7 @@ def toGpt(text):
         {"role":"user","content":content}
     ]
 
-    conn = rpyc.connect("192.168.40.62", 10002,config={"sync_request_timeout": 120})
+    conn = rpyc.connect("192.168.40.62", 10002,config={"sync_request_timeout": 300})
     message_str = json.dumps(message)  # 将message转换为字符串
     x = conn.root.getAiResp(message_str)
     # print(x)

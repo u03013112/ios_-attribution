@@ -60,46 +60,62 @@ def getSKANDataFromMC(dayStr, days):
     # 实时的获取AF翻译结论，而非按照配置文件，所以
     # 注意，当days比较小的时候，可能会出现数据不准确的情况
     sql = f'''
-SET odps.sql.timezone=Africa/Accra;
-set odps.sql.hive.compatible=true;
-set odps.sql.executionengine.enable.rand.time.seed=true;
+SET
+  odps.sql.timezone = Africa / Accra;
+
+set
+  odps.sql.hive.compatible = true;
+
+set
+  odps.sql.executionengine.enable.rand.time.seed = true;
 
 @skad :=
 SELECT
-    skad_ad_network_id,
-    skad_conversion_value as cv,
-    timestamp as postback_timestamp,
-    day
+  skad_ad_network_id,
+  skad_conversion_value as cv,
+  timestamp as postback_timestamp,
+  day
 FROM
-    ods_platform_appsflyer_skad_postbacks_copy
+  ods_platform_appsflyer_skad_postbacks_copy
 WHERE
-    day between '{dayBeforeStr}' and '{dayStr}'
-    AND app_id = '6448786147'
-;
+  day between '{dayBeforeStr}'
+  and '{dayStr}'
+  AND app_id = '6448786147';
 
 @media :=
 select
-    max (media_source) as media,
-    skad_ad_network_id
+  max (media_source) as media,
+  skad_ad_network_id
 from
-    ods_platform_appsflyer_skad_details
+  ods_platform_appsflyer_skad_details
 where
-    day between '{dayBeforeStr}' and '{dayStr}'
-    and app_id = 'id6448786147'
-group by 
-    skad_ad_network_id
-;
+  day between '{dayBeforeStr}'
+  and '{dayStr}'
+  and app_id = 'id6448786147'
+group by
+  skad_ad_network_id;
+
+@ret :=
+select
+  media.media,
+  skad.skad_ad_network_id,
+  skad.cv,
+  skad.postback_timestamp,
+  skad.day
+from
+  @skad as skad
+  left join @media as media on skad.skad_ad_network_id = media.skad_ad_network_id;
 
 select
-    media.media,
-    skad.cv,
-    skad.postback_timestamp,
-    skad.day
-from @skad as skad
-left join @media as media
-on skad.skad_ad_network_id = media.skad_ad_network_id
+  COALESCE(ret.media, media2.media) AS media,
+  ret.skad_ad_network_id,
+  ret.cv,
+  ret.postback_timestamp,
+  ret.day
+from
+  @ret as ret
+  left join skad_network_id_map as media2 on ret.skad_ad_network_id = media2.skad_ad_network_id
 ;
-
     '''
     print(sql)
     df = execSql(sql)
