@@ -593,11 +593,11 @@ def main():
     
     skanDf = skanDf.merge(cvMap,on='cv',how='left')
 
-    userDf.to_csv('/src/data/zk/userDf3.csv',index=False)
-    skanDf.to_csv('/src/data/zk/skanDf3.csv',index=False)
+    # userDf.to_csv('/src/data/zk/userDf3.csv',index=False)
+    # skanDf.to_csv('/src/data/zk/skanDf3.csv',index=False)
 
-    userDf = pd.read_csv('/src/data/zk/userDf3.csv',dtype={'customer_user_id':str})
-    skanDf = pd.read_csv('/src/data/zk/skanDf3.csv',dtype={'day':str})
+    # userDf = pd.read_csv('/src/data/zk/userDf3.csv',dtype={'customer_user_id':str})
+    # skanDf = pd.read_csv('/src/data/zk/skanDf3.csv',dtype={'day':str})
 
     # 将skanDf2存档
     skanDf['count'] = 1

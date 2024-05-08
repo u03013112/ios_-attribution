@@ -138,9 +138,15 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 
 from src.report.feishu.feishu import sendMessageDebug
 def main():
+
+    N = 64
+
     df = getPayDataFromMC()
     df.to_csv('/src/data/payData.csv',index=False)
     df = pd.read_csv('/src/data/payData.csv')
+
+    # 将收入3000以上的用户的收入设置为3000
+    df.loc[df['revenue']>3000,'revenue'] = 3000
 
     message = 'Lastwar CV档位自动测试\n\n'
 
@@ -163,8 +169,10 @@ def main():
     # message += f'{levels}\n'
     # message += f'{mape*100:.2f}%\n\n'
 
-    levels = makeLevels(df,usd='revenue',N=32)
+    levels = makeLevels(df,usd='revenue',N=N)
     levels = [round(x,2) for x in levels]
+    cvMapDf = makeCvMap(levels)
+    cvMapDf.to_csv('/src/data/lastwarCV1.csv',index=False)
     mape = checkLevels(df,levels,usd='revenue',cv='cv')
     message += 'makeLevels\n'
     message += f'{levels}\n'
@@ -177,8 +185,10 @@ def main():
     # message += f'{levels}\n'
     # message += f'{mape*100:.2f}%\n\n'
 
-    levels = makeLevelsByKMeans(df,usd='revenue',N=32)
+    levels = makeLevelsByKMeans(df,usd='revenue',N=N)
     levels = [round(x,2) for x in levels]
+    cvMapDf = makeCvMap(levels)
+    cvMapDf.to_csv('/src/data/lastwarCV2.csv',index=False)
     mape = checkLevels(df,levels,usd='revenue',cv='cv')
     message += 'makeLevelsByKMeans\n'
     message += f'{levels}\n'
@@ -187,6 +197,13 @@ def main():
     print(message)
     sendMessageDebug(message)
 
+
+def debug():
+    df = pd.read_csv('/src/data/payData.csv')
+    df = df.groupby(['install_date']).agg({'revenue':'sum'}).reset_index()
+    print(df)
+
 if __name__ == '__main__':
     main()
+    # debug()
     

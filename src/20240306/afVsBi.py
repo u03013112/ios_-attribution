@@ -108,14 +108,15 @@ def getBiPurchaseData(app, startDate='20230601', endDate='20240301', platform = 
     return data
 
 def main():
-    startDate = '20230601'
-    endDate = '20240301'
+    startDate = '20240101'
+    endDate = '20240503'
     for app in apps:
         afDataDf = getAfPurchaseData(app, startDate, endDate)
         biDataDf = getBiPurchaseData(app, startDate, endDate)
 
         df = pd.merge(afDataDf, biDataDf, how='outer', on='af_install_date', suffixes=('_af', '_bi'))
-        df = df[df['af_install_date'] < '2024-03']
+        # df = df[df['af_install_date'] < '2024-03']
+        df = df[df['af_install_date'] >= '2024-04-01']
         df = df.sort_values(by='af_install_date', ascending=True)
 
         # 计算差异
