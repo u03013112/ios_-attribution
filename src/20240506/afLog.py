@@ -293,9 +293,19 @@ def step5():
 
 
 def debug():
-    df = pd.read_csv('afLog.csv')
-    df1 = df[['appsflyer_id normal','sumrevenue']]
-    print(df1['sumrevenue'].sum())
+    df = pd.read_csv('afLog2.csv')
+    df = df[df['event_name']=='af_purchase_oldusers']
+    print(df)
+    
+
+def readAfLog2():
+    df = pd.read_csv('afLog2.csv')
+    df1 = df.groupby(['appsflyer_id','event_name']).agg({'total_revenue':'max'}).reset_index()
+    print(df1.groupby('event_name').agg({
+        'appsflyer_id':'count',
+        'total_revenue':'sum'
+    }))
+
 
 if __name__ == '__main__':
     # readAfLog()
@@ -303,4 +313,8 @@ if __name__ == '__main__':
 
     # getBIData()
     # step4()
-    step5()
+    # step5()
+
+    # readAfLog2()
+
+    debug()
