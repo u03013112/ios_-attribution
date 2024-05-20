@@ -1,6 +1,6 @@
 # 自然量对数
 
-# iTunes的安装数值和数数中首次激活设备数对比。
+
 
 # iTunes的安装数值和sensor tower的安装数值对比。
 
@@ -68,7 +68,30 @@ def getBIData():
     biData = pd.read_csv('biData.csv')
     return biData
 
+def getSSData():
+    ssData = pd.read_csv('ssData.csv')
+    ssData.rename(columns={
+        '时间':'Date',
+        'app_launch.总次数':'first_launch_total',
+    }, inplace=True)
+    ssData = ssData[['Date', 'first_launch_total']]
+    # Date 类似 2024-01-01 的字符串，转为类似 20240101 的字符串
+    ssData['Date'] = ssData['Date'].apply(lambda x: x.replace('-', ''))
+    # 将first_launch_total转为int类型
+    ssData['first_launch_total'] = ssData['first_launch_total'].astype(int)
+
+    return ssData
+
+# iTunes的安装数值和数数中首次激活设备数对比。
+def iTunesVsSS():
+    iTunesData = getItunesInstallData()
+    SSData = getSSData()
+
+    df = pd.merge(iTunesData, SSData, on='Date', how='left')
+    print(df)
+
 if __name__ == '__main__':
     # getItunesInstallData()
     # print(getSensorTowerInstallData())
-    print(getBIData())
+    # print(getBIData())
+    iTunesVsSS()
