@@ -528,8 +528,8 @@ if __name__ == '__main__':
     # print(getDownloadAndRevenue2(['1479198816'],os='ios',countries='US',startDate='2023-12-01',endDate='2023-12-31',date_granularity='weekly'))
 
     # getRanking()
-    # print(getUnifiedAppIds(app_id_type='android',app_ids=['com.topwar.gp','com.fun.lastwar.gp']))
+    print(getUnifiedAppIds(app_id_type='android',app_ids=['com.topwar.gp','com.fun.lastwar.gp']))
     # print(getCreatives(['5cc98b703ea98357b8ed3ce0','64075e77537c41636a8e1c58'],['US'],networks='Admob',start_date='2024-01-01',end_date='2024-01-31'))
     # print(getRetention(app_ids=['1479198816'],platform='ios',date_granularity='quarterly',start_date='2021-01-01',end_date='2021-04-01'))
     # print(getDemographics(app_ids=['1479198816'],platform='ios',date_granularity='quarterly',start_date='2021-01-01',end_date='2021-04-01'))
-    print(getActiveUsers(platform='ios',app_ids=['1479198816'],time_period='quarter',start_date='2021-01-01',end_date='2021-12-31',countries='US'))
+    # print(getActiveUsers(platform='ios',app_ids=['1479198816'],time_period='quarter',start_date='2021-01-01',end_date='2021-12-31',countries='US'))

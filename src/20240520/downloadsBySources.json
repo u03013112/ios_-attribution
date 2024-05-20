@@ -1,0 +1,45 @@
+{
+    "data": [
+        {
+            "app_id": "64075e77537c41636a8e1c58",
+            "breakdown": [
+                {
+                    "date": "2024-01-01",
+                    "organic_abs": 1558170,
+                    "browser_abs": 53875,
+                    "paid_abs": 2425699,
+                    "organic_frac": 0.385901,
+                    "browser_frac": 0.013343,
+                    "paid_frac": 0.600756
+                },
+                {
+                    "date": "2024-02-01",
+                    "organic_abs": 1158427,
+                    "browser_abs": 51753,
+                    "paid_abs": 1645805,
+                    "organic_frac": 0.405614,
+                    "browser_frac": 0.018121,
+                    "paid_frac": 0.576265
+                },
+                {
+                    "date": "2024-03-01",
+                    "organic_abs": 1054116,
+                    "browser_abs": 37859,
+                    "paid_abs": 1498319,
+                    "organic_frac": 0.406948,
+                    "browser_frac": 0.014616,
+                    "paid_frac": 0.578436
+                },
+                {
+                    "date": "2024-04-01",
+                    "organic_abs": 1156610,
+                    "browser_abs": 60581,
+                    "paid_abs": 1396702,
+                    "organic_frac": 0.442486,
+                    "browser_frac": 0.023177,
+                    "paid_frac": 0.534338
+                }
+            ]
+        }
+    ]
+}
