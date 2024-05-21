@@ -87,8 +87,19 @@ def iTunesVsSS():
     iTunesData = getItunesInstallData()
     SSData = getSSData()
 
+    # total 是所有 以‘ total’结尾的列的数据的和
+    iTunesData['total sum'] = iTunesData.filter(like=' total').sum(axis=1)
+    iTunesData['first sum'] = iTunesData.filter(like=' first').sum(axis=1)
+
     df = pd.merge(iTunesData, SSData, on='Date', how='left')
-    print(df)
+    
+    # 额外添加一行，Date列写SUM
+    sumRow = df.sum()
+    sumRow['Date'] = 'SUM'
+    df = df.append(sumRow, ignore_index=True)
+
+    # 得到结论，iTunes的全部安装数值和数数中首次激活设备数数值接近，差距在6%左右。
+    df.to_csv('/src/data/iTunesVsSS.csv', index=False)
 
 if __name__ == '__main__':
     # getItunesInstallData()
