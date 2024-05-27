@@ -301,11 +301,28 @@ def mergeVsITunes():
     
     df.to_csv('/src/data/mergeVsITunes.csv', index=False)
 
+def iTunesVsSsot():
+    iTunesData = getItunesInstallData()
+    iTunesData['iTunes organic'] = iTunesData['App Store浏览 first'] + iTunesData['App Store搜索 first'] + iTunesData['未知来源 first']
+    iTunesData = iTunesData[['Date','iTunes organic']]
+    ssotData = pd.read_csv('lwSsot.csv', dtype={'Date':str})
+    ssotData.rename(columns={'install':'ssot organic'}, inplace=True)
+
+    df = pd.merge(iTunesData, ssotData, on='Date', how='left')
+    df.to_csv('/src/data/iTunesVsSsot.csv', index=False)
+
+    # 按月汇总
+    df['Month'] = df['Date'].apply(lambda x: x[:6])
+    df = df.groupby('Month').sum().reset_index()
+    df['iTunes organic/ssot organic'] = df['iTunes organic'] / df['ssot organic']
+
+    df.to_csv('/src/data/iTunesVsSsot_monthly.csv', index=False)
 if __name__ == '__main__':
     # iTunesVsSS()
     # iTunesVsSensorTower()
     # SSFirstLaunchVsBI()
     # iTunesVsBI()
     # sensortowerVsBI()
-    mergeVsSensortower()
-    mergeVsITunes()
+    # mergeVsSensortower()
+    # mergeVsITunes()
+    iTunesVsSsot()

@@ -827,7 +827,9 @@ def main():
     check(dayStr)
     # 1、获取skan数据
     skanDf = getSKANDataFromMC(dayStr,days)
-    # 将skanDf中media不属于mediaList的media改为other
+    
+    # skanDf['media']中，替换，将tiktokglobal_int替换为bytedanceglobal_int
+    skanDf['media'] = skanDf['media'].replace('tiktokglobal_int','bytedanceglobal_int')
     skanDf.loc[~skanDf['media'].isin(mediaList),'media'] = 'other'
     # skanDf = skanDf[skanDf['media'].isin(mediaList)]
     # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
