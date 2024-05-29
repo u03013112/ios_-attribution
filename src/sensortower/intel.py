@@ -159,8 +159,9 @@ def getTopApp(os='android',custom_fields_filter_id='6009d417241',time_range='yea
         urlTail = '&device_type=total'
         if category == 'all':
             category = '0'
-
-    url = 'https://api.sensortower.com/v1/{}/sales_report_estimates_comparison_attributes?comparison_attribute=absolute&time_range={}&measure={}&category={}&date={}&end_date={}&country={}&limit={}&custom_fields_filter_id={}&custom_tags_mode=exclude_unified_apps&auth_token={}'.format(os,time_range,measure,category,startDate,endDate,countries,limit,custom_fields_filter_id,sensortowerToken)
+    # https://api.sensortower.com/v1/ios/sales_report_estimates_comparison_attributes?comparison_attribute=absolute&time_range=week&measure=units&device_type=total&category=6000&date=2021-01-04&end_date=2021-01-10&regions=US,JP&limit=25&custom_tags_mode=include_unified_apps&auth_token=YOUR_AUTHENTICATION_TOKEN
+  
+    url = 'https://api.sensortower.com/v1/{}/sales_report_estimates_comparison_attributes?comparison_attribute=absolute&time_range={}&measure={}&category={}&date={}&end_date={}&regions={}&limit={}&custom_fields_filter_id={}&custom_tags_mode=exclude_unified_apps&auth_token={}'.format(os,time_range,measure,category,startDate,endDate,countries,limit,custom_fields_filter_id,sensortowerToken)
     url += urlTail
 
     r = requests.get(url)
@@ -304,7 +305,7 @@ def getRanking(platform='ios',category='7017',countries='KR',chartTypeIds='topfr
     return ret['ranking']
 
 
-def getCreatives(unifiedAppIds=[],countries=[],networks='Admob,Meta Audience Network,Unity,Facebook,Instagram,TikTok,Youtube',ad_types='video',limit=10,page=1,display_breakdown=False,start_date='2024-01-01',end_date='2024-02-29'):
+def getCreatives(unifiedAppIds=[],countries=[],networks='Admob,Meta Audience Network,Unity,Facebook,Instagram,TikTok,Youtube',ad_types='video',limit=10,page=1,display_breakdown=False,start_date='2024-01-01',end_date='2024-02-29',debug=False):
     # https://api.sensortower.com/v1/unified/ad_intel/creatives?app_ids=56cbbce9d48401b048003405&start_date=2023-01-01&end_date=2023-01-31&countries=US%2CCA&networks=Adcolony&ad_types=video&limit=10&page=1&display_breakdown=true&auth_token=YOUR_AUTHENTICATION_TOKEN
     url = 'https://api.sensortower.com/v1/unified/ad_intel/creatives?app_ids={}&start_date={}&end_date={}&countries={}&networks={}&ad_types={}&limit={}&page={}&display_breakdown={}&auth_token={}'.format(','.join(unifiedAppIds),start_date,end_date,','.join(countries),networks,ad_types,limit,page,display_breakdown,sensortowerToken)
     r = requests.get(url)
@@ -312,7 +313,8 @@ def getCreatives(unifiedAppIds=[],countries=[],networks='Admob,Meta Audience Net
         print('Error: getCreatives failed, status_code:',r.status_code)
         print(r.text)
         return None
-    
+    if debug:
+        print(r.text)
     creatives = []
     ret = r.json()
     ad_units = ret['ad_units']
@@ -325,6 +327,17 @@ def getCreatives(unifiedAppIds=[],countries=[],networks='Admob,Meta Audience Net
         }
         creatives.append(creative)
     return creatives
+
+# getCreatives 的第二个版本，返回的数据更多，拿到结果再做筛选
+def getCreatives2(os,appIds=[],countries=[],networks='Admob,Meta Audience Network,Unity,Facebook,Instagram,TikTok,Youtube',ad_types='video',limit=10,page=1,display_breakdown=False,start_date='2024-01-01',end_date='2024-02-29'):
+    url = 'https://api.sensortower.com/v1/{}/ad_intel/creatives?app_ids={}&start_date={}&end_date={}&countries={}&networks={}&ad_types={}&limit={}&page={}&display_breakdown={}&auth_token={}'.format(os,','.join(appIds),start_date,end_date,','.join(countries),networks,ad_types,limit,page,display_breakdown,sensortowerToken)
+    r = requests.get(url)
+    if r.status_code != 200:
+        print('Error: getCreatives failed, status_code:',r.status_code)
+        print(r.text)
+        return None
+    
+    return r.json()
 
 def getUnifiedAppIds(app_id_type='android',app_ids=[]):
     if app_id_type == 'ios':
@@ -528,8 +541,8 @@ if __name__ == '__main__':
     # print(getDownloadAndRevenue2(['1479198816'],os='ios',countries='US',startDate='2023-12-01',endDate='2023-12-31',date_granularity='weekly'))
 
     # getRanking()
-    print(getUnifiedAppIds(app_id_type='android',app_ids=['com.topwar.gp','com.fun.lastwar.gp']))
-    # print(getCreatives(['5cc98b703ea98357b8ed3ce0','64075e77537c41636a8e1c58'],['US'],networks='Admob',start_date='2024-01-01',end_date='2024-01-31'))
+    # print(getUnifiedAppIds(app_id_type='android',app_ids=['com.topwar.gp','com.fun.lastwar.gp']))
+    print(getCreatives(['5cc98b703ea98357b8ed3ce0','64075e77537c41636a8e1c58'],['US'],networks='Admob',start_date='2024-01-01',end_date='2024-01-31',debug=True))
     # print(getRetention(app_ids=['1479198816'],platform='ios',date_granularity='quarterly',start_date='2021-01-01',end_date='2021-04-01'))
     # print(getDemographics(app_ids=['1479198816'],platform='ios',date_granularity='quarterly',start_date='2021-01-01',end_date='2021-04-01'))
     # print(getActiveUsers(platform='ios',app_ids=['1479198816'],time_period='quarter',start_date='2021-01-01',end_date='2021-12-31',countries='US'))
