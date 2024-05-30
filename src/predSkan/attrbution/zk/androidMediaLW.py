@@ -11,7 +11,8 @@ import io
 import os
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+import pytz
 
 import sys
 sys.path.append('/src')
@@ -22,17 +23,18 @@ def getFilename(filename,ext='csv'):
 
 installTimeStart = '2024-01-01'
 installTimeEnd = '2024-01-31'
-startDay = datetime.strptime(installTimeStart, '%Y-%m-%d')
-endDay = datetime.strptime(installTimeEnd, '%Y-%m-%d')
-endDay += timedelta(days=30)
-startDayStr = startDay.strftime('%Y%m%d')
-endDayStr = endDay.strftime('%Y%m%d')
-filename = getFilename(f'androidFp{startDayStr}_{endDayStr}')
+
+filename = getFilename(f'androidFp{installTimeStart}_{installTimeEnd}')
 
 def getDataFromMC():
     global installTimeStart,installTimeEnd
-    global startDayStr,endDayStr
     global filename
+
+    installTimeStartTimestamp = int(datetime.strptime(installTimeStart, '%Y-%m-%d').timestamp())
+    installTimeEndTimestamp = int(datetime.strptime(installTimeEnd, '%Y-%m-%d').timestamp())
+    # 时区不对，简便解决方案
+    installTimeStartTimestamp += 8*3600
+    installTimeEndTimestamp += 8*3600
 
     if os.path.exists(filename):
         print('已存在%s'%filename)
@@ -40,113 +42,111 @@ def getDataFromMC():
     else:
         # 获得用户信息，这里要额外获得归因信息，精确到campaign
         sql = f'''
-            WITH installs AS (
-                SELECT
-                    appsflyer_id AS uid,
-                    to_char(
-                        to_date(install_time, "yyyy-mm-dd hh:mi:ss"),
-                        "yyyy-mm-dd"
-                    ) AS install_date,
-                    install_timestamp,
-                    media_source,
-                    country_code,
-                    campaign_id
-                FROM
-                    ods_platform_appsflyer_events
-                WHERE
-                    zone = '0'
-                    and app = 502
-                    and app_id = 'com.fun.lastwar.gp'
-                    AND event_name = 'install'
-                    AND day BETWEEN '{startDayStr}'AND '{endDayStr}'
-                    AND to_date(install_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('{installTimeStart}', "yyyy-mm-dd")
-                    AND to_date('{installTimeEnd}', "yyyy-mm-dd")
-            ),
-            purchases AS (
-                SELECT
-                    appsflyer_id AS uid,
-                    event_timestamp,
-                    event_revenue_usd
-                FROM
-                    ods_platform_appsflyer_events
-                WHERE
-                    event_name in ('af_purchase','af_purchase_oldusers')
-                    AND zone = 0
-                    and app = 502
-                    and app_id = 'com.fun.lastwar.gp'
-                    AND day BETWEEN '{startDayStr}'AND '{endDayStr}'
-                    AND to_date(event_time, "yyyy-mm-dd hh:mi:ss") BETWEEN to_date('{installTimeStart}', "yyyy-mm-dd")
-                    AND to_date('{installTimeEnd}', "yyyy-mm-dd")
-            )
-            SELECT
-                installs.uid,
-                installs.install_date,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN purchases.event_timestamp - installs.install_timestamp between 0
-                        and 24 * 3600 THEN purchases.event_revenue_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r1usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN purchases.event_timestamp - installs.install_timestamp between 0
-                        and 2 * 24 * 3600 THEN purchases.event_revenue_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r2usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN purchases.event_timestamp - installs.install_timestamp between 0
-                        and 7 * 24 * 3600 THEN purchases.event_revenue_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r7usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN purchases.event_timestamp - installs.install_timestamp between 0
-                        and 30 * 24 * 3600 THEN purchases.event_revenue_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r30usd,
-                installs.install_timestamp,
-                COALESCE(
-                    max(purchases.event_timestamp) FILTER (
-                        WHERE
-                            purchases.event_timestamp - installs.install_timestamp between 0
-                            and 1 * 86400
-                    ),
-                    installs.install_timestamp
-                ) AS last_timestamp,
-                installs.media_source,
-                installs.country_code,
-                installs.campaign_id
-            FROM
-                installs
-                LEFT JOIN purchases ON installs.uid = purchases.uid
-            GROUP BY
-                installs.uid,
-                installs.install_date,
-                installs.install_timestamp,
-                installs.media_source,
-                installs.country_code,
-                installs.campaign_id
-            ;
+SET
+	odps.sql.timezone = Africa / Accra;
+
+set
+	odps.sql.executionengine.enable.rand.time.seed = true;
+
+@user_info :=
+select
+	uid,
+	mediasource,
+	campaign_id,
+	install_timestamp,
+	to_char(from_unixtime(install_timestamp), 'YYYY-MM-DD') as install_day
+from
+	dws_overseas_lastwar_unique_uid
+where
+	app_package = 'com.fun.lastwar.gp'
+	and install_timestamp between {installTimeStartTimestamp} and {installTimeEndTimestamp}
+;
+
+@user_revenue :=
+select
+	game_uid as uid,
+	COALESCE(
+		SUM(
+			CASE
+				WHEN event_time - install_timestamp between 0
+				and 24 * 3600 THEN revenue_value_usd
+				ELSE 0
+			END
+		),
+		0
+	) as r1usd,
+	COALESCE(
+		SUM(
+			CASE
+				WHEN event_time - install_timestamp between 0
+				and 2 * 24 * 3600 THEN revenue_value_usd
+				ELSE 0
+			END
+		),
+		0
+	) as r2usd,
+	COALESCE(
+		SUM(
+			CASE
+				WHEN event_time - install_timestamp between 0
+				and 7 * 24 * 3600 THEN revenue_value_usd
+				ELSE 0
+			END
+		),
+		0
+	) as r7usd,
+	COALESCE(
+		SUM(
+			CASE
+				WHEN event_time - install_timestamp between 0
+				and 30 * 24 * 3600 THEN revenue_value_usd
+				ELSE 0
+			END
+		),
+		0
+	) as r30usd,
+	COALESCE(
+		max(event_time) FILTER (
+			WHERE
+				event_time - install_timestamp between 0
+				and 1 * 86400
+		),
+		install_timestamp
+	) AS last_timestamp
+FROM
+	rg_bi.dwd_overseas_revenue_allproject
+WHERE
+	zone = '0'
+	and app = 502
+	and app_package = 'com.fun.lastwar.gp'
+	AND game_uid IS NOT NULL
+GROUP BY
+	game_uid,
+	install_timestamp
+;
+
+select
+	user_info.uid,
+	user_info.install_day as install_date,
+	COALESCE(user_revenue.r1usd, 0) as r1usd,
+	COALESCE(user_revenue.r2usd, 0) as r2usd,
+	COALESCE(user_revenue.r7usd, 0) as r7usd,
+	COALESCE(user_revenue.r30usd, 0) as r30usd,
+	user_info.install_timestamp,
+	COALESCE(
+        user_revenue.last_timestamp,
+		user_info.install_timestamp
+	) as last_timestamp,
+	user_info.mediasource as media_source,
+	user_info.campaign_id
+from
+	@user_info as user_info
+	left join @user_revenue as user_revenue on user_info.uid = user_revenue.uid
+;
         '''
         print(sql)
         df = execSql(sql)
+        df['country_code'] = ''
         df.to_csv(filename, index=False)
     return df
 
@@ -334,11 +334,10 @@ def dataStep2(df):
 # 制作一个模拟的SKAN报告
 def makeSKAN(df):
     df = df.loc[df['media'].isna() == False]
+    df = df.loc[df['media'] != 'organic']
     # 重排索引
     df = df.reset_index(drop=True)
     cvDf = df
-
-
 
     # 添加postback_timestamp
     # 如果用户的r1usd == 0，postback_timestamp = install_timestamp + 24小时 + 0~24小时之间随机时间
@@ -348,7 +347,8 @@ def makeSKAN(df):
     non_zero_r1usd_mask = cvDf['r1usd'] > 0
 
     cvDf.loc[zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[zero_r1usd_mask, 'install_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=zero_r1usd_mask.sum())
-    cvDf.loc[non_zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[non_zero_r1usd_mask, 'last_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=non_zero_r1usd_mask.sum())
+    # cvDf.loc[non_zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[non_zero_r1usd_mask, 'last_timestamp'] + 24 * 3600 + np.random.uniform(0, 24 * 3600, size=non_zero_r1usd_mask.sum())
+    cvDf.loc[non_zero_r1usd_mask, 'postback_timestamp'] = cvDf.loc[non_zero_r1usd_mask, 'install_timestamp'] + 24 * 3600 + np.random.uniform(0, 48 * 3600, size=non_zero_r1usd_mask.sum())
 
     # postback_timestamp 转成 int
     cvDf['postback_timestamp'] = cvDf['postback_timestamp'].astype(int)
@@ -484,7 +484,7 @@ def userGroupby(userDf):
     # userGroupbyDf的列名为install_timestamp,cv,user_count和r7usd
     # user_count是每组的用户数
     # r7usd是每组的r7usd汇总
-    userGroupbyDf = userDf.groupby(['install_timestamp','cv','country_code']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r7usd':'sum','r30usd':'sum'}).reset_index()
+    userGroupbyDf = userDf.groupby(['install_timestamp','cv']).agg({'uid':'count','r1usd':'sum','r2usd':'sum','r7usd':'sum','r30usd':'sum'}).reset_index()
     userGroupbyDf.rename(columns={'uid':'user_count'}, inplace=True)
     return userGroupbyDf
 
@@ -496,7 +496,9 @@ def meanAttributionFastv2(userDf, skanDf):
     attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
 
     mediaList = skanDf.loc[~skanDf['media'].isnull()]['media'].unique().tolist()
+    # print('mediaList:',mediaList)
 
+    userDf['total media rate'] = 0
     for media in mediaList:
         userDf['%s rate'%(media)] = 0
 
@@ -511,7 +513,9 @@ def meanAttributionFastv2(userDf, skanDf):
         print(f"待处理的skanDf行数：{len(skanDf_to_process)}")
         
         # 在每次循环开始时，预先计算每一行的media rate的总和
-        userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
+        # userDf['total media rate'] = userDf.apply(lambda x: sum([x[media + ' rate'] for media in mediaList]), axis=1)
+        for media in mediaList:
+            userDf['total media rate'] = userDf['total media rate'] + userDf[media + ' rate']
         
         print('第%d次分配，时间范围向前推%d小时'%(i+1,i*12))
         
@@ -986,35 +990,26 @@ def debug():
     print(groupByMediaDf)
 
 
-
 if __name__ == '__main__':
-    # print('main24')
+    print('main24')
+    
+    dayList = [
+        # {'installTimeStart':'2024-01-01','installTimeEnd':'2024-01-02'},
+        {'installTimeStart':'2024-01-01','installTimeEnd':'2024-01-31'},
+        {'installTimeStart':'2024-02-01','installTimeEnd':'2024-02-29'},
+        {'installTimeStart':'2024-03-01','installTimeEnd':'2024-03-31'},
+        {'installTimeStart':'2024-04-01','installTimeEnd':'2024-04-30'},
+    ]
 
-    # global installTimeStart,installTimeEnd,startDay,endDay,startDayStr,endDayStr,filename
 
-    # dayList = [
-    #     # {'installTimeStart':'2024-01-01','installTimeEnd':'2024-01-31'},
-    #     {'installTimeStart':'2024-02-01','installTimeEnd':'2024-02-29'},
-    #     {'installTimeStart':'2024-03-01','installTimeEnd':'2024-03-31'},
-    #     {'installTimeStart':'2024-04-01','installTimeEnd':'2024-04-30'},
-    # ]
+    for day in dayList:
+        installTimeStart = day['installTimeStart']
+        installTimeEnd = day['installTimeEnd']
+        
+        filename = getFilename(f'androidFp{installTimeStart}_{installTimeEnd}')
+
+        main24(fast = False,onlyCheck = False)
 
 
-    # for day in dayList:
-    #     installTimeStart = day['installTimeStart']
-    #     installTimeEnd = day['installTimeEnd']
-    #     startDay = datetime.strptime(installTimeStart, '%Y-%m-%d')
-    #     endDay = datetime.strptime(installTimeEnd, '%Y-%m-%d')
-    #     endDay += timedelta(days=30)
-    #     startDayStr = startDay.strftime('%Y%m%d')
-    #     endDayStr = endDay.strftime('%Y%m%d')
-    #     filename = getFilename(f'androidFp{startDayStr}_{endDayStr}')
-
-    #     main24(fast = False,onlyCheck = False)
-
-    # main24(fast = True,onlyCheck = True)
-    # print('main48')
-    # main48(fast = False,onlyCheck = False)
-    # main48(fast = True,onlyCheck = True)
 
     debug()

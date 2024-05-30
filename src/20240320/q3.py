@@ -300,7 +300,8 @@ def debug():
 
 # cv分组
 cvGroupList = [
-    {'name':'low','min':0,'max':10},
+    {'name':'free','min':0,'max':0},
+    {'name':'low','min':1,'max':10},
     {'name':'mid','min':11,'max':21},
     {'name':'high','min':22,'max':31}
 ]
@@ -369,6 +370,7 @@ def df2CvGroupUserRate(startDayStr,endDayStr):
     groupByCvGroupDf['r1usd rate'] = groupByCvGroupDf['r1usd rate'].apply(lambda x: format(x, '.2%'))
     groupByCvGroupDf['r7usd rate'] = groupByCvGroupDf['r7usd rate'].apply(lambda x: format(x, '.2%'))
     groupByCvGroupDf.to_csv(f'/src/data/zk/q3_d2_cv_group_{startDayStr}_{endDayStr}.csv', index=False)
+    print(groupByCvGroupDf)
 
 # 付费增长率
 def df1CvPay(startDayStr,endDayStr):
@@ -453,13 +455,13 @@ if __name__ == '__main__':
     # startDayStr = '20240304'
     # endDayStr = '20240306'
 
-    R0R7(startDayStr,endDayStr)
+    # R0R7(startDayStr,endDayStr)
     # userCount(startDayStr,endDayStr)
 
     # df1CvUserRate(startDayStr,endDayStr)
     # df1CvGroupUserRate(startDayStr,endDayStr)
     # df2CvUserRate(startDayStr,endDayStr)
-    # df2CvGroupUserRate(startDayStr,endDayStr)
+    df2CvGroupUserRate(startDayStr,endDayStr)
 
     # df1CvPay(startDayStr,endDayStr)
     # df1CvGroupPay(startDayStr,endDayStr)
