@@ -54,5 +54,10 @@ def writeTableBjTmp(df):
         # print(df)
         writer.write(df)
 
+def getO():
+    o = ODPS(accessId, secretAccessKey, defaultProject,
+            endpoint=endPoint)
+    return o
+
 if __name__ == '__main__':
     createTableBjTmp()

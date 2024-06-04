@@ -17,3 +17,8 @@ class SmartCompute:
     def readCsv(self,csvFilename):
         pd_df = pd.read_csv(csvFilename)
         return pd_df
+    
+    def getO(self):
+        o = ODPS(accessId, secretAccessKey, defaultProject,
+                endpoint=endPoint)
+        return o

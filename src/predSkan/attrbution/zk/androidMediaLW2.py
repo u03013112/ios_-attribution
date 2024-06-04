@@ -290,39 +290,32 @@ def addCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
     return userDfCopy
 
 
-def addCv2(userDf,usd='r7usd',cv='cv', p_pos=1.00, r_pos=1.00):
-    # 先进行旧有逻辑，addCv，对用户的24小时付费进行分档
-    # 然后再针对cv == 0 的用户，进行新的分档
-    # 其中 usd 列 == 0的用户，cv列不变
-    # usd列 > 0 的用户，cv列 = cv列 + 32
-    
-    # 但是由于7日付费金额是预测的，所以不可能非常准确，所以要测试一下各种准确率的情况
-    # 即随机的进行一些错误的分档
-    # 按照参数中的准确率与查全率，对cv == 0的用户进行分档，例如当p==1.00,r==1.00时，cv == 0的用户的分档是完全正确的
-    
-    # 针对 cv == 0 的用户进行新的分档
-    cv_zero_users = userDf[userDf[cv] == 0].copy()
-    
-    # 正样本和负样本
-    pos_users = cv_zero_users[cv_zero_users[usd] > 0]
-    neg_users = cv_zero_users[cv_zero_users[usd] == 0]
-    
-    total_pos_users = len(pos_users)
-    
-    # 1. 根据查准率计算
-    num_correct_pos = int(total_pos_users * p_pos)
-    correctPosDf = pos_users.sample(num_correct_pos, replace=False)
-    
-    # 2. 根据查全率计算
-    num_to_classify_pos = int(total_pos_users * r_pos)
-    num_incorrect_pos_from_neg = num_to_classify_pos - num_correct_pos
-    incorrectNegDf = neg_users.sample(num_incorrect_pos_from_neg, replace=False)
+def addCv2(userDf,cv='cv', p_pos=1.00, r_pos=1.00):
+    for cv1 in range(11):
+        
+        cv_zero_users = userDf[userDf[cv] == cv1]
+        
+        # 正样本和负样本
+        pos_users = cv_zero_users[cv_zero_users['r7usd'] > cv_zero_users['r1usd']]
+        neg_users = cv_zero_users[cv_zero_users['r7usd'] == cv_zero_users['r1usd']]
+        
+        total_pos_users = len(pos_users)
+        
+        # 1. 根据查准率计算
+        numTP = int(total_pos_users * p_pos)
+        TPDf = pos_users.sample(numTP, replace=False)
+        
+        # 2. 根据查全率计算
+        numFN = int(total_pos_users / r_pos - numTP)
+        if numFN > len(neg_users):
+            numFN = len(neg_users)
+        FNDf = neg_users.sample(numFN, replace=False)
 
-    # 3. 合并
-    needMarkPosDf = pd.concat([correctPosDf, incorrectNegDf])
-    
-    # 4. 标记
-    userDf.loc[needMarkPosDf.index, cv] += 32
+        # 3. 合并
+        needMarkPosDf = pd.concat([TPDf, FNDf])
+        
+        # 4. 标记
+        userDf.loc[needMarkPosDf.index, cv] += 32
     
     return userDf
 
@@ -901,9 +894,8 @@ def draw24(df,prefix='attCampaign24_',label = 'r1usd'):
         plt.close()
 
 pAndRList = [
-    {'p':1.0,'r':1.0},
     {'p':0.8,'r':0.8},
-    {'p':0.6,'r':0.6},
+    {'p':0.5,'r':0.5},
 
     {'p':0.5,'r':0.9},
     {'p':0.3,'r':0.9},
