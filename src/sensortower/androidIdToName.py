@@ -23,7 +23,7 @@ def androidIdToName2(app_id):
         app_name = soup.find_all("h1")[0].text
         return app_name, url
     else:
-        return "App not found."
+        return f"App not found.{app_id}", ''
  
 
 if __name__ == "__main__":
