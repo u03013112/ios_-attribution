@@ -149,6 +149,62 @@ select * from (select *,count(data_map_0) over () group_num_0,count(data_map_1) 
 
     data.to_csv('/src/data/lwData20240530.csv', index=False)
 
+def getData2():
+    sql = '''
+select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."#duration"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-30 and "#zone_offset"<=30, date_add('second', cast((0-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('hour', "internal_u@lwu_register_date", "#event_time")) as double) "#vp@lifetime_hour" from (select a.*, b."lwu_register_date" "internal_u@lwu_register_date" from (select "#event_name","#duration","#event_time","#zone_offset","#user_id","$part_date","$part_event" from v_event_15) a join (select * from (select "lwu_register_date","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20231225) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20231225)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 'ta_app_end' ) ) )) and ((("$part_date" between '2023-12-31' and '2024-05-01') and ("@vpc_tz_#event_time" >= timestamp '2024-01-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2024-04-30'))) and (ta_ev."#vp@lifetime_hour" <= 2E+1)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    '''
+    lines = ssSql2(sql)
+    # print(lines[0])
+
+    date_str = "1981-01-01 00:00:00"
+
+    data_list = []
+
+    columns = ['uid', 'onlineTime']
+
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+
+        uid = lineJ[0]
+        onlineTime = lineJ[1].get(date_str, 0) if lineJ[1] else 0
+        data_list.append([uid, onlineTime])
+
+    data = pd.DataFrame(data_list, columns=columns)
+    data.to_csv('/src/data/lwDataOT_20240101_20240430.csv', index=False)
+
+def getData3():
+    sql = '''
+select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(MAX(ta_ev."lw_main_level"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-30 and "#zone_offset"<=30, date_add('second', cast((0-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('hour', "internal_u@lwu_register_date", "#event_time")) as double) "#vp@lifetime_hour" from (select a.*, b."lwu_register_date" "internal_u@lwu_register_date" from (select "lw_main_level","#event_name","#event_time","#zone_offset","#user_id","$part_date","$part_event" from v_event_15) a join (select * from (select "lwu_register_date","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20231225) b on a."#user_id"=b."#user_id")))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20231225)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay_new' ) ) )) and ((("$part_date" between '2023-12-31' and '2024-05-01') and ("@vpc_tz_#event_time" >= timestamp '2024-01-01' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2024-04-30'))) and (ta_ev."#vp@lifetime_hour" <= 24)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC
+    '''
+    lines = ssSql2(sql)
+    # print(lines[0])
+
+    date_str = "1981-01-01 00:00:00"
+
+    data_list = []
+
+    columns = ['uid', 'level']
+
+    for line in lines:
+        try:
+            lineJ = json.loads(line)
+        except:
+            continue
+
+        uid = lineJ[0]
+        level = lineJ[1].get(date_str, 0) if lineJ[1] else 0
+        data_list.append([uid, level])
+
+    data = pd.DataFrame(data_list, columns=columns)
+    data.to_csv('/src/data/lwDataLevel_20240101_20240430.csv', index=False)
+
+
+
+
+
 def test():
     df = pd.read_csv('/src/data/lwData20240530.csv')
     print(len(df))
@@ -223,6 +279,10 @@ if __name__ == '__main__':
     # getData()
     # print('done')
 
-    test()
+    # test()
 
     # classify_and_evaluate()
+
+
+    # getData2()
+    getData3()
