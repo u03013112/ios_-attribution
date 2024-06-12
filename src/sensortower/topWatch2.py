@@ -92,7 +92,8 @@ def getDataFromSensorTower():
                 # ranking 是类似 [6448786147, 6473006839, 6476766567, 1660160760,……] 的列表
                 ranking = getRanking(platform=platform,category=category,countries=country,chartTypeIds=chartTypeId,date=dayStr)
                 
-                for j in range(len(ranking)):
+                l = max(10,len(ranking))
+                for j in range(l):
                     appId = ranking[j]
                     
                     if platform == 'ios':

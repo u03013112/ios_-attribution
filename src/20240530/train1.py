@@ -1,8 +1,12 @@
+import numpy as np
 import pandas as pd  
+from itertools import combinations
 from sklearn.model_selection import train_test_split  
 from sklearn.ensemble import RandomForestClassifier  
-from sklearn.metrics import classification_report, accuracy_score, recall_score, make_scorer  
+from sklearn.metrics import classification_report, accuracy_score, recall_score, make_scorer,precision_score
 from sklearn.model_selection import GridSearchCV    
+from scipy.stats import pointbiserialr
+from sklearn.cluster import KMeans
 
 def classify_and_evaluate():
     # 加载数据并筛选特征和目标列
@@ -153,7 +157,7 @@ def classify_and_evaluate_et():
     print('Test Accuracy:', accuracy_score(y_test, y_test_pred))
 
 # 调用函数
-classify_and_evaluate_et()
+# classify_and_evaluate_et()
 
 
 # 调整权重
@@ -274,3 +278,159 @@ def classify_and_evaluate3():
       
 # 运行函数
 # classify_and_evaluate()
+
+
+def load_and_prepare_data(file_path):
+    # 加载数据并筛选特征和目标列
+    df = pd.read_csv(file_path)
+    
+    # 只分析24小时内不付费用户
+    freeDf = df.loc[(df['payNew24'] == 0)]
+    
+    # 选取目标列并转换为二分类问题
+    freeDf['target'] = freeDf['payNew168'].apply(lambda x: 1 if x > 0 else 0)
+    
+    # 分离出目标为1的样本以及目标为0的样本
+    positive_samples = freeDf[freeDf['target'] == 1]
+    negative_samples = freeDf[freeDf['target'] == 0].sample(frac=1, random_state=0)
+    
+    # 合并进行采样后的数据
+    sampled_df = pd.concat([positive_samples, negative_samples])
+
+    # 选取特征列
+    X = sampled_df[['heroLevelUp', 'appLaunch', 'login', 'payAction', 'plunder', 'goldCost', 'onlineTime', 'mainLevel', 'radar']]
+    
+    # 重新选取目标列
+    y = sampled_df['target']
+    
+    return X, y
+
+
+def calculate_point_biserial_correlation(X, y):
+    correlations = {}
+    for column in X.columns:
+        correlation, _ = pointbiserialr(y, X[column])
+        correlations[column] = correlation
+        print(f'Correlation between {column} and target: {correlation:.2f}')
+    return correlations
+
+def calculate_combination_correlations(X, y):
+    combinations_correlations = {}
+    for (col1, col2) in combinations(X.columns, 2):
+        new_feature = X[col1] * X[col2]
+        correlation, _ = pointbiserialr(y, new_feature)
+        combinations_correlations[f'{col1}*{col2}'] = correlation
+        print(f'Correlation between {col1}*{col2} and target: {correlation:.2f}')
+    return combinations_correlations
+
+def evaluate_kmeans(X, y):
+    kmeans = KMeans(n_clusters=2, random_state=0)
+    kmeans.fit(X)
+    y_pred = kmeans.predict(X)
+    print(f'K-Means Accuracy: {accuracy_score(y, y_pred):.2f}')
+    print(classification_report(y, y_pred))
+    return kmeans
+
+def find_thresholds(X, y):
+    thresholds = {}
+    for column in X.columns:
+        best_threshold = None
+        best_accuracy = 0
+        for threshold in X[column].unique():
+            y_pred = (X[column] >= threshold).astype(int)
+            accuracy = accuracy_score(y, y_pred)
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_threshold = threshold
+        thresholds[column] = best_threshold
+        print(f'Best threshold for {column}: {best_threshold} with accuracy {best_accuracy:.2f}')
+    return thresholds
+
+def evaluate_feature_threshold(X, y):
+    results = []
+    for feature in X.columns:
+        # 使用KMeans进行聚类
+        kmeans = KMeans(n_clusters=2, random_state=0)
+        kmeans.fit(X[[feature]])
+        y_pred = kmeans.predict(X[[feature]])
+        
+        # 找到最佳阈值
+        cluster_centers = kmeans.cluster_centers_.flatten()
+        threshold = (cluster_centers[0] + cluster_centers[1]) / 2
+        
+        # 根据阈值进行分类
+        y_pred_threshold = (X[feature] >= threshold).astype(int)
+        
+        # 计算查准率和查全率
+        precision = precision_score(y, y_pred_threshold)
+        recall = recall_score(y, y_pred_threshold)
+        accuracy = accuracy_score(y, y_pred_threshold)
+        
+        results.append((feature, threshold, precision, recall, accuracy))
+    
+    return results
+
+def evaluate_feature_threshold2(X, y):
+    results = []
+    for feature in X.columns:
+        best_threshold = None
+        best_precision = 0
+        best_recall = 0
+        best_accuracy = 0
+        best_score = 0
+        
+        # 计算0.1分位数到0.9分位数的值
+        quantiles = np.linspace(0.9, 0.999, 9)
+        thresholds = X[feature].quantile(quantiles)
+        
+        for threshold in thresholds:
+            # 根据阈值进行分类
+            y_pred_threshold = (X[feature] >= threshold).astype(int)
+            
+            # 计算查准率和查全率
+            precision = precision_score(y, y_pred_threshold)
+            recall = recall_score(y, y_pred_threshold)
+            accuracy = accuracy_score(y, y_pred_threshold)
+            
+            # 计算查准率和查全率的乘积
+            score = precision * recall
+            # score = precision
+
+            print(f"Feature: {feature}, Threshold: {threshold:.2f}, Precision: {precision:.2f}, Recall: {recall:.2f}, Accuracy: {accuracy:.2f}")
+            
+            # 更新最佳阈值
+            if score > best_score:
+                best_threshold = threshold
+                best_precision = precision
+                best_recall = recall
+                best_accuracy = accuracy
+                best_score = score
+        
+        results.append((feature, best_threshold, best_precision, best_recall, best_accuracy))
+    
+    return results
+# 主程序
+if __name__ == "__main__":
+    file_path = '/src/data/lwData20240530.csv'
+    
+    # 加载和准备数据
+    print('Loading and preparing data...')
+    X, y = load_and_prepare_data(file_path)
+    print('Data loaded and prepared.')
+    # # 计算并打印点双列相关系数
+    # print('Calculating point-biserial correlation...')
+    # calculate_point_biserial_correlation(X, y)
+
+    # print("\nCombination Feature Correlations:")
+    # calculate_combination_correlations(X, y)
+
+    # print("\nEvaluating K-Means Clustering:")
+    # kmeans_model = evaluate_kmeans(X, y)
+    
+    # print("\nFinding Best Thresholds for Each Feature:")
+    # thresholds = find_thresholds(X, y)
+
+    results = evaluate_feature_threshold2(X, y)
+    
+    for feature, threshold, precision, recall, accuracy in results:
+        print(f"Feature: {feature}, Threshold: {threshold:.2f}, Precision: {precision:.2f}, Recall: {recall:.2f}, Accuracy: {accuracy:.2f}")

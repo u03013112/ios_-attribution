@@ -318,20 +318,21 @@ def addCv2(userDf,cv='cv', p_pos=1.00, r_pos=1.00):
     
     return userDf
 
-def addCv3(userDf,cv='cv'):
+def addCv3(userDf,cv='cv',t = 3600):
     print('addCv3')
+    userDf = userDf.copy(deep=True)
     # 统计不同cv中，影响的用户数量
     cvList = userDf['cv'].unique().tolist()
     cvList.sort()
 
     for cv1 in cvList:
         cvDf = userDf[userDf['cv'] == cv1]
-        cvDf2 = cvDf.loc[cvDf['onlineTime'] > 3600]
+        cvDf2 = cvDf.loc[cvDf['onlineTime'] > t]
         print('cv:',cv1,'count:',len(cvDf),'count2:',len(cvDf2),'rate:',len(cvDf2)/len(cvDf))
 
     userDf.loc[
         (userDf['cv']<=10) &
-        (userDf['onlineTime'] > 3600)
+        (userDf['onlineTime'] > t)
         ,cv
     ] += 32
 
@@ -346,16 +347,68 @@ def addCv4(userDf,cv='cv'):
 
     for cv1 in cvList:
         cvDf = userDf[userDf['cv'] == cv1]
-        cvDf2 = cvDf.loc[userDf['level'] >= 10]
+        cvDf2 = cvDf.loc[userDf['level'] >= 5]
         print('cv:',cv1,'count:',len(cvDf),'count2:',len(cvDf2),'rate:',len(cvDf2)/len(cvDf))
 
+        # if cv1 == 0:
+        #     print(cvDf2.head(20))
 
     userDf.loc[
-        (userDf['level'] >= 10)
+        (userDf['cv']>0) &
+        (userDf['cv']<=10) &
+        (userDf['level'] >= 5)
         ,cv
     ] += 32
 
     print('修改cv数量：',len(userDf.loc[userDf['cv'] >= 32]))
+    return userDf
+
+
+def addCv5(userDf):
+    # 复合条件添加cv
+    # 对于付费用户，判断付费时等级是否大于 等于 5
+    # 对于不付费用户，判断在线时间是否大于 3600
+    userDf = userDf.copy(deep=True)
+
+    # 付费用户
+    payDf = userDf.loc[(userDf['cv'] > 0) & (userDf['cv'] <= 10)]
+    payDf2 = payDf.loc[payDf['level'] >= 5]
+
+    print('付费用户')
+    print('总人数：',len(payDf))
+    print('等级大于等于5的人数：',len(payDf2))
+
+    # 不付费用户
+    freeDf = userDf.loc[userDf['cv'] == 0]
+    freeDf2 = freeDf.loc[freeDf['onlineTime'] > 3600]
+    print('不付费用户')
+    print('总人数：',len(freeDf))
+    print('在线时间大于3600的人数：',len(freeDf2))
+
+    userDf.loc[payDf2.index, 'cv'] += 32
+    # userDf.loc[freeDf2.index, 'cv'] += 32
+
+    print('修改cv数量：',len(userDf.loc[userDf['cv'] >= 32]))
+    return userDf
+
+
+def addCv6(userDf):
+    userDf = userDf.copy(deep=True)
+    userDf.loc[userDf['mainLevel'] > 3, 'cv'] += 32
+
+    print('修改cv数量：',len(userDf.loc[userDf['cv'] >= 32]))
+
+    # 计算p r
+    tp = len(userDf.loc[(userDf['cv'] == 32) & (userDf['r7usd'] > 0)])
+    fp = len(userDf.loc[(userDf['cv'] == 0) & (userDf['r7usd'] > 0)])
+    p = tp / (tp + fp)
+
+    fn = len(userDf.loc[(userDf['cv'] == 32) & (userDf['r7usd'] == 0)])
+    r = tp / (tp + fn)
+
+    print('p:',p)
+    print('r:',r)
+
     return userDf
 
 def addOT(userDf):
@@ -372,6 +425,21 @@ def addLevel(userDf):
     userDf['level'] = userDf['level'].fillna(0)
     return userDf
 
+def addLevel2(userDf):
+    levelDf = pd.read_csv('/src/data/lwData_heroLevel_mainLevel.csv', converters={'uid':str})
+    userDf['uid'] = userDf['uid'].astype(str)
+    userDf = pd.merge(userDf, levelDf, on='uid', how='left')
+    print('addLevel2')
+    print('userDf:',len(userDf))
+    print('levelDf:',len(levelDf))
+    print('heroLevelUp null:',len(userDf.loc[userDf['heroLevelUp'].isna()]))
+    print('mainLevel null:',len(userDf.loc[userDf['mainLevel'].isna()]))
+
+    userDf['heroLevelUp'] = userDf['heroLevelUp'].fillna(0)
+    userDf['mainLevel'] = userDf['mainLevel'].fillna(0)
+
+    return userDf
+
 def dataStep1_24():
     df = pd.read_csv(filename, converters={'campaign_id':str})
     df.loc[df['last_timestamp'] == 0, 'last_timestamp'] = df['install_timestamp']
@@ -384,6 +452,7 @@ def dataStep1_24():
     df = addCv(df,cvMapDf,usd='r1usd',cv='cv')
     df = addOT(df)
     df = addLevel(df)
+    df = addLevel2(df)
     df.to_csv(getFilename('androidFpMergeDataStep1Campaign24'), index=False)
     print('dataStep1 24h done')    
     return df
@@ -416,7 +485,9 @@ def dataStep2(df):
         'country_code',
         'campaign_id',
         'onlineTime',
-        'level'
+        'level',
+        'heroLevelUp',
+        'mainLevel'
     ]]
     df.to_csv(getFilename('androidFpMergeDataStep2Media'), index=False)
     print('dataStep2 done')
@@ -584,7 +655,7 @@ import gc
 def meanAttributionFastv2(userDf, skanDf):
     userDf = userDf.copy(deep=True)
     pending_skan_indices = skanDf.index.tolist()
-    N = 10
+    N = 5
     attributeDf = pd.DataFrame(columns=['user index', 'media', 'skan index', 'rate'])
 
     mediaList = skanDf.loc[~skanDf['media'].isnull()]['media'].unique().tolist()
@@ -952,6 +1023,14 @@ pAndRList = [
     {'p':1.0,'r':1.0},
 ]
 
+tList = [
+    # 300,
+    # 600,
+    # 1800,
+    # 3600,
+    7200
+]
+
 def main24(fast = False,onlyCheck = False):
     if onlyCheck == False:
         if fast == False:
@@ -959,15 +1038,16 @@ def main24(fast = False,onlyCheck = False):
             getDataFromMC()
             
             df = dataStep1_24()
-            df2 = dataStep2(df)
+            df = dataStep2(df)
 
-            for pAndR in pAndRList:
-                p = pAndR['p']
-                r = pAndR['r']
+            for t in tList:
+                
                 # df2 = addCv2(df2,p_pos=p,r_pos=r)
 
-                # df2 = addCv3(df2)
-                df2 = addCv4(df2)
+                # df2 = addCv3(df,t = t)
+                # df2 = addCv4(df)
+                # df2 = addCv5(df)
+                df2 = addCv6(df)
                 # return
 
                 skanDf = makeSKAN(df2)
@@ -977,7 +1057,7 @@ def main24(fast = False,onlyCheck = False):
                 
                 skanDf = skanValidInstallDate2Min(skanDf,N = 3600)
                 skanDf = skanGroupby(skanDf)
-                skanDf.to_csv(getFilename(f'skanAOSCampaignG24_{p:.1f}_{r:.1f}'),index=False)
+                skanDf.to_csv(getFilename(f'skanAOSCampaignG24_{t:.0f}'),index=False)
                 print('skan data group len:',len(skanDf))
 
                 userDf = makeUserDf(df2.copy())
@@ -985,30 +1065,27 @@ def main24(fast = False,onlyCheck = False):
                 
                 userDf = userInstallDate2Min(userDf,N = 3600)
                 userDf = userGroupby(userDf)
-                userDf.to_csv(getFilename(f'userAOSCampaignG24_{p:.1f}_{r:.1f}'),index=False)
+                userDf.to_csv(getFilename(f'userAOSCampaignG24_{t:.0f}'),index=False)
                 print('user data group len:',len(userDf))
         
         mediaList = skanDf.loc[~skanDf['media'].isnull()]['media'].unique().tolist()
 
-        for pAndR in pAndRList:
-            p = pAndR['p']
-            r = pAndR['r']
+        for t in tList:
+            print(f'-=-=-=-=-=-=-=-=-=> t:{t}')
 
-            print(f'-=-=-=-=-=-=-=-=-=> p:{p},r:{r}')
-
-            userDf = pd.read_csv(getFilename(f'userAOSCampaignG24_{p:.1f}_{r:.1f}'))
-            skanDf = pd.read_csv(getFilename(f'skanAOSCampaignG24_{p:.1f}_{r:.1f}'))
+            userDf = pd.read_csv(getFilename(f'userAOSCampaignG24_{t:.0f}'))
+            skanDf = pd.read_csv(getFilename(f'skanAOSCampaignG24_{t:.0f}'))
 
             userDf2 = meanAttributionFastv2(userDf, skanDf)
-            meanAttributionFastv2Filename = getFilename(f'meanAttribution24_{installTimeStart}_{installTimeEnd}_{pAndR["p"]:.1f}_{pAndR["r"]:.1f}')
+            meanAttributionFastv2Filename = getFilename(f'meanAttribution24_{installTimeStart}_{installTimeEnd}_{t:.0f}')
             userDf2.to_csv(meanAttributionFastv2Filename, index=False)
             userDf2 = pd.read_csv(meanAttributionFastv2Filename)
             userDf2 = meanAttributionResult(userDf2,mediaList)
-            meanAttributionResultFilename = getFilename(f'meanAttributionResult24_{installTimeStart}_{installTimeEnd}_{pAndR["p"]:.1f}_{pAndR["r"]:.1f}')
+            meanAttributionResultFilename = getFilename(f'meanAttributionResult24_{installTimeStart}_{installTimeEnd}_{t:.0f}')
             userDf2.to_csv(meanAttributionResultFilename, index=False)
 
             userDf2 = pd.read_csv(meanAttributionResultFilename)
-            df = checkRet(userDf2,prefix=f'attMedia24_{installTimeStart}_{installTimeEnd}_{pAndR["p"]:.1f}_{pAndR["r"]:.1f}_')
+            df = checkRet(userDf2,prefix=f'attMedia24_{installTimeStart}_{installTimeEnd}_{t:.0f}_')
 
 def debug():
     dayList = [
@@ -1020,16 +1097,13 @@ def debug():
 
     df = pd.DataFrame()
 
-    for pAndR in pAndRList:
-
-        p = pAndR['p']
-        r = pAndR['r']
-
+    for t in tList:
+        
         for day in dayList:
             installTimeStart = day['installTimeStart']
             installTimeEnd = day['installTimeEnd']
 
-            filename = getFilename(f'attMedia24_{installTimeStart}_{installTimeEnd}_{pAndR["p"]:.1f}_{pAndR["r"]:.1f}_groupbyMedia_Mape_{installTimeStart}_{installTimeEnd}')
+            filename = getFilename(f'attMedia24_{installTimeStart}_{installTimeEnd}_{t:.0f}_groupbyMedia_Mape_{installTimeStart}_{installTimeEnd}')
 
             df0 = pd.read_csv(filename)
 
@@ -1038,14 +1112,14 @@ def debug():
 
         df = df.loc[df['r7usd'] > 1000]
 
-        df.to_csv(getFilename(f'attMedia24_{pAndR["p"]:.1f}_{pAndR["r"]:.1f}_groupbyMedia_Mape'),index=False)
+        df.to_csv(getFilename(f'attMedia24_{t:.0f}_groupbyMedia_Mape'),index=False)
 
         groupByMediaDf = df.groupby('media').agg({
             'MAPE7':'mean',
             'MAPE30':'mean'
         }).reset_index()
 
-        print('p:',p,'r:',r)
+        print('t:',t)
         print(groupByMediaDf)
 
 
