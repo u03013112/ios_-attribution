@@ -57,6 +57,7 @@ def makeLevels1(userDf, usd='r1usd', N=32):
 # 计算档位的核心算法
 # 基本与makeLevels1改进版
 def makeLevels(userDf, usd='r1usd', N=32):
+    userDf = userDf.copy()
     # 如果userDf没有sumUsd列，就添加sumUsd列，值为usd列的值
     if 'sumUsd' not in userDf.columns:
         userDf['sumUsd'] = userDf[usd]
