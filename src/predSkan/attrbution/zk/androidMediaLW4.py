@@ -1147,6 +1147,77 @@ def debug3():
         mediaDf.to_csv(getFilename(f'debug4_{media}'),index=False)
 
     
+def debug5():
+    # 按媒体分组
+    # 按cv group分组
+    # 计算不同媒体，不同cv group的r7usd均值，与整体r7usd均值的比例
+    # 再画图
+
+    df = pd.read_csv(getFilename(f'attMedia24_1_groupbyMedia_Mape'))
+    cvGroupList = [
+        {'name':'free','cvList':[0]},
+        {'name':'low','cvList':[1,2,3,4,5,6,7,8,9,10]},
+        {'name':'mid','cvList':[11,12,13,14,15,16,17,18,19,20]},
+        {'name':'high','cvList':[21,22,23,24,25,26,27,28,29,30,31]},
+    ]
+
+    df['cvGroup'] = 'unknow'
+    for cvGroup in cvGroupList:
+        cvList = cvGroup['cvList']
+        cvGroupName = cvGroup['name']
+        df.loc[df['cv'].isin(cvList),'cvGroup'] = cvGroupName
+
+    meanDf = df.groupby(['cvGroup','Month']).agg({
+        'r7usd':'sum',
+        'user_count':'sum'
+    }).reset_index()
+    meanDf['r7usd mean'] = meanDf['r7usd'] / meanDf['user_count']
+
+    df = df.groupby(['media','cvGroup','Month']).agg({
+        'r7usd':'sum',
+        'user_count':'sum'
+    }).reset_index()
+    df['r7usd mean'] = df['r7usd'] / df['user_count']
+
+    meanDf = meanDf.sort_values(by=['cvGroup','Month']).reset_index(drop=True)
+    df = df.sort_values(by=['media','cvGroup','Month']).reset_index(drop=True)
+
+    # 画图
+    # 1、Month 升序
+    # 2、按照Month作为X
+    # 3、每个cvGroup一张图
+    # 4、每个media一条线
+    # 5、整体的平均值一条线 用虚线
+    # 6、y轴是r7usd的均值
+    # 7、保存为 '/src/data/zk2/debug5_{cvGroup}.jpg'
+
+    for cvGroup in cvGroupList:
+        cvGroupName = cvGroup['name']
+        cvGroupDf = df[df['cvGroup'] == cvGroupName]
+        meanGroupDf = meanDf[meanDf['cvGroup'] == cvGroupName]
+
+        plt.figure()
+        mediaList = [
+            'Facebook Ads',
+            'organic',
+            'googleadwords_int',
+            'applovin_int',
+        ]
+
+        for media in mediaList:
+            mediaDf = cvGroupDf[cvGroupDf['media'] == media]
+            plt.plot(mediaDf['Month'], mediaDf['r7usd mean'], label=media)
+
+        plt.plot(meanGroupDf['Month'], meanGroupDf['r7usd mean'], linestyle='--', label='Overall Mean')
+
+        plt.xlabel('Month')
+        plt.ylabel('R7USD Mean')
+        plt.title(f'{cvGroupName} CV Group')
+        plt.legend()
+        plt.savefig(f'/src/data/zk2/debug5_{cvGroupName}.jpg')
+        plt.close()
+
+
 
 if __name__ == '__main__':
     # print('main24')
@@ -1173,6 +1244,8 @@ if __name__ == '__main__':
 
     # debug()
 
-    debug2Adv()
+    # debug2Adv()
 
     # debug3()
+
+    debug5()
