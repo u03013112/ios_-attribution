@@ -12,7 +12,7 @@ import pandas as pd
 
 def getPayDataFromMC():
     todayStr = datetime.datetime.now().strftime('%Y%m%d')
-    oneMonthAgoStr = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y%m%d')
+    oneMonthAgoStr = (datetime.datetime.now() - datetime.timedelta(days=60)).strftime('%Y%m%d')
     print('获得%s~%s的付费数据'%(oneMonthAgoStr,todayStr))
 
     sql = f'''
@@ -139,7 +139,7 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 from src.report.feishu.feishu import sendMessageDebug
 def main():
 
-    N = 64
+    N = 32
 
     df = getPayDataFromMC()
     df.to_csv('/src/data/payData.csv',index=False)
@@ -151,11 +151,13 @@ def main():
     message = 'Lastwar CV档位自动测试\n\n'
 
     # 计算旧版本的Mape
-    cvMapDf = pd.read_csv('/src/src/lastwar/cv/cvMap20231205.csv')
-    cvMapDf = cvMapDf.loc[
-        (cvMapDf['event_name'] == 'af_skad_revenue')
-        & (cvMapDf['conversion_value'] < 32)
-    ]
+    cvMapDf = pd.read_csv('/src/src/lastwar/cv/cvMap20240708.csv')
+    # cvMapDf = cvMapDf.loc[
+    #     (cvMapDf['event_name'] == 'af_skad_revenue')
+    #     & (cvMapDf['conversion_value'] < 32)
+    # ]
+    cvMapDf = cvMapDf.loc[cvMapDf['event_name'] == 'af_purchase_update_skan_on']
+    
     levels = cvMapDf['max_event_revenue'].tolist()
     mape = checkLevels(df,levels,usd='revenue',cv='cv')
     message += '旧版本\n'

@@ -1117,6 +1117,7 @@ def debug3():
         df.loc[df['cv'].isin(cvList),'cvGroup'] = cvGroupName
 
     df = df.groupby(['media','cvGroup']).agg({
+        'user_count':'sum',
         'r7usd':'sum',
         'r7usdp':'sum',
         'r30usd':'sum',
@@ -1126,12 +1127,30 @@ def debug3():
     # 分媒体统计 金额偏差占比，即 金额偏差，占媒体总金额偏差的比例
     df['detla7'] = df['r7usd'] - df['r7usdp']
     df['detla30'] = df['r30usd'] - df['r30usdp']
-    
+    df['r7usd/user_count'] = df['r7usd'] / df['user_count']
+
+    r7usdSum = df['r7usd'].sum()
+    userCountSum = df['user_count'].sum()
+    print('total r7usdSum:',r7usdSum)
+    print('total userCountSum:',userCountSum) 
+
+    for cvGroup in cvGroupList:
+        print(f'\n{cvGroup["name"]}:')
+        cvGroupName = cvGroup['name']
+        cvGroupDf = df[df['cvGroup'] == cvGroupName]
+        r7usdSum = cvGroupDf['r7usd'].sum()
+        userCountSum = cvGroupDf['user_count'].sum()
+        print(' r7usdSum:',r7usdSum)
+        print(' userCountSum:',userCountSum)
+        print(' r7usd/userCount:',r7usdSum / userCountSum)
+
     for media in df['media'].unique():
-        print(f'\n{media}:')
+        # print(f'\n{media}:')
         mediaDf = df.loc[df['media'] == media].copy()
         r7usdSum = mediaDf['r7usd'].sum()
         r30usdSum = mediaDf['r30usd'].sum()
+        userCountSum = mediaDf['user_count'].sum()
+
         mediaDf['r7usd ratio'] = mediaDf['r7usd'] / r7usdSum
         mediaDf['r30usd ratio'] = mediaDf['r30usd'] / r30usdSum
 
@@ -1141,9 +1160,10 @@ def debug3():
         mediaDf['detla7 ratio'] = mediaDf['detla7'] / detla7Sum
         mediaDf['detla30 ratio'] = mediaDf['detla30'] / detla30Sum
 
-        mediaDf = mediaDf[['cvGroup','r7usd ratio','r30usd ratio','detla7 ratio','detla30 ratio']]
+        # mediaDf = mediaDf[['cvGroup','r7usd ratio','r30usd ratio','detla7 ratio','detla30 ratio']]
 
-        print(mediaDf)
+        # print(mediaDf)
+        # print('r7usdSum/ userCountSum = ',r7usdSum/ userCountSum)
         mediaDf.to_csv(getFilename(f'debug4_{media}'),index=False)
 
     
@@ -1246,6 +1266,6 @@ if __name__ == '__main__':
 
     # debug2Adv()
 
-    # debug3()
+    debug3()
 
-    debug5()
+    # debug5()
