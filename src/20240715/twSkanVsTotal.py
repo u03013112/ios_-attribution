@@ -1,10 +1,3 @@
-# 比对 skan 的整体走势与iOS大盘走势是否一致
-# 数据源来自3个地方：skanAf，merge，iOS
-# 按照自然日进行比对
-# 按照周做汇总后进行比对
-# 按月做汇总后进行比对
-
-import pandas as pd
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -49,21 +42,26 @@ def getData():
     df['installDate'] = df['installDate'].astype(str)
     df = df[df['installDate'] < '20240708']
 
+    # 计算revenue
+    df['iOS24hRevenue'] = df['cost'] * df['iOS24hROI'].str.replace('%', '').astype(float) / 100
+    df['skan24hRevenue'] = df['cost'] * df['skan24hROI'].str.replace('%', '').astype(float) / 100
+    df['iOS7dRevenue'] = df['cost'] * df['iOS7dROI'].str.replace('%', '').astype(float) / 100
+
     df.to_csv('/src/data/tw_20240716_skanVsTotal.csv', index=False)
 
 # 按天比对
 def check1():
     df = pd.read_csv('/src/data/tw_20240716_skanVsTotal.csv')
     
-    # iOSInstalls,mergeInstalls,skanInstalls 的相关性
+    # iOSInstalls,skanInstalls 的相关性
     installDf = df[['installDate','iOSInstalls','skanInstalls']].copy()
-    # mergeInstalls 和 skanInstalls 是类似77,094 的str，需要转换成int
+    # skanInstalls 是类似77,094 的str，需要转换成int
     installDf['skanInstalls'] = installDf['skanInstalls'].str.replace(',', '').astype(int)
 
     print(installDf[['iOSInstalls','skanInstalls']].corr())
     plot_and_save(installDf, ['iOSInstalls','skanInstalls'], 'skanVsTotal_install')
 
-    # iOS24hROI,merge24hROI,skan24hROI 的相关性
+    # iOS24hROI,skan24hROI 的相关性
     roi24hDf = df[['installDate','iOS24hROI','skan24hROI']].copy()
     roi24hDf['iOS24hROI'] = roi24hDf['iOS24hROI'].str.replace('%', '').astype(float)
     roi24hDf['skan24hROI'] = roi24hDf['skan24hROI'].str.replace('%', '').astype(float)
@@ -71,7 +69,7 @@ def check1():
     print(roi24hDf[['iOS24hROI','skan24hROI']].corr())
     plot_and_save(roi24hDf, ['iOS24hROI',  'skan24hROI'], 'skanVsTotal_roi24hDf')
 
-    # iOS24hROI,merge24hROI,skan24hROI,iOS7dROI,merge7dROI 的相关性
+    # iOS24hROI,skan24hROI,iOS7dROI 的相关性
     roi7dDf = df[['installDate','iOS24hROI','skan24hROI','iOS7dROI']].copy()
     roi7dDf['iOS24hROI'] = roi7dDf['iOS24hROI'].str.replace('%', '').astype(float)
     roi7dDf['skan24hROI'] = roi7dDf['skan24hROI'].str.replace('%', '').astype(float)
@@ -91,27 +89,33 @@ def check2():
     
     # 汇总数据
     weekly_df = df.groupby('week').agg({
+        'cost': 'sum',
         'iOSInstalls': 'sum',
         'skanInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
-        'iOS24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'skan24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'iOS7dROI': lambda x: x.str.replace('%', '').astype(float).sum()
+        'iOS24hRevenue': 'sum',
+        'skan24hRevenue': 'sum',
+        'iOS7dRevenue': 'sum'
     }).reset_index()
+    
+    # 计算ROI
+    weekly_df['iOS24hROI'] = (weekly_df['iOS24hRevenue'] / weekly_df['cost']) * 100
+    weekly_df['skan24hROI'] = (weekly_df['skan24hRevenue'] / weekly_df['cost']) * 100
+    weekly_df['iOS7dROI'] = (weekly_df['iOS7dRevenue'] / weekly_df['cost']) * 100
     
     # 将 week 列重命名为 installDate
     weekly_df.rename(columns={'week': 'installDate'}, inplace=True)
     
-    # iOSInstalls,mergeInstalls,skanInstalls 的相关性
+    # iOSInstalls,skanInstalls 的相关性
     installDf = weekly_df[['installDate','iOSInstalls','skanInstalls']].copy()
     print(installDf.corr())
     plot_and_save(installDf, ['iOSInstalls',  'skanInstalls'], 'skanVsTotal_install2')
 
-    # iOS24hROI,merge24hROI,skan24hROI 的相关性
+    # iOS24hROI,skan24hROI 的相关性
     roi24hDf = weekly_df[['installDate','iOS24hROI','skan24hROI']].copy()
     print(roi24hDf.corr())
     plot_and_save(roi24hDf, ['iOS24hROI',  'skan24hROI'], 'skanVsTotal_roi24hDf2')
 
-    # iOS24hROI,merge24hROI,skan24hROI,iOS7dROI,merge7dROI 的相关性
+    # iOS24hROI,skan24hROI,iOS7dROI 的相关性
     roi7dDf = weekly_df[['installDate','iOS24hROI','skan24hROI','iOS7dROI']].copy()
     print(roi7dDf.corr())
     plot_and_save(roi7dDf, ['iOS24hROI',  'skan24hROI', 'iOS7dROI'], 'skanVsTotal_roi7dDf2')
@@ -127,34 +131,40 @@ def check3():
     
     # 汇总数据
     monthly_df = df.groupby('month').agg({
+        'cost': 'sum',
         'iOSInstalls': 'sum',
         'skanInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
-        'iOS24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'skan24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'iOS7dROI': lambda x: x.str.replace('%', '').astype(float).sum()
+        'iOS24hRevenue': 'sum',
+        'skan24hRevenue': 'sum',
+        'iOS7dRevenue': 'sum'
     }).reset_index()
+    
+    # 计算ROI
+    monthly_df['iOS24hROI'] = (monthly_df['iOS24hRevenue'] / monthly_df['cost']) * 100
+    monthly_df['skan24hROI'] = (monthly_df['skan24hRevenue'] / monthly_df['cost']) * 100
+    monthly_df['iOS7dROI'] = (monthly_df['iOS7dRevenue'] / monthly_df['cost']) * 100
     
     # 将 month 列重命名为 installDate
     monthly_df.rename(columns={'month': 'installDate'}, inplace=True)
     
-    # iOSInstalls,mergeInstalls,skanInstalls 的相关性
+    # iOSInstalls,skanInstalls 的相关性
     installDf = monthly_df[['installDate','iOSInstalls','skanInstalls']].copy()
     print(installDf.corr())
     plot_and_save(installDf, ['iOSInstalls',  'skanInstalls'], 'skanVsTotal_install3')
 
-    # iOS24hROI,merge24hROI,skan24hROI 的相关性
+    # iOS24hROI,skan24hROI 的相关性
     roi24hDf = monthly_df[['installDate','iOS24hROI','skan24hROI']].copy()
     print(roi24hDf.corr())
     plot_and_save(roi24hDf, ['iOS24hROI',  'skan24hROI'], 'skanVsTotal_roi24hDf3')
 
-    # iOS24hROI,merge24hROI,skan24hROI,iOS7dROI,merge7dROI 的相关性
+    # iOS24hROI,skan24hROI,iOS7dROI 的相关性
     roi7dDf = monthly_df[['installDate','iOS24hROI','skan24hROI','iOS7dROI']].copy()
     print(roi7dDf.corr())
     plot_and_save(roi7dDf, ['iOS24hROI',  'skan24hROI', 'iOS7dROI'], 'skanVsTotal_roi7dDf3')
 
 
 if __name__ == '__main__':
-    # getData()
-    # check1()
-    # check2()
+    getData()
+    check1()
+    check2()
     check3()

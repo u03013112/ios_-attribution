@@ -5,7 +5,6 @@
 # 按月做汇总后进行比对
 
 import pandas as pd
-import pandas as pd
 import matplotlib.pyplot as plt
 
 def plot_and_save(df, columns, filename):
@@ -51,6 +50,13 @@ def getData():
     
     df['installDate'] = df['installDate'].astype(str)
     df = df[df['installDate'] < '20240708']
+
+    # 计算revenue
+    df['iOS24hRevenue'] = df['cost'] * df['iOS24hROI'].str.replace('%', '').astype(float) / 100
+    df['merge24hRevenue'] = df['cost'] * df['merge24hROI'].str.replace('%', '').astype(float) / 100
+    df['skan24hRevenue'] = df['cost'] * df['skan24hROI'].str.replace('%', '').astype(float) / 100
+    df['iOS7dRevenue'] = df['cost'] * df['iOS7dROI'].str.replace('%', '').astype(float) / 100
+    df['merge7dRevenue'] = df['cost'] * df['merge7dROI'].str.replace('%', '').astype(float) / 100
 
     df.to_csv('/src/data/20240715_skanVsTotal.csv', index=False)
 
@@ -98,15 +104,23 @@ def check2():
     
     # 汇总数据
     weekly_df = df.groupby('week').agg({
+        'cost': 'sum',
         'iOSInstalls': 'sum',
         'mergeInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
         'skanInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
-        'iOS24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'merge24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'skan24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'iOS7dROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'merge7dROI': lambda x: x.str.replace('%', '').astype(float).sum()
+        'iOS24hRevenue': 'sum',
+        'merge24hRevenue': 'sum',
+        'skan24hRevenue': 'sum',
+        'iOS7dRevenue': 'sum',
+        'merge7dRevenue': 'sum'
     }).reset_index()
+    
+    # 计算ROI
+    weekly_df['iOS24hROI'] = (weekly_df['iOS24hRevenue'] / weekly_df['cost']) * 100
+    weekly_df['merge24hROI'] = (weekly_df['merge24hRevenue'] / weekly_df['cost']) * 100
+    weekly_df['skan24hROI'] = (weekly_df['skan24hRevenue'] / weekly_df['cost']) * 100
+    weekly_df['iOS7dROI'] = (weekly_df['iOS7dRevenue'] / weekly_df['cost']) * 100
+    weekly_df['merge7dROI'] = (weekly_df['merge7dRevenue'] / weekly_df['cost']) * 100
     
     # 将 week 列重命名为 installDate
     weekly_df.rename(columns={'week': 'installDate'}, inplace=True)
@@ -116,10 +130,10 @@ def check2():
     print(installDf.corr())
     plot_and_save(installDf, ['iOSInstalls', 'mergeInstalls', 'skanInstalls'], 'skanVsTotal_install2')
 
-    # # iOS24hROI,merge24hROI,skan24hROI 的相关性
-    # roi24hDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI']].copy()
-    # print(roi24hDf.corr())
-    # plot_and_save(roi24hDf, ['iOS24hROI', 'merge24hROI', 'skan24hROI'], 'skanVsTotal_roi24hDf2')
+    # iOS24hROI,merge24hROI,skan24hROI 的相关性
+    roi24hDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI']].copy()
+    print(roi24hDf.corr())
+    plot_and_save(roi24hDf, ['iOS24hROI', 'merge24hROI', 'skan24hROI'], 'skanVsTotal_roi24hDf2')
 
     # iOS24hROI,merge24hROI,skan24hROI,iOS7dROI,merge7dROI 的相关性
     roi7dDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI','iOS7dROI','merge7dROI']].copy()
@@ -139,15 +153,23 @@ def check3():
     
     # 汇总数据
     monthly_df = df.groupby('month').agg({
+        'cost': 'sum',
         'iOSInstalls': 'sum',
         'mergeInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
         'skanInstalls': lambda x: x.str.replace(',', '').astype(int).sum(),
-        'iOS24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'merge24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'skan24hROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'iOS7dROI': lambda x: x.str.replace('%', '').astype(float).sum(),
-        'merge7dROI': lambda x: x.str.replace('%', '').astype(float).sum()
+        'iOS24hRevenue': 'sum',
+        'merge24hRevenue': 'sum',
+        'skan24hRevenue': 'sum',
+        'iOS7dRevenue': 'sum',
+        'merge7dRevenue': 'sum'
     }).reset_index()
+    
+    # 计算ROI
+    monthly_df['iOS24hROI'] = (monthly_df['iOS24hRevenue'] / monthly_df['cost']) * 100
+    monthly_df['merge24hROI'] = (monthly_df['merge24hRevenue'] / monthly_df['cost']) * 100
+    monthly_df['skan24hROI'] = (monthly_df['skan24hRevenue'] / monthly_df['cost']) * 100
+    monthly_df['iOS7dROI'] = (monthly_df['iOS7dRevenue'] / monthly_df['cost']) * 100
+    monthly_df['merge7dROI'] = (monthly_df['merge7dRevenue'] / monthly_df['cost']) * 100
     
     # 将 month 列重命名为 installDate
     monthly_df.rename(columns={'month': 'installDate'}, inplace=True)
