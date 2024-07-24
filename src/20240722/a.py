@@ -87,7 +87,7 @@ having
 
 # 对数1
 def check1():
-    installTimeStart = '20240601'
+    installTimeStart = '20240101'
     installTimeEnd = '20240630'
 
     videoDf = getVideoDataFromMC(installTimeStart,installTimeEnd)
@@ -142,16 +142,26 @@ def check1():
     df2 = df0.groupby(['mediasource','app_package']).sum().reset_index()
     df2['cost mape'] = np.abs(df2['cost_media'] - df2['cost_video']) / df2['cost_media']
     df2['r7usd mape'] = np.abs(df2['r7usd_media'] - df2['r7usd_video']) / df2['r7usd_media']
-    print('按媒体汇总')
-    print('cost mape:',df2)
+    # 改为.2f%格式
+    df2['cost mape'] = df2['cost mape'].apply(lambda x: '%.2f%%'%(x*100))
+    df2['r7usd mape'] = df2['r7usd mape'].apply(lambda x: '%.2f%%'%(x*100))
 
-    # 找到Google差异
-    googleDf = df0.loc[df0['mediasource'] == 'Google']
-    googleDf = googleDf.groupby(['install_day','app_package']).sum().reset_index()
-    googleDf = googleDf[['install_day','app_package','cost_media','cost_video']]
-    googleDf['cost mape'] = np.abs(googleDf['cost_media'] - googleDf['cost_video']) / googleDf['cost_media']
-    print('Google差异')
-    print(googleDf)
+    print('按媒体汇总')
+    print('cost mape:',df2[['mediasource','app_package','cost mape']])
+    print('r7usd mape:',df2[['mediasource','app_package','r7usd mape']])
+
+    # 按国家汇总
+    df3 = df0.loc[df0['mediasource'] != 'Google']
+    df3 = df3.groupby(['country','app_package']).sum().reset_index()
+    df3['cost mape'] = np.abs(df3['cost_media'] - df3['cost_video']) / df3['cost_media']
+    df3['r7usd mape'] = np.abs(df3['r7usd_media'] - df3['r7usd_video']) / df3['r7usd_media']
+    # 改为.2f%格式
+    df3['cost mape'] = df3['cost mape'].apply(lambda x: '%.2f%%'%(x*100))
+    df3['r7usd mape'] = df3['r7usd mape'].apply(lambda x: '%.2f%%'%(x*100))
+
+    print('按国家汇总')
+    print('cost mape:',df3[['country','app_package','cost mape']])
+    print('r7usd mape:',df3[['country','app_package','r7usd mape']])
     
 
 if __name__ == '__main__':
