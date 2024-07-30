@@ -34,8 +34,14 @@ def getData():
     mergeDf = getMergeData()
     # installs 取整后转为 str
     mergeDf['installs'] = mergeDf['installs'].astype(int).apply(lambda x: '{:,}'.format(x))
-    mergeDf = mergeDf[['installDate', 'installs','24hROI','7dROI']]
-    mergeDf.rename(columns={'installs':'mergeInstalls', '24hROI':'merge24hROI', '7dROI':'merge7dROI'}, inplace=True)
+    mergeDf = mergeDf[['installDate', 'installs','24hROI','7dROI','r1usd','r7usd']]
+    mergeDf.rename(columns={
+        'installs':'mergeInstalls', 
+        '24hROI':'merge24hROI', 
+        '7dROI':'merge7dROI',
+        'r1usd':'merge24hRevenue',
+        'r7usd':'merge7dRevenue'
+    }, inplace=True)
 
 
     iOSDf = pd.read_csv('Topwar_iOS_20240101_20240716.csv')
@@ -48,17 +54,18 @@ def getData():
         'installDate', 'cost',
         'iOSInstalls', 'mergeInstalls', 'skanInstalls',
         'iOS24hROI', 'merge24hROI', 'skan24hROI', 
-        'iOS7dROI', 'merge7dROI']]
+        'iOS7dROI', 'merge7dROI',
+        'merge24hRevenue', 'merge7dRevenue']]
     
     df['installDate'] = df['installDate'].astype(str)
     df = df[df['installDate'] < '20240708']
 
     # 计算revenue
     df['iOS24hRevenue'] = df['cost'] * df['iOS24hROI'].str.replace('%', '').astype(float) / 100
-    df['merge24hRevenue'] = df['cost'] * df['merge24hROI'].str.replace('%', '').astype(float) / 100
+    # df['merge24hRevenue'] = df['cost'] * df['merge24hROI'].str.replace('%', '').astype(float) / 100
     df['skan24hRevenue'] = df['cost'] * df['skan24hROI'].str.replace('%', '').astype(float) / 100
     df['iOS7dRevenue'] = df['cost'] * df['iOS7dROI'].str.replace('%', '').astype(float) / 100
-    df['merge7dRevenue'] = df['cost'] * df['merge7dROI'].str.replace('%', '').astype(float) / 100
+    # df['merge7dRevenue'] = df['cost'] * df['merge7dROI'].str.replace('%', '').astype(float) / 100
 
     df.to_csv('/src/data/tw_20240716_skanVsTotal.csv', index=False)
 
@@ -153,7 +160,7 @@ def getMergeData():
     df['7dROI'] = df['7dROI'].apply(lambda x: '%.2f%%'%(x*100))
 
     # print(df)
-    df = df[['installDate', 'installs','cost', '24hROI', '7dROI']]
+    # df = df[['installDate', 'installs','cost', '24hROI', '7dROI']]
 
     return df
 
@@ -162,12 +169,12 @@ def check1():
     df = pd.read_csv('/src/data/tw_20240716_skanVsTotal.csv')
     
     # iOSInstalls,mergeInstalls,skanInstalls 的相关性
-    installDf = df[['installDate','iOSInstalls','mergeInstalls','skanInstalls']].copy()
+    installDf = df[['installDate','cost','iOSInstalls','mergeInstalls','skanInstalls']].copy()
 
     installDf['mergeInstalls'] = installDf['mergeInstalls'].str.replace(',', '').astype(int)
     installDf['skanInstalls'] = installDf['skanInstalls'].str.replace(',', '').astype(int)
 
-    print(installDf[['iOSInstalls', 'mergeInstalls', 'skanInstalls']].corr())
+    print(installDf[['cost','iOSInstalls', 'mergeInstalls', 'skanInstalls']].corr())
     plot_and_save(installDf, ['iOSInstalls', 'mergeInstalls', 'skanInstalls'], 'skanVsTotal_install')
 
     # iOS24hROI,merge24hROI,skan24hROI 的相关性
@@ -223,14 +230,14 @@ def check2():
     weekly_df.rename(columns={'week': 'installDate'}, inplace=True)
     
     # iOSInstalls,mergeInstalls,skanInstalls 的相关性
-    installDf = weekly_df[['installDate','iOSInstalls','mergeInstalls','skanInstalls']].copy()
+    installDf = weekly_df[['installDate','cost','iOSInstalls','mergeInstalls','skanInstalls']].copy()
     print(installDf.corr())
     plot_and_save(installDf, ['iOSInstalls', 'mergeInstalls', 'skanInstalls'], 'skanVsTotal_install2')
 
-    # iOS24hROI,merge24hROI,skan24hROI 的相关性
-    roi24hDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI']].copy()
-    print(roi24hDf.corr())
-    plot_and_save(roi24hDf, ['iOS24hROI', 'merge24hROI', 'skan24hROI'], 'skanVsTotal_roi24hDf2')
+    # # iOS24hROI,merge24hROI,skan24hROI 的相关性
+    # roi24hDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI']].copy()
+    # print(roi24hDf.corr())
+    # plot_and_save(roi24hDf, ['iOS24hROI', 'merge24hROI', 'skan24hROI'], 'skanVsTotal_roi24hDf2')
 
     # iOS24hROI,merge24hROI,skan24hROI,iOS7dROI,merge7dROI 的相关性
     roi7dDf = weekly_df[['installDate','iOS24hROI','merge24hROI','skan24hROI','iOS7dROI','merge7dROI']].copy()
@@ -272,7 +279,7 @@ def check3():
     monthly_df.rename(columns={'month': 'installDate'}, inplace=True)
     
     # iOSInstalls,mergeInstalls,skanInstalls 的相关性
-    installDf = monthly_df[['installDate','iOSInstalls','mergeInstalls','skanInstalls']].copy()
+    installDf = monthly_df[['installDate','cost','iOSInstalls','mergeInstalls','skanInstalls']].copy()
     print(installDf.corr())
     plot_and_save(installDf, ['iOSInstalls', 'mergeInstalls', 'skanInstalls'], 'skanVsTotal_install3')
 
