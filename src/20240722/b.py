@@ -57,8 +57,8 @@ group by
 def diffMedia(installTimeStart = '20240601',installTimeEnd = '20240630',period='week', cost_threshold=0.1):
     dataDf = getVideoData1FromMC(installTimeStart=installTimeStart, installTimeEnd=installTimeEnd)
 
-    # 不要Google的数据
-    dataDf = dataDf[dataDf['mediasource'] != 'Google']
+    # # 不要Google的数据
+    # dataDf = dataDf[dataDf['mediasource'] != 'Google']
 
     # 将install_day转换为datetime类型
     dataDf['install_day'] = pd.to_datetime(dataDf['install_day'], format='%Y%m%d')
@@ -104,15 +104,15 @@ def diffMedia(installTimeStart = '20240601',installTimeEnd = '20240630',period='
 def diffCountry(installTimeStart = '20240601',installTimeEnd = '20240630',period='week', cost_threshold=0.1):
     dataDf = getVideoData1FromMC(installTimeStart=installTimeStart, installTimeEnd=installTimeEnd)
 
-    # 国家进行一下过滤，太多了，只对US,JP,KR,BR,DE,FR,MX,IN,GB,ID,TW,SA,TR,IT感兴趣，其他数据扔掉
-    dataDf = dataDf[dataDf['country'].isin([
-        'US', 'JP', 'KR', 'BR', 'DE', 
-        # 'FR', 'MX', 'IN', 'GB', 'ID', 
-        # 'TW', 'SA', 'TR', 'IT'
-    ])]
+    # # 国家进行一下过滤，太多了，只对US,JP,KR,BR,DE,FR,MX,IN,GB,ID,TW,SA,TR,IT感兴趣，其他数据扔掉
+    # dataDf = dataDf[dataDf['country'].isin([
+    #     'US', 'JP', 'KR', 'BR', 'DE', 
+    #     # 'FR', 'MX', 'IN', 'GB', 'ID', 
+    #     # 'TW', 'SA', 'TR', 'IT'
+    # ])]
 
-    # 不要Google的数据
-    dataDf = dataDf[dataDf['mediasource'] != 'Google']
+    # # 不要Google的数据
+    # dataDf = dataDf[dataDf['mediasource'] != 'Google']
 
     # 将install_day转换为datetime类型
     dataDf['install_day'] = pd.to_datetime(dataDf['install_day'], format='%Y%m%d')
@@ -127,7 +127,7 @@ def diffCountry(installTimeStart = '20240601',installTimeEnd = '20240630',period
     else:
         raise ValueError("Invalid period. Choose from 'day', 'week', or 'month'.")
 
-    grouped = dataDf.groupby(['period', 'country'])
+    grouped = dataDf.groupby(['period', 'country_levels'])
 
     result_list = []
 
@@ -157,12 +157,12 @@ def diffCountry(installTimeStart = '20240601',installTimeEnd = '20240630',period
 def diffCountryLanguage(installTimeStart = '20240601',installTimeEnd = '20240630',period='week', cost_threshold=0.1):
     dataDf = getVideoData1FromMC(installTimeStart=installTimeStart, installTimeEnd=installTimeEnd)
 
-    # 国家进行一下过滤，太多了，只对US,JP,KR,BR,DE,FR,MX,IN,GB,ID,TW,SA,TR,IT感兴趣，其他数据扔掉
-    dataDf = dataDf[dataDf['country'].isin([
-        'US', 'JP', 'KR', 'BR', 'DE', 
-        # 'FR', 'MX', 'IN', 'GB', 'ID', 
-        # 'TW', 'SA', 'TR', 'IT'
-    ])]
+    # # 国家进行一下过滤，太多了，只对US,JP,KR,BR,DE,FR,MX,IN,GB,ID,TW,SA,TR,IT感兴趣，其他数据扔掉
+    # dataDf = dataDf[dataDf['country'].isin([
+    #     'US', 'JP', 'KR', 'BR', 'DE', 
+    #     # 'FR', 'MX', 'IN', 'GB', 'ID', 
+    #     # 'TW', 'SA', 'TR', 'IT'
+    # ])]
 
     # 不要Google的数据
     dataDf = dataDf[dataDf['mediasource'] != 'Google']
@@ -180,7 +180,7 @@ def diffCountryLanguage(installTimeStart = '20240601',installTimeEnd = '20240630
     else:
         raise ValueError("Invalid period. Choose from 'day', 'week', or 'month'.")
 
-    grouped = dataDf.groupby(['period', 'country'])
+    grouped = dataDf.groupby(['period', 'country_levels'])
 
     result_list = []
 
@@ -414,6 +414,18 @@ if __name__ == "__main__":
     # print(diffMediaDf)
     # diffMediaDf.to_csv('/src/data/lw20240722DiffMedia.csv', index=False)
 
+    diffMediaDf = pd.read_csv('/src/data/lw20240722DiffMedia.csv')
+    diffMediaDf = diffMediaDf.groupby([
+        'period_start', 
+        # 'mediasource',
+        # 'app_package'
+        ]).agg({
+        'cost_ratio':'mean'
+    }).reset_index()
+    print(diffMediaDf)
+    # diffMediaDf.to_csv('/src/data/lw20240722DiffMedia2.csv', index=False)
+
+
     # diffCountryDf = diffCountry(installTimeStart='20240101', installTimeEnd='20240630', period='month', cost_threshold=0.1)
     # print(diffCountryDf)
     # diffCountryDf.to_csv('/src/data/lw20240722DiffCountry.csv', index=False)
@@ -423,4 +435,4 @@ if __name__ == "__main__":
     # diffCountryLanguageDf.to_csv('/src/data/lw20240722DiffCountryLanguage.csv', index=False)
 
 
-    popTime(installTimeStart='20240101', installTimeEnd='20240630', cost_threshold=0.2)
+    # popTime(installTimeStart='20240101', installTimeEnd='20240630', cost_threshold=0.2)
