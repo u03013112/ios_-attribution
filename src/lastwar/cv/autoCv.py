@@ -11,8 +11,8 @@ import datetime
 import pandas as pd
 
 def getPayDataFromMC():
-    todayStr = datetime.datetime.now().strftime('%Y%m%d')
-    oneMonthAgoStr = (datetime.datetime.now() - datetime.timedelta(days=60)).strftime('%Y%m%d')
+    todayStr = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y%m%d')
+    oneMonthAgoStr = (datetime.datetime.now() - datetime.timedelta(days=15)).strftime('%Y%m%d')
     print('获得%s~%s的付费数据'%(oneMonthAgoStr,todayStr))
 
     sql = f'''
@@ -21,7 +21,7 @@ def getPayDataFromMC():
             game_uid as uid,
             sum(
                 case
-                    when event_time - install_timestamp <= 24 * 3600 then revenue_value_usd
+                    when (event_time - install_timestamp) between 0 and 24 * 3600 then revenue_value_usd
                     else 0
                 end
             ) as revenue

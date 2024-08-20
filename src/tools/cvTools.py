@@ -194,8 +194,39 @@ def checkCv(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='insta
     return df['mape'].mean()
 
 
+# 按照AF的算法，不再计算每天的MAPE，而是直接计算 ARPPU 的 MAPE
+def checkCv2(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='install_date'):
+    # 如果userDf没有count列，就添加count列，值为1
+    if count not in userDf.columns:
+        userDf[count] = 1
+    payUserDf = userDf[userDf[usd] > 0]
+    payUserCount = payUserDf[count].sum()
+
+    # 进行汇总，如果输入的数据已经汇总过，那就再做一次，效率影响不大
+    userDf = userDf.groupby([install_date,usd]).agg({count:'sum'}).reset_index()
+
+    addCvDf = addCv(userDf,cvMapDf,usd,cv)
+    df = addCvDf.merge(cvMapDf,on=[cv],how='left')
+    df['sumUsd'] = df[usd] * df[count]
+    df['sumAvg'] = df['avg'] * df[count]
+
+    readARPPU = df['sumUsd'].sum()/payUserCount
+    cvARPPU = df['sumAvg'].sum()/payUserCount
+
+    mape = abs(readARPPU - cvARPPU) / readARPPU
+
+    print('readARPPU:',readARPPU)
+    print('cvARPPU:',cvARPPU)
+
+    print('mape2:',mape)
+
+
+
 def checkLevels(df,levels,usd='payUsd',cv='cv'):
     cvMapDf = makeCvMap(levels)
+    
+    checkCv2(df,cvMapDf,usd=usd,cv=cv)
+
     return checkCv(df,cvMapDf,usd=usd,cv=cv)
 
 def main1():

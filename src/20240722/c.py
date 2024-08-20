@@ -252,46 +252,43 @@ def getChiSquare(topVideoDf, videoParamsDf):
     df = pd.merge(topVideoDf, videoParamsDf, on='material_name', how='left')
     dimension_columns = topVideoDf.columns.difference(['material_name', 'is_top'])
     feature_columns = videoParamsDf.columns.difference(['material_name'])
-    print('feature_columns:', feature_columns)
-    
+
     chi_square_results = []
     grouped = df.groupby(list(dimension_columns))
 
     for name, group in grouped:
         for feature in feature_columns:
             contingency_table = pd.crosstab(group[feature], group['is_top'])
-            chi2, p, _, _ = chi2_contingency(contingency_table)
+            chi2, p, dof, _ = chi2_contingency(contingency_table)
+            standardized_chi2 = chi2 / dof if dof != 0 else 0  # 避免除以零的情况
             result = {
                 'dimension': name,
                 'feature': feature,
                 'chi2': chi2,
-                'p_value': p
+                'p_value': p,
+                'standardized_chi2': standardized_chi2
             }
             chi_square_results.append(result)
 
     chi_square_df = pd.DataFrame(chi_square_results)
     chi_square_df.to_csv('/src/data/zk2/lw_chi_square_results.csv', index=False)
 
-    top_3 = chi_square_df.nsmallest(3, 'p_value')
-    bottom_3 = chi_square_df.nlargest(3, 'p_value')
+    # 按照标准化 Chi2 从大到小排序
+    chi_square_df = chi_square_df.sort_values(by=['standardized_chi2'], ascending=False)
 
-    print("Top 3 chi-square features:")
-    for _, row in top_3.iterrows():
-        print(f"Dimension: {row['dimension']}, Feature: {row['feature']}, Chi2: {row['chi2']}, P-value: {row['p_value']}")
-
-    print("\nBottom 3 chi-square features:")
-    for _, row in bottom_3.iterrows():
-        print(f"Dimension: {row['dimension']}, Feature: {row['feature']}, Chi2: {row['chi2']}, P-value: {row['p_value']}")
-
-    print("\nDimension columns:")
-    for column in dimension_columns:
-        print(column)
+    print("Chi-square results sorted by standardized Chi2 value:")
+    for _, row in chi_square_df.iterrows():
+        # print(f"Dimension: {row['dimension']}, Feature: {row['feature']}, Chi2: {row['chi2']}, P-value: {row['p_value']}, Standardized Chi2: {row['standardized_chi2']}")
+        print(f"Dimension: {row['dimension']}, Feature: {row['feature']},P-value: {row['p_value']}, Standardized Chi2: {row['standardized_chi2']}")
 
 from sklearn.feature_selection import mutual_info_classif
 
-def getInformationGain(topVideoDf, videoParamsDf):
+def getInformationGain(topVideoDf, videoParamsDf,dimensionColumns = []):
     df = pd.merge(topVideoDf, videoParamsDf, on='material_name', how='left')
-    dimension_columns = topVideoDf.columns.difference(['material_name', 'is_top'])
+    if len(dimensionColumns) == 0:
+        dimension_columns = topVideoDf.columns.difference(['material_name', 'is_top'])
+    else:
+        dimension_columns = dimensionColumns
     feature_columns = videoParamsDf.columns.difference(['material_name'])
     information_gain_results = []
     grouped = df.groupby(list(dimension_columns))
@@ -311,32 +308,24 @@ def getInformationGain(topVideoDf, videoParamsDf):
     information_gain_df = pd.DataFrame(information_gain_results)
     information_gain_df.to_csv('/src/data/zk2/lw_information_gain_results.csv', index=False)
 
-    top_3 = information_gain_df.nlargest(3, 'information_gain')
-    bottom_3 = information_gain_df.nsmallest(3, 'information_gain')
-
-    print("Top 3 information gain features:")
-    for _, row in top_3.iterrows():
-        print(f"Dimension: {row['dimension']}, Feature: {row['feature']}, Information Gain: {row['information_gain']}")
-
-    print("\nBottom 3 information gain features:")
-    for _, row in bottom_3.iterrows():
-        print(f"Dimension: {row['dimension']}, Feature: {row['feature']}, Information Gain: {row['information_gain']}")
-
-    print("\nDimension columns:")
-    for column in dimension_columns:
-        print(column)
-
+    print('information results sorted by information gain:')
+    print(information_gain_df.sort_values(by='information_gain', ascending=False))
+    
 
 if __name__ == "__main__":
-    result_df = getTopVideoDataWithLabel(installTimeStart='20240601', installTimeEnd='20240630',dim='appPackage+mediasource', cost_threshold=0.05)
+    result_df = getTopVideoDataWithLabel(installTimeStart='20240601', installTimeEnd='20240630',dim='appPackage', cost_threshold=0.05)
     # print(result_df)
-    print(result_df[result_df['is_top'] == 1])
+    # result_df.to_csv('/src/data/zk2/lw_getTopVideoDataWithLabel_appPackage+mediasource_005.csv', index=False)
+    # print(result_df[result_df['is_top'] == 1])
 
     p1Df = getVideoParams01(installTimeStart='20240601',installTimeEnd='20240630')
     # print(p1Df)
-
-    # getCorrelation(result_df, p1Df)
-
+    # p1Df.to_csv('/src/data/zk2/lw_getVideoParams01_20240601_20240630.csv', index=False)
+    
     getChiSquare(result_df, p1Df)
 
-    getInformationGain(result_df, p1Df)
+    result_df_ios = result_df[result_df['app_package'] == '海外IOS']
+
+    getInformationGain(result_df_ios, p1Df,['level_tag_name'])
+
+    # getCorrelation(result_df, p1Df)
