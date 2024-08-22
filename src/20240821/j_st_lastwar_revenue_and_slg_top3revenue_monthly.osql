@@ -1,0 +1,63 @@
+-- 分国家获得SLG类型游戏的收入前三的收入总和（不包含lastwar）
+-- 以及lastwar的每个国家的收入总和
+-- 再计算每个国家的 前三名收入总和 - lastwar的收入总和
+
+-- 创建目标表，如果不存在
+CREATE TABLE IF NOT EXISTS j_st_lastwar_revenue_and_slg_top3revenue_monthly (
+  month STRING,
+  country STRING,
+  top3_revenue_sum DOUBLE,
+  lastwar_revenue_sum DOUBLE
+);
+
+-- 提取lastwar的收入数据
+@lastwarRevenueData :=
+  SELECT
+  month,
+  country,
+  SUM(revenue) AS lastwar_revenue_sum
+  FROM j_st_slg_revenuetop3_monthly
+  WHERE app_id = '64075e77537c41636a8e1c58'
+  GROUP BY month, country;
+
+-- 提取SLG类型游戏的收入数据（不包含lastwar）
+@slgRevenueData :=
+  SELECT
+  month,
+  country,
+  app_id,
+  revenue
+  FROM j_st_slg_revenuetop3_monthly
+  WHERE app_id <> '64075e77537c41636a8e1c58';
+
+-- 计算每个国家前3名的收入总和（重新排名）
+@slgRevenueRankData :=
+  SELECT
+  month,
+  country,
+  app_id,
+  revenue,
+  RANK() OVER (PARTITION BY month, country ORDER BY revenue DESC) AS rank
+  FROM @slgRevenueData;
+
+-- 计算每个国家前3名的收入总和
+@top3RevenueSumData :=
+  SELECT
+  month,
+  country,
+  SUM(revenue) AS top3_revenue_sum
+  FROM @slgRevenueRankData
+  WHERE rank <= 3
+  GROUP BY month, country;
+
+-- 插入结果到目标表
+INSERT OVERWRITE TABLE j_st_lastwar_revenue_and_slg_top3revenue_monthly
+SELECT
+top3RevenueSumData.month,
+top3RevenueSumData.country,
+top3RevenueSumData.top3_revenue_sum,
+COALESCE(lastwarRevenueData.lastwar_revenue_sum, 0) AS lastwar_revenue_sum
+FROM @top3RevenueSumData AS top3RevenueSumData
+LEFT JOIN @lastwarRevenueData AS lastwarRevenueData
+ON top3RevenueSumData.country = lastwarRevenueData.country
+AND top3RevenueSumData.month = lastwarRevenueData.month;

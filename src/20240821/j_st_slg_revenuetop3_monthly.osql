@@ -1,0 +1,65 @@
+--name:j_st_slg_top3revenue_monthly
+--author:u03013112
+--create time:2024-08-21 15:56
+
+--drop table j_st_slg_revenuetop3_monthly;
+-- 创建目标表，如果不存在
+CREATE TABLE IF NOT EXISTS j_st_slg_revenuetop3_monthly (
+  month STRING,
+  country STRING,
+  app_id STRING,
+  rank bigint,
+  revenue DOUBLE
+);
+
+-- 提取应用收入数据
+@appRevenueData :=
+  SELECT
+  month,
+  country,
+  get_json_object(json, "$.app_id") AS app_id,
+  CAST(get_json_object(json, "$.revenue_absolute") AS DOUBLE) / 100 AS usd
+  FROM rg_bi.ods_platform_sensortower_monthtoopapps
+  WHERE month > '202404';
+
+-- 获取SLG类型游戏的应用ID列表
+@slgAppIdList :=
+  SELECT
+  unified_app_id AS app_id
+  FROM dwd_sensortower_topapps
+  WHERE gamesubgenre = '4X Strategy'
+  AND day = '20240801'
+  GROUP BY unified_app_id;
+
+-- 过滤出SLG类型的游戏收入数据
+@slgRevenueData :=
+  SELECT
+  appRevenueData.month,
+  appRevenueData.country,
+  appRevenueData.app_id,
+  appRevenueData.usd
+  FROM @appRevenueData AS appRevenueData
+  LEFT JOIN @slgAppIdList AS slgAppIdList
+  ON appRevenueData.app_id = slgAppIdList.app_id
+  WHERE slgAppIdList.app_id IS NOT NULL;
+
+-- 计算SLG类型游戏的收入排名
+@slgRevenueRankData :=
+  SELECT
+  month,
+  country,
+  app_id,
+  usd,
+  RANK() OVER (PARTITION BY month, country ORDER BY usd DESC) AS rank
+  FROM @slgRevenueData;
+
+-- 将每个国家收入前10的SLG应用ID保存到目标表格
+INSERT OVERWRITE TABLE j_st_slg_revenuetop3_monthly
+SELECT
+month,
+country,
+app_id,
+rank,
+usd AS revenue
+FROM @slgRevenueRankData
+WHERE rank <= 10;
