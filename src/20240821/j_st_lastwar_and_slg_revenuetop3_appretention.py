@@ -281,6 +281,20 @@ def getSlgTop3AppRetention(month = '202406'):
 
     return retDf
 
+# 计算上个月的月份
+def get_previous_month(day):
+    # 将 day 转换为 datetime 对象
+    current_date = datetime.strptime(day, '%Y%m%d')
+    
+    # 减去一个月
+    first_of_current_month = current_date.replace(day=1)
+    last_of_previous_month = first_of_current_month - timedelta(days=1)
+    
+    # 格式化为 YYYYMM
+    previous_month = last_of_previous_month.strftime('%Y%m')
+    
+    return previous_month
+
 def init():
     global execSql
     global month
@@ -308,7 +322,7 @@ def init():
         execSql = execSql_online
 
         # 线上版本是有args这个全局变量的，无需再判断
-        month = args['month']
+        day = args['day']
     else:
         print('this is local version')
         import sys
@@ -317,7 +331,11 @@ def init():
 
         execSql = execSql_local
 
-        month = '202406'
+        day = '20240701'
+    
+    # 月份是day的上个月，即如果day是20240801，则month是202407
+    month = get_previous_month(day)
+    print('month:',month)
 
 from odps.models import Schema, Column, Partition
 def createTable():
