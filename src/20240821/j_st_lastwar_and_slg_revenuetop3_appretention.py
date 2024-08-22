@@ -9,8 +9,9 @@ import calendar
 # month: 获取畅销榜的月份
 # day：appid 映射表的日期，一般的采用month的最后一天
 def getSlgTop3AppIdList(month = '202406'):
+    global isOnlineVersion
     filename = f'/src/data/slgTop3AppIdList_{month}.csv'
-    if os.path.exists(filename):
+    if isOnlineVersion == False and os.path.exists(filename):
         print('已存在%s'%filename)
         return pd.read_csv(filename)
     else:
@@ -133,7 +134,8 @@ FROM
         '''
         print(sql)
         df = execSql(sql)
-        df.to_csv(filename,index=False)
+        if isOnlineVersion == False:
+            df.to_csv(filename,index=False)
     return df
 
 def get_month_start_end_dates(month):
@@ -182,7 +184,7 @@ def getSensortowerToken():
 # 获得留存数据
 def getRetention(app_ids=[],platform='ios',date_granularity='all_time',start_date='2021-01-01',end_date='2021-04-01',country=''):
     filename = f'/src/data/stRetention20240821_{platform}_{start_date}_{end_date}_{country}.csv'
-    if os.path.exists(filename):
+    if isOnlineVersion == False and os.path.exists(filename):
         print('已存在%s'%filename)
         return pd.read_csv(filename)
     else:
@@ -223,7 +225,8 @@ def getRetention(app_ids=[],platform='ios',date_granularity='all_time',start_dat
             })
 
         df = pd.DataFrame(retentions)
-        df.to_csv(filename,index=False)
+        if isOnlineVersion == False:
+            df.to_csv(filename,index=False)
 
     return df
 
@@ -284,13 +287,11 @@ def getSlgTop3AppRetention(month = '202406'):
 def init():
     global execSql
     global month
-
-    tmpDir = '/src/data/'
-    if not os.path.exists(tmpDir):
-        os.makedirs(tmpDir)
+    global isOnlineVersion
 
     if 'o' in globals():
         print('this is online version')
+        isOnlineVersion = True
 
         from odps import options
         # UTC+0
@@ -311,6 +312,8 @@ def init():
         month = args['month']
     else:
         print('this is local version')
+        isOnlineVersion = False
+
         import sys
         sys.path.append('/src')
         from src.maxCompute import execSql as execSql_local
@@ -321,7 +324,8 @@ def init():
 
 from odps.models import Schema, Column, Partition
 def createTable():
-    if 'o' in globals():
+    global isOnlineVersion
+    if isOnlineVersion:
         columns = [
             Column(name='country', type='string', comment=''),
             Column(name='platform', type='string', comment=''),
@@ -347,10 +351,11 @@ def createTable():
 def writeTable(df,month):
     print('try to write table:')
     print(df.head(5))
-    if 'o' in globals():
+    global isOnlineVersion
+    if isOnlineVersion:
         t = o.get_table('j_st_lastwar_and_slg_revenuetop3_appretention')
         t.delete_partition('month=%s'%(month), if_exists=True)
-        with t.open_writer(partition='day=%s'%(month), create_partition=True, arrow=True) as writer:
+        with t.open_writer(partition='month=%s'%(month), create_partition=True, arrow=True) as writer:
             writer.write(df)
     else:
         print('writeTable failed, o is not defined')
