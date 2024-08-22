@@ -1,6 +1,5 @@
 --name:j_st_slg_top3revenue_monthly
---author:u03013112
---create time:2024-08-21 15:56
+-- 分国家获得SLG类型游戏的收入前10的应用 的 排名 和 收入
 
 --drop table j_st_slg_revenuetop3_monthly;
 -- 创建目标表，如果不存在

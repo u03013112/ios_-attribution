@@ -5,21 +5,17 @@ import pandas as pd
 from datetime import datetime, timedelta
 import calendar
 
-import sys
-sys.path.append('/src')
-from src.maxCompute import execSql
-from src.config import sensortowerToken
-
 # 获得slg收费前3名游戏的app_id
 # month: 获取畅销榜的月份
 # day：appid 映射表的日期，一般的采用month的最后一天
 def getSlgTop3AppIdList(month = '202406'):
-    filename = f'/src/data/zk2/slgTop3AppIdList_{month}.csv'
+    filename = f'/src/data/slgTop3AppIdList_{month}.csv'
     if os.path.exists(filename):
         print('已存在%s'%filename)
         return pd.read_csv(filename)
     else:
         _,day = get_month_start_end_dates(month)
+        day = day.replace('-','')
         sql = f'''
 -- 提取lastwar的app_id
 @lastwarAppIds :=
@@ -135,6 +131,7 @@ SELECT
 FROM
 	@top3AppIdsWithUnified;
         '''
+        print(sql)
         df = execSql(sql)
         df.to_csv(filename,index=False)
     return df
@@ -165,6 +162,23 @@ def is_number(value):
         # 其他类型返回 False
         return False
 
+sensortowerToken = ''
+
+def getSensortowerToken():
+    global sensortowerToken
+    if sensortowerToken != '':
+        return sensortowerToken
+    
+    sql = '''
+        select k,v from j_st_config;
+    '''
+    df = execSql(sql)
+    token = df[df['k'] == 'token']['v'].values[0]
+    token = 'ST0_' + token
+    sensortowerToken = token
+
+    return token
+
 # 获得留存数据
 def getRetention(app_ids=[],platform='ios',date_granularity='all_time',start_date='2021-01-01',end_date='2021-04-01',country=''):
     filename = f'/src/data/stRetention20240821_{platform}_{start_date}_{end_date}_{country}.csv'
@@ -173,7 +187,7 @@ def getRetention(app_ids=[],platform='ios',date_granularity='all_time',start_dat
         return pd.read_csv(filename)
     else:
         # https://api.sensortower.com/v1/ios/usage/retention?app_ids=5cc98b703ea98357b8ed3ce0&date_granularity=quarterly&start_date=2021-01-01&end_date=2021-04-01&country=US&auth_token=YOUR_AUTHENTICATION_TOKEN
-        url = 'https://api.sensortower.com/v1/{}/usage/retention?app_ids={}&date_granularity={}&start_date={}&end_date={}&auth_token={}'.format(platform,','.join(app_ids),date_granularity,start_date,end_date,sensortowerToken)
+        url = 'https://api.sensortower.com/v1/{}/usage/retention?app_ids={}&date_granularity={}&start_date={}&end_date={}&auth_token={}'.format(platform,','.join(app_ids),date_granularity,start_date,end_date,getSensortowerToken())
         print(url)
 
         if country != '':
@@ -265,5 +279,90 @@ def getSlgTop3AppRetention(month = '202406'):
     retDf = pd.merge(slgTop3Df,lastwarDf,on=['month','country','platform'],how='left',suffixes=('_slg_top3_mean','_lw'))
     print(retDf)
 
+    return retDf
+
+def init():
+    global execSql
+    global month
+
+    tmpDir = '/src/data/'
+    if not os.path.exists(tmpDir):
+        os.makedirs(tmpDir)
+
+    if 'o' in globals():
+        print('this is online version')
+
+        from odps import options
+        # UTC+0
+        options.sql.settings = {
+            'odps.sql.timezone':'Africa/Accra',
+            "odps.sql.submit.mode" : "script"
+        }
+
+        def execSql_online(sql):
+            with o.execute_sql(sql).open_reader(tunnel=True, limit=False) as reader:
+                pd_df = reader.to_pandas()
+                print('获得%d行数据' % len(pd_df))
+                return pd_df
+
+        execSql = execSql_online
+
+        # 线上版本是有args这个全局变量的，无需再判断
+        month = args['month']
+    else:
+        print('this is local version')
+        import sys
+        sys.path.append('/src')
+        from src.maxCompute import execSql as execSql_local
+
+        execSql = execSql_local
+
+        month = '202406'
+
+from odps.models import Schema, Column, Partition
+def createTable():
+    if 'o' in globals():
+        columns = [
+            Column(name='country', type='string', comment=''),
+            Column(name='platform', type='string', comment=''),
+            Column(name='retention0_slg_top3_mean', type='double', comment=''),
+            Column(name='retention1_slg_top3_mean', type='double', comment=''),
+            Column(name='retention6_slg_top3_mean', type='double', comment=''),
+            Column(name='retention29_slg_top3_mean', type='double', comment=''),
+            Column(name='retention0_lw', type='double', comment=''),
+            Column(name='retention1_lw', type='double', comment=''),
+            Column(name='retention6_lw', type='double', comment=''),
+            Column(name='retention29_lw', type='double', comment='')
+        ]
+        
+        partitions = [
+            Partition(name='month', type='string', comment='like 202406')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table = o.create_table('j_st_lastwar_and_slg_revenuetop3_appretention', schema, if_not_exists=True)
+        return table
+    else:
+        print('createTable failed, o is not defined')
+
+def writeTable(df,month):
+    print('try to write table:')
+    print(df.head(5))
+    if 'o' in globals():
+        t = o.get_table('j_st_lastwar_and_slg_revenuetop3_appretention')
+        t.delete_partition('month=%s'%(month), if_exists=True)
+        with t.open_writer(partition='day=%s'%(month), create_partition=True, arrow=True) as writer:
+            writer.write(df)
+    else:
+        print('writeTable failed, o is not defined')
+        print('try to write csv file')
+        df.to_csv('/src/data/j_st_lastwar_and_slg_revenuetop3_appretention_%s.csv'%(month),index=False)
+    
+
 if __name__ == '__main__':
-    getSlgTop3AppRetention(month = '202406')
+    init()
+    createTable()
+
+    global month
+
+    df = getSlgTop3AppRetention(month)
+    writeTable(df,month)
