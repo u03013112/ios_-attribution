@@ -1,0 +1,55 @@
+-- 计算最近6个月每个国家的SLG广告收入Top3的SOV和上月战争游戏的SOV的相关系数
+
+-- 创建一个表来存储最终结果
+CREATE TABLE IF NOT EXISTS j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly_corr (
+    country STRING,
+    month STRING,
+    correlation_coefficient DOUBLE
+);
+
+-- 第一步：获取原始数据
+@raw_data :=
+SELECT
+    month,
+    country,
+    slg_top3_sov_sum,
+    lastwar_sov_sum
+FROM
+    j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly
+WHERE
+    month > 0;
+
+-- 第二步：创建一个表来存储每个国家每个月的相关系数
+@correlation_data :=
+SELECT
+    country,
+    month,
+    IF(
+        COUNT(*) OVER (
+            PARTITION BY country
+            ORDER BY
+                month ROWS BETWEEN 5 PRECEDING
+                AND CURRENT ROW
+        ) = 6,
+        CORR(slg_top3_sov_sum, lastwar_sov_sum) OVER (
+            PARTITION BY country
+            ORDER BY
+                month ROWS BETWEEN 5 PRECEDING
+                AND CURRENT ROW
+        ),
+        NULL
+    ) AS correlation_coefficient
+FROM
+    @raw_data;
+
+-- 第三步：插入最终结果表
+INSERT
+    OVERWRITE TABLE j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly_corr
+SELECT
+    country,
+    month,
+    correlation_coefficient
+FROM
+    @correlation_data
+WHERE
+    correlation_coefficient IS NOT NULL;

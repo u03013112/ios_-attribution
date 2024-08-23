@@ -1,0 +1,63 @@
+-- 维度是分国家+分媒体
+-- 即还是取最近6个月做相关系数，最终输出列：
+-- Month,country,network,correlation_coefficient
+
+-- 创建一个表来存储最终结果
+CREATE TABLE IF NOT EXISTS j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly_corr2 (
+    month STRING,
+    country STRING,
+    network STRING,
+    correlation_coefficient DOUBLE
+);
+
+-- 第一步：获取原始数据
+@raw_data :=
+SELECT
+    month,
+    country,
+    network,
+    slg_top3_sov_sum,
+    lastwar_sov
+FROM
+    j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly2
+WHERE
+    month > 0;
+
+-- 第二步：计算每个国家和媒体的相关系数
+@correlation_data :=
+SELECT
+    country,
+    network,
+    month,
+    IF(
+        COUNT(*) OVER (
+            PARTITION BY country,
+            network
+            ORDER BY
+                month ROWS BETWEEN 5 PRECEDING
+                AND CURRENT ROW
+        ) = 6,
+        CORR(slg_top3_sov_sum, lastwar_sov) OVER (
+            PARTITION BY country,
+            network
+            ORDER BY
+                month ROWS BETWEEN 5 PRECEDING
+                AND CURRENT ROW
+        ),
+        NULL
+    ) AS correlation_coefficient
+FROM
+    @raw_data;
+
+-- 第三步：插入最终结果表
+INSERT
+    OVERWRITE TABLE j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly_corr2
+SELECT
+    month,
+    country,
+    network,
+    correlation_coefficient
+FROM
+    @correlation_data
+WHERE
+    correlation_coefficient IS NOT NULL;

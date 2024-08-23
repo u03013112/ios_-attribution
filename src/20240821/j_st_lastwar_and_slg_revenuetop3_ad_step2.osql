@@ -1,0 +1,62 @@
+-- 获得slg收费前3名游戏的广告展示占比与lastwar的广告展示占比
+-- 不按照权重进行汇总，保持原始数据，但是按照国家+媒体进行汇总
+
+CREATE table if not exists j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly2 (
+    month string,
+    country string,
+    network string,
+    lastwar_sov double,
+    slg_top3_sov_sum double
+);
+
+@raw_data :=
+SELECT
+    month,
+    app_id,
+    country,
+    network,
+    sov
+from
+    j_st_slg_revenuetop3_ad_sov_monthly
+where
+    month > 0;
+
+@lastwar_data :=
+select
+    month,
+    app_id,
+    country,
+    network,
+    sov as lastwar_sov
+from
+    @raw_data
+where
+    app_id == '64075e77537c41636a8e1c58';
+
+@others_data :=
+select
+    month,
+    country,
+    network,
+    sum(sov) as slg_top3_sov_sum
+from
+    @raw_data
+where
+    app_id <> '64075e77537c41636a8e1c58'
+group by
+    month,
+    country,
+    network;
+
+insert overwrite table j_st_lastwar_and_slg_revenuetop3_ad_sov_monthly2
+select
+    lastwar_data.month,
+    lastwar_data.country,
+    lastwar_data.network,
+    lastwar_data.lastwar_sov,
+    others_data.slg_top3_sov_sum
+from
+    @lastwar_data as lastwar_data
+    join @others_data as others_data on lastwar_data.month = others_data.month
+    and lastwar_data.country = others_data.country
+    and lastwar_data.network = others_data.network;

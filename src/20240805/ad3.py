@@ -356,8 +356,8 @@ def main2_fix():
 if __name__ == '__main__':
     # main1()
     # main2()
-    # main1_fix()
-    # main1_fix2()
+    main1_fix()
+    main1_fix2()
     main2_fix()
 
 
