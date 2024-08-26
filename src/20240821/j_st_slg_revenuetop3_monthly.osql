@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS j_st_slg_revenuetop3_monthly (
   get_json_object(json, "$.app_id") AS app_id,
   CAST(get_json_object(json, "$.revenue_absolute") AS DOUBLE) / 100 AS usd
   FROM rg_bi.ods_platform_sensortower_monthtoopapps
-  WHERE month > '202404';
+  WHERE month >= '202401';
 
 -- 获取SLG类型游戏的应用ID列表
 @slgAppIdList :=

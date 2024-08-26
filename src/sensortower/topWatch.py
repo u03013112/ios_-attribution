@@ -50,7 +50,7 @@ def topWatch(isDebug=False,gpt=False):
         if platform == 'ios':
             chartTypeIdsList = [
                 'topfreeapplications',
-                'toppaidapplications',
+                # 'toppaidapplications',
                 'topgrossingapplications'
             ]
             # https://app.sensortower.com/api/docs/static/category_ids.json
@@ -59,7 +59,7 @@ def topWatch(isDebug=False,gpt=False):
         else:
             chartTypeIdsList = [
                 'topselling_free',
-                'topselling_paid',
+                # 'topselling_paid',
                 'topgrossing'
             ]
             # "game_strategy": "Strategy"
@@ -67,7 +67,7 @@ def topWatch(isDebug=False,gpt=False):
 
         chartTypeNamesList = [
             '免费榜',
-            '付费榜',
+            # '付费榜',
             '畅销榜'
         ]
         

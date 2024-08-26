@@ -1,0 +1,77 @@
+-- 分国家获得SLG类型游戏的收入前三的收入总和（不包含lastwar）
+-- 以及lastwar的每个国家的收入总和
+-- 再计算每个国家的 前三名收入总和 - lastwar的收入总和
+-- 分平台版本（ios、android）
+
+--name:j_st_lastwar_revenue_and_slg_top3revenue_monthly_platform
+-- 分国家获得SLG类型游戏的收入前三的收入总和（不包含lastwar）
+-- 以及lastwar的每个国家的收入总和
+-- 再计算每个国家的 前三名收入总和 - lastwar的收入总和
+-- 分平台版本（ios、android）
+
+-- 创建目标表，如果不存在
+CREATE TABLE IF NOT EXISTS j_st_lastwar_revenue_and_slg_top3revenue_monthly_platform (
+  month STRING,
+  country STRING,
+  platform STRING,
+  top3_revenue_sum DOUBLE,
+  lastwar_revenue_sum DOUBLE
+);
+
+-- 提取lastwar的收入数据
+@lastwarRevenueData :=
+  SELECT
+  month,
+  country,
+  platform,
+  SUM(revenue) AS lastwar_revenue_sum
+  FROM j_st_slg_revenuetop3_monthly_platform
+  WHERE (app_id = '6448786147' AND platform = 'ios') OR (app_id = 'com.fun.lastwar.gp' AND platform = 'android')
+  GROUP BY month, country, platform;
+
+-- 提取SLG类型游戏的收入数据（不包含lastwar）
+@slgRevenueData :=
+  SELECT
+  month,
+  country,
+  platform,
+  app_id,
+  revenue
+  FROM j_st_slg_revenuetop3_monthly_platform
+  WHERE (app_id <> '6448786147' AND platform = 'ios') OR (app_id <> 'com.fun.lastwar.gp' AND platform = 'android');
+
+-- 计算每个国家前3名的收入总和（重新排名）
+@slgRevenueRankData :=
+  SELECT
+  month,
+  country,
+  platform,
+  app_id,
+  revenue,
+  RANK() OVER (PARTITION BY month, country, platform ORDER BY revenue DESC) AS rank
+  FROM @slgRevenueData;
+
+-- 计算每个国家前3名的收入总和
+@top3RevenueSumData :=
+  SELECT
+  month,
+  country,
+  platform,
+  SUM(revenue) AS top3_revenue_sum
+  FROM @slgRevenueRankData
+  WHERE rank <= 3
+  GROUP BY month, country, platform;
+
+-- 插入结果到目标表
+INSERT OVERWRITE TABLE j_st_lastwar_revenue_and_slg_top3revenue_monthly_platform
+SELECT
+top3RevenueSumData.month,
+top3RevenueSumData.country,
+top3RevenueSumData.platform,
+top3RevenueSumData.top3_revenue_sum,
+COALESCE(lastwarRevenueData.lastwar_revenue_sum, 0) AS lastwar_revenue_sum
+FROM @top3RevenueSumData AS top3RevenueSumData
+LEFT JOIN @lastwarRevenueData AS lastwarRevenueData
+ON top3RevenueSumData.country = lastwarRevenueData.country
+AND top3RevenueSumData.month = lastwarRevenueData.month
+AND top3RevenueSumData.platform = lastwarRevenueData.platform;
