@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS j_st_slg_revenuetop3_monthly_platform (
   country,
   get_json_object(json, "$.app_id") AS app_id,
   CAST(get_json_object(json, "$.revenue_absolute") AS DOUBLE) / 100 AS usd,
-  get_json_object(json, "$.entities[0].app_id") as app_id_ios,
-  CAST(get_json_object(json, "$.entities[0].revenue_absolute") AS DOUBLE) / 100 AS revenue_absolute_ios,
-  get_json_object(json, "$.entities[1].app_id") as app_id_android,
-  CAST(get_json_object(json, "$.entities[1].revenue_absolute") AS DOUBLE) / 100 AS revenue_absolute_android
+  get_json_object(json, "$.entities[0].app_id") as app_id_0,
+  CAST(get_json_object(json, "$.entities[0].revenue_absolute") AS DOUBLE) / 100 AS revenue_absolute_0,
+  get_json_object(json, "$.entities[1].app_id") as app_id_1,
+  CAST(get_json_object(json, "$.entities[1].revenue_absolute") AS DOUBLE) / 100 AS revenue_absolute_1
   FROM rg_bi.ods_platform_sensortower_monthtoopapps
   WHERE month >= '202401'
 ;
@@ -36,28 +36,43 @@ CREATE TABLE IF NOT EXISTS j_st_slg_revenuetop3_monthly_platform (
   AND day = '20240801'
   GROUP BY unified_app_id;
 
+-- 判断平台并提取收入数据
+@platformRevenueData :=
+  SELECT
+  month,
+  country,
+  app_id,
+  app_id_0 AS app_id_platform,
+  CASE
+  WHEN app_id_0 RLIKE '^[0-9]+$' THEN 'ios'
+  ELSE 'android'
+  END AS platform,
+  revenue_absolute_0 AS revenue
+  FROM @appRevenueData
+  UNION ALL
+  SELECT
+  month,
+  country,
+  app_id,
+  app_id_1 AS app_id_platform,
+  CASE
+  WHEN app_id_1 RLIKE '^[0-9]+$' THEN 'ios'
+  ELSE 'android'
+  END AS platform,
+  revenue_absolute_1 AS revenue
+  FROM @appRevenueData;
+
 -- 过滤出SLG类型的游戏收入数据
 @slgRevenueData :=
   SELECT
-  appRevenueData.month,
-  appRevenueData.country,
-  appRevenueData.app_id_ios AS app_id,
-  'ios' AS platform,
-  appRevenueData.revenue_absolute_ios AS revenue
-  FROM @appRevenueData AS appRevenueData
+  platformRevenueData.month,
+  platformRevenueData.country,
+  platformRevenueData.app_id_platform AS app_id,
+  platformRevenueData.platform,
+  platformRevenueData.revenue
+  FROM @platformRevenueData AS platformRevenueData
   LEFT JOIN @slgAppIdList AS slgAppIdList
-  ON appRevenueData.app_id = slgAppIdList.app_id
-  WHERE slgAppIdList.app_id IS NOT NULL
-  UNION ALL
-  SELECT
-  appRevenueData.month,
-  appRevenueData.country,
-  appRevenueData.app_id_android AS app_id,
-  'android' AS platform,
-  appRevenueData.revenue_absolute_android AS revenue
-  FROM @appRevenueData AS appRevenueData
-  LEFT JOIN @slgAppIdList AS slgAppIdList
-  ON appRevenueData.app_id = slgAppIdList.app_id
+  ON platformRevenueData.app_id = slgAppIdList.app_id
   WHERE slgAppIdList.app_id IS NOT NULL;
 
 -- 计算SLG类型游戏的收入排名
@@ -74,11 +89,11 @@ CREATE TABLE IF NOT EXISTS j_st_slg_revenuetop3_monthly_platform (
 -- 将每个国家收入前10的SLG应用ID保存到目标表格
 INSERT OVERWRITE TABLE j_st_slg_revenuetop3_monthly_platform
 SELECT
-  platform,
-  month,
-  country,
-  app_id,
-  rank,
-  revenue
+platform,
+month,
+country,
+app_id,
+rank,
+revenue
 FROM @slgRevenueRankData
 WHERE rank <= 10;
