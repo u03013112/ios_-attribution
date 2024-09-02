@@ -644,6 +644,8 @@ def debug_more2():
         print(correlation_matrix['applovin_int_ROI'])
 
 # debug_more2 不分国家 版本
+import pandas as pd
+
 def debug_more2_all():
     df = pd.read_csv('/src/data/20240826_weekly_df.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
@@ -675,22 +677,16 @@ def debug_more2_all():
         # 计算 ROI
         summary['ROI'] = summary['revenue'] / summary['cost']
         
-        # 计算每个 install_day 中 applovin 的花费占比
+        # 计算每个 install_day 中每个媒体的花费占比
         total_cost_per_day = summary.groupby('install_day')['cost'].sum().reset_index()
         total_cost_per_day.rename(columns={'cost': 'total_cost'}, inplace=True)
         summary = summary.merge(total_cost_per_day, on='install_day')
-        summary['applovin_cost_ratio'] = summary.apply(
-            lambda row: row['cost'] / row['total_cost'] if row['mediasource'] == 'applovin_int' else 0, axis=1
-        )
-
+        summary['cost_ratio'] = summary['cost'] / summary['total_cost']
+        
         # 重塑数据框架
-        pivot = summary.pivot(index='install_day', columns='mediasource', values=['cost', 'revenue', 'ROI']).reset_index()
+        pivot = summary.pivot(index='install_day', columns='mediasource', values=['cost', 'revenue', 'ROI', 'cost_ratio']).reset_index()
         pivot.columns = ['install_day'] + [f'{col[1]}_{col[0]}' for col in pivot.columns[1:]]
         
-        # 添加 applovin_cost_ratio 列
-        applovin_cost_ratio = summary[summary['mediasource'] == 'applovin_int'][['install_day', 'applovin_cost_ratio']]
-        pivot = pivot.merge(applovin_cost_ratio, on='install_day', how='left')
-
         # 添加国家列
         pivot['country'] = country
         results.append(pivot)
@@ -704,11 +700,14 @@ def debug_more2_all():
         correlation_matrix = country_df.corr()
         
         # 打印国家及其相关系数矩阵
-        print('\n', country)
-        print('>>applovin_cost_ratio corr:')
-        print(correlation_matrix['applovin_cost_ratio'])
-        print('>>applovin_int_ROI corr:')
-        print(correlation_matrix['applovin_int_ROI'])
+        # print('\n', country)
+        # print('>>Cost Ratios Correlation:')
+        # print(correlation_matrix.filter(like='cost_ratio'))
+        print('>>ROI Correlation:')
+        print(correlation_matrix.filter(like='ROI'))
+
+        correlation_matrix.filter(like='ROI').to_csv(f'/src/data/20240826_debug_more2_{country}_df.csv', index=True)
+
 
 def debug2():
     df = pd.read_csv('/src/data/20240826_weekly_df.csv')
@@ -900,8 +899,8 @@ if __name__ == '__main__':
     # debug_more()
     # debug_more_all()
 
-    debug_more2()
-    # debug_more2_all()
+    # debug_more2()
+    debug_more2_all()
 
     # debug2()
     # debug2_all()
