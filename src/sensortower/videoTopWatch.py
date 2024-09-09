@@ -10,8 +10,6 @@ import rpyc
 
 def videoTopWatch(isDebug=False,N = 20):
     # N是榜单的前N名
-    
-
     # 支持多个国家放在一起
     countryList2 = [
         {'name':'US','codeList':['US']},
@@ -40,7 +38,7 @@ def videoTopWatch(isDebug=False,N = 20):
         topAppIdList = topAppDf['appId'].tolist()
 
         topAppUnifiedIds = getUnifiedAppIds(app_id_type='android',app_ids=topAppIdList)
-        # print(topAppUnifiedIds)
+        print(topAppUnifiedIds)
 
         # 再将这些app的id放到Creatives获取，找到TopVideo
         unifiedIds = []
@@ -81,6 +79,7 @@ def videoTopWatch(isDebug=False,N = 20):
                 if country != lastCountry:
                     lastCountry = country
                     reportStr += f"{country}：\n"
+                    lastAppName = ''
                 if app_name != lastAppName:
                     lastAppName = app_name
                     reportStr += f" {app_name} \n"

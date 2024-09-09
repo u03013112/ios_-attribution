@@ -1,14 +1,15 @@
+# top hero 项目分析，分析项目与 lastwar 一致，只是数据源替换
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 import sys
 sys.path.append('/src')
 from src.maxCompute import execSql
 
 def getMediaCostDataFromMC(installTimeStart = '20240601',installTimeEnd = '20240630'):
-    filename = f'/src/data/zk2/lwMediaCostData_{installTimeStart}_{installTimeEnd}.csv'
+    filename = f'/src/data/zk2/thMediaCostData_{installTimeStart}_{installTimeEnd}.csv'
 
     if os.path.exists(filename):
         print('已存在%s'%filename)
@@ -26,7 +27,7 @@ select
 from
     rg_bi.dws_overseas_public_roi
 where
-    app = '502'
+    app = '116'
     and zone = 0
     and facebook_segment in ('N/A', 'country')
     and install_day between {installTimeStart} and {installTimeEnd}
@@ -40,39 +41,6 @@ group by
         df.to_csv(filename,index=False)
 
     return df
-
-# 读gpir归因结论数据
-def getMediaCostDataFromMC2(installTimeStart = '20240601',installTimeEnd = '20240630'):
-    filename = f'/src/data/zk2/lwMediaCostData_gpir_{installTimeStart}_{installTimeEnd}.csv'
-
-    if os.path.exists(filename):
-        print('已存在%s'%filename)
-        return pd.read_csv(filename)
-    else:
-        # 获得用户信息，这里要额外获得归因信息，精确到campaign
-        sql = f'''
-select
-    install_day,
-    country,
-    mediasource,
-    sum(cost_value_usd) as cost,
-    sum(revenue_d7) as r7usd
-from
-    rg_bi.ads_lastwar_mediasource_reattribution
-where
-    facebook_segment in ('N/A', 'country')
-    and install_day between {installTimeStart} and {installTimeEnd}
-group by
-    install_day,
-    country,
-    mediasource
-        '''
-        df = execSql(sql)
-        df.to_csv(filename,index=False)
-
-    return df
-
-
 
 def categorize_proportion(proportion):
     if proportion <= 0.01:
@@ -95,7 +63,7 @@ def detect_and_plot_changes(df):
     
     # 标注平台
     df['platform'] = df['app_package'].map({
-        'com.fun.lastwar.gp': 'android',
+        'com.greenmushroom.boomblitz.gp': 'android',
         'id6448786147': 'iOS'
     })
 
@@ -149,7 +117,7 @@ def detect_and_plot_changes(df):
     
 
 def step1():
-    df = getMediaCostDataFromMC(installTimeStart='20240101', installTimeEnd='20240730')
+    df = getMediaCostDataFromMC(installTimeStart='20240305', installTimeEnd='20240825')
 
     # Convert install_day to datetime
     df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
@@ -189,14 +157,14 @@ def step1():
     weekly_df['revenue_proportion'] = grouped['r7usd'].apply(lambda x: x / x.sum()).values
     
     # Categorize the proportions
-    weekly_df['cost_proportion_category'] = weekly_df['cost_proportion'].apply(categorize_proportion)
-    weekly_df['revenue_proportion_category'] = weekly_df['revenue_proportion'].apply(categorize_proportion)
+    # weekly_df['cost_proportion_category'] = weekly_df['cost_proportion'].apply(categorize_proportion)
+    # weekly_df['revenue_proportion_category'] = weekly_df['revenue_proportion'].apply(categorize_proportion)
     
     # print(weekly_df)
 
     # print(weekly_df[weekly_df['mediasource'] == 'applovin_int'])
     
-    weekly_df.to_csv('/src/data/20240826_weekly_df.csv', index=False)
+    weekly_df.to_csv('/src/data/th20240826_weekly_df.csv', index=False)
 
     # Detect changes and plot
     # detect_and_plot_changes(weekly_df)
@@ -330,10 +298,10 @@ def drawPic2(df, saveFilenamePrefix):
     print(f'Saved USD plot to {usd_img_path}')
 
 def debug():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
     df2 = df[
         (df['country'] == 'UK') &
-        (df['app_package'] == 'com.fun.lastwar.gp')
+        (df['app_package'] == 'com.greenmushroom.boomblitz.gp')
     ]
     df2 = df2[df2['mediasource'].isin(['applovin_int', 'Facebook Ads', 'googleadwords_int'])]
     df2.rename(columns={'r7usd':'revenue'},inplace=True)
@@ -385,8 +353,8 @@ def debug():
 
 # 按照applovin花费比例，进行分国家、分媒体汇总，然后对汇总数据进行相关性分析
 def debug_more():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     # df = df[df['mediasource'].isin(['applovin_int', 'Facebook Ads', 'googleadwords_int', 'Organic'])]
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
@@ -482,7 +450,7 @@ def debug_more():
     for country in sorted_countries:
         country_df = final_df[final_df['country'] == country]
         # print(country_df)
-        country_df.to_csv(f'/src/data/20240826_debug2_{country}_df.csv', index=False)
+        country_df.to_csv(f'/src/data/th_20240826_debug2_{country}_df.csv', index=False)
         country_df = country_df.drop(columns=['type', 'country'])
         correlation_matrix = country_df.corr()
 
@@ -498,8 +466,8 @@ def debug_more():
 # debug_more 不分国家版本
 def debug_more_all():
     print('debug_more_all')
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
     # 定义类型列表
@@ -583,20 +551,28 @@ def debug_more_all():
             
             # 添加国家列
             pivot['country'] = country
+
+            # 计算每个 type 中唯一的 install_day 数量
+            week_count = classified_df.groupby('type')['install_day'].nunique().reset_index(name='week_count')
+            pivot = pivot.merge(week_count, on='type', how='left')
+
             results.append(pivot)
     
     # 合并所有国家的结果
     final_df = pd.concat(results, ignore_index=True)
-    print(final_df[['type','applovin_int_cost_proportion','applovin_int_ROI','Facebook Ads_ROI','googleadwords_int_ROI']])
+    print(final_df[['type','applovin_int_cost_proportion','applovin_int_ROI','Facebook Ads_ROI','googleadwords_int_ROI','week_count']])
 
 
     # 遍历每个国家，计算相关系数
     for country in final_df['country'].unique():
-        country_df = final_df[final_df['country'] == country].drop(columns=['type', 'country'])
+        country_df = final_df[final_df['country'] == country]
+        # print(country_df)
+        country_df.to_csv(f'/src/data/th_20240826_debug2_{country}_df.csv', index=False)
+
+        country_df = country_df.drop(columns=['type', 'country'])
         correlation_matrix = country_df.corr()
         
-        # print(country_df)
-        country_df.to_csv(f'/src/data/20240826_debug2_{country}_df.csv', index=False)
+        
 
         # if country_df.shape[0] <= 3:
         #     continue
@@ -610,8 +586,8 @@ def debug_more_all():
 
 # 直接计算相关性
 def debug_more2():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
     # 只保留主要媒体数据
@@ -681,8 +657,8 @@ def debug_more2():
 import pandas as pd
 
 def debug_more2_all():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
     # 只保留主要媒体数据
@@ -716,11 +692,18 @@ def debug_more2_all():
         total_cost_per_day.rename(columns={'cost': 'total_cost'}, inplace=True)
         summary = summary.merge(total_cost_per_day, on='install_day')
         summary['cost_ratio'] = summary['cost'] / summary['total_cost']
-        
+        summary['applovin_cost_ratio'] = summary.apply(
+            lambda row: row['cost'] / row['total_cost'] if row['mediasource'] == 'applovin_int' else 0, axis=1
+        )
+
         # 重塑数据框架
         pivot = summary.pivot(index='install_day', columns='mediasource', values=['cost', 'revenue', 'ROI', 'cost_ratio']).reset_index()
         pivot.columns = ['install_day'] + [f'{col[1]}_{col[0]}' for col in pivot.columns[1:]]
         
+        # 添加 applovin_cost_ratio 列
+        applovin_cost_ratio = summary[summary['mediasource'] == 'applovin_int'][['install_day', 'applovin_cost_ratio']]
+        pivot = pivot.merge(applovin_cost_ratio, on='install_day', how='left')
+
         # 添加国家列
         pivot['country'] = country
         results.append(pivot)
@@ -737,15 +720,21 @@ def debug_more2_all():
         # print('\n', country)
         # print('>>Cost Ratios Correlation:')
         # print(correlation_matrix.filter(like='cost_ratio'))
-        print('>>ROI Correlation:')
-        print(correlation_matrix.filter(like='ROI'))
+        # print('>>ROI Correlation:')
+        # print(correlation_matrix.filter(like='ROI'))
+        
+        # 打印国家及其相关系数矩阵
+        print(f'>>applovin 花费比例 相关系数 {country}:')
+        print(correlation_matrix['applovin_cost_ratio'])
+        print(f'>>applovin ROI 相关系数: {country}')
+        print(correlation_matrix['applovin_int_ROI'])
 
-        correlation_matrix.filter(like='ROI').to_csv(f'/src/data/20240826_debug_more2_{country}_df.csv', index=True)
+        correlation_matrix.filter(like='ROI').to_csv(f'/src/data/th20240826_debug_more2_{country}_df.csv', index=True)
 
 
 def debug2():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     
     # 重命名 r7usd 列为 revenue
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
@@ -826,13 +815,14 @@ def debug2():
                     'cost_total_revenue_corr': cost_total_revenue_corr
                 }, ignore_index=True)
     
+    print(results)
     # 保存结果到CSV文件
-    results.to_csv('/src/data/correlation_results_by_country.csv', index=False)
+    results.to_csv('/src/data/th_correlation_results_by_country.csv', index=False)
 
 
 def debug2_all():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     
     # 重命名 r7usd 列为 revenue
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
@@ -892,7 +882,7 @@ def debug2_all():
         
         # 初始化结果DataFrame
         results = pd.DataFrame(columns=['type', 'media', 'cost_revenue_corr', 'cost_total_revenue_corr'])
-        
+
         # 遍历每种类型
         for t in typeList:
             type_df = classified_df[classified_df['type'] == t['type']]
@@ -904,6 +894,10 @@ def debug2_all():
             for media in ['applovin_int', 'Facebook Ads', 'googleadwords_int']:
                 media_df = type_df[type_df['mediasource'] == media][['cost', 'revenue', 'total_revenue']]
                 
+                if media == 'applovin_int':
+                    print(t['type'])
+                    print(media_df)
+
                 # 判断行数是否足够
                 if len(media_df) < 3:
                     continue
@@ -924,14 +918,18 @@ def debug2_all():
                 }, ignore_index=True)
         
         # 保存结果到CSV文件
-        results.to_csv('/src/data/correlation_results_all.csv', index=False)
+        results.to_csv('/src/data/th_correlation_results_all.csv', index=False)
 
-def draw1():
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def drawAll():
     # 读取数据
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
     df['install_day'] = pd.to_datetime(df['install_day'])
 
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
     # 只保留主要媒体数据
@@ -946,8 +944,77 @@ def draw1():
     countries = ['WW']
 
     for country in countries:
-        print(f'Processing {country}...')
+        df_country = df[df['country'] == country]
+        
+        # 计算每个 install_day 的汇总数据
+        summary = df_country.groupby(['install_day', 'mediasource']).agg({
+            'cost': 'sum',
+            'revenue': 'sum'
+        }).reset_index()
+        
+        # 计算 ROI
+        summary['ROI'] = summary['revenue'] / summary['cost']
+        
+        # 计算每个 install_day 中每个媒体的花费占比
+        total_cost_per_day = summary.groupby('install_day')['cost'].sum().reset_index()
+        total_cost_per_day.rename(columns={'cost': 'total_cost'}, inplace=True)
+        summary = summary.merge(total_cost_per_day, on='install_day')
+        summary['cost_ratio'] = summary['cost'] / summary['total_cost']
 
+        print(summary)
+
+        # 设置绘图风格
+        sns.set(style="whitegrid")
+
+        # 创建一个包含3个子图的图形
+        fig, axes = plt.subplots(3, 1, figsize=(18, 18), sharex=True)
+
+        # 第一张图：花费比例
+        sns.lineplot(ax=axes[0], data=summary, x='install_day', y='cost_ratio', hue='mediasource')
+        axes[0].set_title('Cost Ratio by Install Day')
+        axes[0].set_ylabel('Cost Ratio')
+
+        # 第二张图：花费金额
+        sns.lineplot(ax=axes[1], data=summary, x='install_day', y='cost', hue='mediasource')
+        axes[1].set_title('Cost by Install Day')
+        axes[1].set_ylabel('Cost')
+
+        # 第三张图：ROI
+        sns.lineplot(ax=axes[2], data=summary, x='install_day', y='ROI', hue='mediasource')
+        axes[2].set_title('ROI by Install Day')
+        axes[2].set_ylabel('ROI')
+
+        # 设置x轴标签
+        axes[2].set_xlabel('Install Day')
+
+        # 调整图例位置
+        for ax in axes:
+            ax.legend(loc='upper right')
+
+        # 保存图形
+        plt.tight_layout()
+        plt.savefig('/src/data/th20240826_debug_more2_ww.png')
+
+def draw1():
+    # 读取数据
+    df = pd.read_csv('/src/data/th20240826_weekly_df.csv')
+    df['install_day'] = pd.to_datetime(df['install_day'])
+
+    df = df[df['app_package'] == 'com.greenmushroom.boomblitz.gp']
+    df.rename(columns={'r7usd': 'revenue'}, inplace=True)
+    
+    # 只保留主要媒体数据
+    df = df[df['mediasource'].isin(['applovin_int', 'Facebook Ads', 'googleadwords_int'])]
+    
+    df['country'] = 'WW'
+    df = df.groupby(['country', 'install_day', 'mediasource']).agg({
+        'cost': 'sum',
+        'revenue': 'sum'
+    }).reset_index()
+
+    countries = ['WW']
+
+    for country in countries:
         df_country = df[df['country'] == country]
         
         # 计算每个 install_day 的汇总数据
@@ -967,7 +1034,7 @@ def draw1():
 
         # 提取 applovin 的花费比例和 google 的 ROI
         applovin_cost_ratio = summary[summary['mediasource'] == 'applovin_int'][['install_day', 'cost_ratio']]
-        facebook_roi = summary[summary['mediasource'] == 'Facebook Ads'][['install_day', 'ROI']]
+        google_roi = summary[summary['mediasource'] == 'googleadwords_int'][['install_day', 'ROI']]
 
         # 设置绘图风格
         sns.set(style="whitegrid")
@@ -983,8 +1050,8 @@ def draw1():
 
         # 创建第二个 Y 轴
         ax2 = ax1.twinx()
-        sns.lineplot(ax=ax2, data=facebook_roi, x='install_day', y='ROI', color='r', label='Facebook ROI')
-        ax2.set_ylabel('Facebook ROI', color='r')
+        sns.lineplot(ax=ax2, data=google_roi, x='install_day', y='ROI', color='r', label='Google ROI')
+        ax2.set_ylabel('Google ROI', color='r')
         ax2.tick_params(axis='y', labelcolor='r')
 
         # 设置x轴标签
@@ -996,18 +1063,20 @@ def draw1():
 
         # 保存图形
         plt.tight_layout()
-        plt.savefig('/src/data/20240826_debug_more2_ww1.png')
+        plt.savefig('/src/data/th20240826_debug_more2_ww1.png')
 
 
 if __name__ == '__main__':
-    step1()
+    # step1()
     # debug()
     # debug_more()
     # debug_more_all()
 
     # debug_more2()
     # debug_more2_all()
-    draw1()
 
     # debug2()
     # debug2_all()
+
+    drawAll()
+    # draw1()

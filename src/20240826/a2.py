@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 import sys
 sys.path.append('/src')
@@ -149,7 +148,7 @@ def detect_and_plot_changes(df):
     
 
 def step1():
-    df = getMediaCostDataFromMC(installTimeStart='20240101', installTimeEnd='20240730')
+    df = getMediaCostDataFromMC2(installTimeStart='20240304', installTimeEnd='20240825')
 
     # Convert install_day to datetime
     df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
@@ -159,13 +158,12 @@ def step1():
 
     # 创建一个 DataFrame，包含所有可能的组合
     all_combinations = pd.MultiIndex.from_product([df['country'].unique(),
-                                                df['app_package'].unique(),
                                                 all_days,
                                                 df['mediasource'].unique()],
-                                                names=['country', 'app_package', 'install_day', 'mediasource']).to_frame(index=False)
+                                                names=['country', 'install_day', 'mediasource']).to_frame(index=False)
 
     # 合并原始数据和所有可能的组合
-    merged_df = pd.merge(all_combinations, df, on=['country', 'app_package', 'install_day', 'mediasource'], how='left')
+    merged_df = pd.merge(all_combinations, df, on=['country', 'install_day', 'mediasource'], how='left')
 
     # 填补缺失值
     merged_df['cost'] = merged_df['cost'].fillna(0)
@@ -174,15 +172,15 @@ def step1():
     # 重新计算 week 列
     merged_df['week'] = merged_df['install_day'].dt.isocalendar().week
 
-    # 按 week, country, app_package, and mediasource 汇总数据
-    weekly_df = merged_df.groupby(['country', 'app_package', 'week', 'mediasource']).agg({
+    # 按 week, country, and mediasource 汇总数据
+    weekly_df = merged_df.groupby(['country', 'week', 'mediasource']).agg({
         'install_day': 'min',
         'cost': 'sum',
         'r7usd': 'sum'
     }).reset_index()
     
-    # Group by country, app_package, and week to calculate proportions
-    grouped = weekly_df.groupby(['country', 'app_package', 'week','install_day'])
+    # Group by country, and week to calculate proportions
+    grouped = weekly_df.groupby(['country', 'week','install_day'])
     
     # Calculate the cost and revenue proportions
     weekly_df['cost_proportion'] = grouped['cost'].apply(lambda x: x / x.sum()).values
@@ -196,7 +194,7 @@ def step1():
 
     # print(weekly_df[weekly_df['mediasource'] == 'applovin_int'])
     
-    weekly_df.to_csv('/src/data/20240826_weekly_df.csv', index=False)
+    weekly_df.to_csv('/src/data/20240826_weekly_df2.csv', index=False)
 
     # Detect changes and plot
     # detect_and_plot_changes(weekly_df)
@@ -330,7 +328,7 @@ def drawPic2(df, saveFilenamePrefix):
     print(f'Saved USD plot to {usd_img_path}')
 
 def debug():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df2 = df[
         (df['country'] == 'UK') &
         (df['app_package'] == 'com.fun.lastwar.gp')
@@ -385,7 +383,7 @@ def debug():
 
 # 按照applovin花费比例，进行分国家、分媒体汇总，然后对汇总数据进行相关性分析
 def debug_more():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
     # df = df[df['mediasource'].isin(['applovin_int', 'Facebook Ads', 'googleadwords_int', 'Organic'])]
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
@@ -498,7 +496,7 @@ def debug_more():
 # debug_more 不分国家版本
 def debug_more_all():
     print('debug_more_all')
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
@@ -610,7 +608,7 @@ def debug_more_all():
 
 # 直接计算相关性
 def debug_more2():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
@@ -681,8 +679,8 @@ def debug_more2():
 import pandas as pd
 
 def debug_more2_all():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
+    # df = df[df['app_package'] == 'com.fun.lastwar.gp']
     df.rename(columns={'r7usd': 'revenue'}, inplace=True)
     
     # 只保留主要媒体数据
@@ -740,11 +738,11 @@ def debug_more2_all():
         print('>>ROI Correlation:')
         print(correlation_matrix.filter(like='ROI'))
 
-        correlation_matrix.filter(like='ROI').to_csv(f'/src/data/20240826_debug_more2_{country}_df.csv', index=True)
+        correlation_matrix.filter(like='ROI').to_csv(f'/src/data/20240826_debug_more2_{country}_df2.csv', index=True)
 
 
 def debug2():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
     
     # 重命名 r7usd 列为 revenue
@@ -831,7 +829,7 @@ def debug2():
 
 
 def debug2_all():
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
+    df = pd.read_csv('/src/data/20240826_weekly_df2.csv')
     df = df[df['app_package'] == 'com.fun.lastwar.gp']
     
     # 重命名 r7usd 列为 revenue
@@ -926,78 +924,6 @@ def debug2_all():
         # 保存结果到CSV文件
         results.to_csv('/src/data/correlation_results_all.csv', index=False)
 
-def draw1():
-    # 读取数据
-    df = pd.read_csv('/src/data/20240826_weekly_df.csv')
-    df['install_day'] = pd.to_datetime(df['install_day'])
-
-    df = df[df['app_package'] == 'com.fun.lastwar.gp']
-    df.rename(columns={'r7usd': 'revenue'}, inplace=True)
-    
-    # 只保留主要媒体数据
-    df = df[df['mediasource'].isin(['applovin_int', 'Facebook Ads', 'googleadwords_int'])]
-    
-    df['country'] = 'WW'
-    df = df.groupby(['country', 'install_day', 'mediasource']).agg({
-        'cost': 'sum',
-        'revenue': 'sum'
-    }).reset_index()
-
-    countries = ['WW']
-
-    for country in countries:
-        print(f'Processing {country}...')
-
-        df_country = df[df['country'] == country]
-        
-        # 计算每个 install_day 的汇总数据
-        summary = df_country.groupby(['install_day', 'mediasource']).agg({
-            'cost': 'sum',
-            'revenue': 'sum'
-        }).reset_index()
-        
-        # 计算 ROI
-        summary['ROI'] = summary['revenue'] / summary['cost']
-        
-        # 计算每个 install_day 中每个媒体的花费占比
-        total_cost_per_day = summary.groupby('install_day')['cost'].sum().reset_index()
-        total_cost_per_day.rename(columns={'cost': 'total_cost'}, inplace=True)
-        summary = summary.merge(total_cost_per_day, on='install_day')
-        summary['cost_ratio'] = summary['cost'] / summary['total_cost']
-
-        # 提取 applovin 的花费比例和 google 的 ROI
-        applovin_cost_ratio = summary[summary['mediasource'] == 'applovin_int'][['install_day', 'cost_ratio']]
-        facebook_roi = summary[summary['mediasource'] == 'Facebook Ads'][['install_day', 'ROI']]
-
-        # 设置绘图风格
-        sns.set(style="whitegrid")
-
-        # 创建一个图形
-        fig, ax1 = plt.subplots(figsize=(12, 6))
-
-        # 绘制 applovin 的花费比例
-        sns.lineplot(ax=ax1, data=applovin_cost_ratio, x='install_day', y='cost_ratio', color='b', label='Applovin Cost Ratio')
-        ax1.set_ylabel('Applovin Cost Ratio', color='b')
-        ax1.tick_params(axis='y', labelcolor='b')
-        ax1.set_title('Applovin Cost Ratio and Google ROI by Install Day')
-
-        # 创建第二个 Y 轴
-        ax2 = ax1.twinx()
-        sns.lineplot(ax=ax2, data=facebook_roi, x='install_day', y='ROI', color='r', label='Facebook ROI')
-        ax2.set_ylabel('Facebook ROI', color='r')
-        ax2.tick_params(axis='y', labelcolor='r')
-
-        # 设置x轴标签
-        ax1.set_xlabel('Install Day')
-
-        # 调整图例位置
-        ax1.legend(loc='upper left')
-        ax2.legend(loc='upper right')
-
-        # 保存图形
-        plt.tight_layout()
-        plt.savefig('/src/data/20240826_debug_more2_ww1.png')
-
 
 if __name__ == '__main__':
     step1()
@@ -1006,8 +932,7 @@ if __name__ == '__main__':
     # debug_more_all()
 
     # debug_more2()
-    # debug_more2_all()
-    draw1()
+    debug_more2_all()
 
     # debug2()
     # debug2_all()
