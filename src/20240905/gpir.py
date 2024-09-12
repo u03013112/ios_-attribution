@@ -344,9 +344,52 @@ def f3():
 	groupedByMediaAndGpMediaData = groupedByMediaAndGpMediaData.sort_values(by=['mmp_media','在mmp媒体中安装占比'], ascending=False)	
 	groupedByMediaAndGpMediaData.to_csv('/src/data/gpir_mmp.csv', index=False)
 
+def f4():
+    data = getDataFromMC()
+    data['match_type'] = data['match_type'].fillna('null')
+    data['gp_referrer_media'].replace('bytedanceglobal_int', 'tiktokglobal_int', inplace=True)
+    data['mediasource'].replace('restricted', 'Facebook Ads', inplace=True)
+    data['mediasource'] = data['mediasource'].fillna('organic')
+
+    # 按照 gp_referrer_media 分组
+    groupedByGpMediaData = data.groupby(['gp_referrer_media']).agg(
+        total_count_gp=('uid', 'size'),
+        total_revenue_d7_gp=('revenue_d7', 'sum')
+    ).reset_index()
+
+    # 按照 mediasource 分组
+    groupedByMediaData = data.groupby(['mediasource']).agg(
+        total_count_media=('uid', 'size'),
+        total_revenue_d7_media=('revenue_d7', 'sum')
+    ).reset_index()
+
+    # 合并两个分组结果
+    mergedData = pd.merge(groupedByGpMediaData, groupedByMediaData, left_on='gp_referrer_media', right_on='mediasource', how='inner')
+
+    # 计算安装数和付费金额的差异比例
+    mergedData['安装数差异比例'] = (mergedData['total_count_gp'] - mergedData['total_count_media']) / mergedData['total_count_media']
+    mergedData['付费金额差异比例'] = (mergedData['total_revenue_d7_gp'] - mergedData['total_revenue_d7_media']) / mergedData['total_revenue_d7_media']
+
+    # 处理 NaN 值
+    mergedData['安装数差异比例'].fillna(0, inplace=True)
+    mergedData['付费金额差异比例'].fillna(0, inplace=True)
+
+    # 排序并选择需要的列
+    mergedData = mergedData.sort_values(by=['gp_referrer_media', 'mediasource'], ascending=False)
+    mergedData = mergedData[['gp_referrer_media', 'mediasource', '安装数差异比例', '付费金额差异比例']]
+
+    print(mergedData)
+
+    # 保存结果到 CSV 文件
+    mergedData.to_csv('/src/data/gpir_diff.csv', index=False)
+
+
+
 if __name__ == '__main__':
 	# f1()
 	# f2()
 	# f3()
+	f4()
+
 	# debug()
-	debug2()
+	# debug2()
