@@ -584,21 +584,36 @@ def f3(appName):
 	app_id = appInfo['app_id']
 
 	# data = getDataFromMC(app,app_id)
-	data = getTopwarDataFromMC()
+	data = getTopwarDataFromMC2()
+	data.rename(columns={
+		'installs': 'uid'
+	}, inplace=True)
 	data['match_type'] = 'null'
 
-	data['match_type'] = data['match_type'].fillna('null')
+	# data['match_type'] = data['match_type'].fillna('null')
 	data['gp_referrer_media'].replace('bytedanceglobal_int', 'tiktokglobal_int', inplace=True)
+	data['mediasource'].replace('tiktoklive_int', 'tiktokglobal_int', inplace=True)
+	data['gp_referrer_media'].replace('tiktoklive_int', 'tiktokglobal_int', inplace=True)
 	data['mediasource'].replace('restricted', 'Facebook Ads', inplace=True)
-	data['mediasource'] = data['mediasource'].fillna('organic')
+	data['gp_referrer_media'].replace('organic', 'Organic', inplace=True)
 
+	data['mediasource'] = data['mediasource'].fillna('Organic')
+
+	# for debug
+	# 将mediasource == Organic 且 gp_referrer_media == 'applovin_int'的部分进行过滤和保存
+	debugDf01 = data[(data['mediasource'] == 'Organic')& (data['gp_referrer_media'] == 'applovin_int')]
+	debugDf01.to_csv(f'/src/data/gpir_debug_01_{app}.csv', index=False)
+	# print(debugDf01['uid'].sum())
+	#
+	return 
+	data.replace('restricted', 'Facebook Ads', inplace=True)
 	groupedByMediaAndGpMediaData = data.groupby(['gp_referrer_media', 'mediasource']).agg(
-		total_count=('uid', 'size'),
+		total_count=('uid', 'sum'),
 		total_revenue_d7=('revenue_d7', 'sum')
 	).reset_index()
 
 	groupedByGpMediaData = data.groupby(['gp_referrer_media']).agg(
-		total_count=('uid', 'size'),
+		total_count=('uid', 'sum'),
 		total_revenue_d7=('revenue_d7', 'sum')
 	).reset_index()
 	groupedByGpMediaData.rename(columns={'total_count': 'total_count_gp'}, inplace=True)
@@ -609,7 +624,7 @@ def f3(appName):
 	groupedByMediaAndGpMediaData['在gpir媒体中收入占比'] = groupedByMediaAndGpMediaData['total_revenue_d7'] / groupedByMediaAndGpMediaData['total_revenue_d7_gp']
 
 	groupedByMediaData = data.groupby(['mediasource']).agg(
-		total_count=('uid', 'size'),
+		total_count=('uid', 'sum'),
 		total_revenue_d7=('revenue_d7', 'sum')
 	).reset_index()
 	groupedByMediaData.rename(columns={'total_count': 'total_count_media'}, inplace=True)
@@ -626,8 +641,8 @@ def f3(appName):
 
 	groupedByMediaAndGpMediaData.to_csv(f'/src/data/gpir_{app}.csv', index=False)
 
-	# groupedByMediaAndGpMediaData = groupedByMediaAndGpMediaData.sort_values(by=['mmp_media','在mmp媒体中安装占比'], ascending=False)	
-	# groupedByMediaAndGpMediaData.to_csv('/src/data/gpir_mmp.csv', index=False)
+	groupedByMediaAndGpMediaData = groupedByMediaAndGpMediaData.sort_values(by=['mmp_media','在mmp媒体中安装占比'], ascending=False)	
+	groupedByMediaAndGpMediaData.to_csv(f'/src/data/gpir_mmp_{app}.csv', index=False)
 
 # 详细拆分GPIR与AF归因 安装数与收入金额 在各媒体间的改变
 def f4(appName):
@@ -650,6 +665,9 @@ def f4(appName):
 	data.rename(columns={
 		'installs': 'uid'
 	}, inplace=True)
+	
+	data['gp_referrer_media'] = data['gp_referrer_media'].fillna('OTHER')
+	data['mediasource'] = data['mediasource'].fillna('Organic')
 
 	data.replace('restricted', 'Facebook Ads', inplace=True)
 
@@ -658,6 +676,8 @@ def f4(appName):
 		total_count_gp=('uid', 'sum'),
 		total_revenue_d7_gp=('revenue_d7', 'sum')
 	).reset_index()
+
+	groupedByGpMediaData['gp_referrer_media'].replace('organic', 'Organic', inplace=True)
 
 	print('groupedByGpMediaData')
 	print(groupedByGpMediaData)
@@ -672,7 +692,7 @@ def f4(appName):
 	print(groupedByMediaData)
 
 	# 合并两个分组结果
-	mergedData = pd.merge(groupedByGpMediaData, groupedByMediaData, left_on='gp_referrer_media', right_on='mediasource', how='inner')
+	mergedData = pd.merge(groupedByGpMediaData, groupedByMediaData, left_on='gp_referrer_media', right_on='mediasource', how='outer')
 
 	# 计算安装数和付费金额的差异比例
 	mergedData['安装数差异比例'] = (mergedData['total_count_gp'] - mergedData['total_count_media']) / mergedData['total_count_media']
@@ -764,7 +784,219 @@ where
 	data.to_csv(f'/src/data/gpir_organic_{app}.csv', index=False)
 
 
+def organicDebug2():
+	# 针对 AF归因为 organic，但是 GPIR归因是 applovin_int 的情况
+	# 1、共有多少人，多少金额
+	# 2、这些人中，从google play安装时间到游戏激活时间 超过7天的有多少人，多少金额
+	# 3、再找到剩下的人，逐个观察
 
+	sql = f'''
+@gpir :=
+select
+	uid,
+	mediasource as gpir_mediasource,
+	get_day_from_timestamp(install_timestamp, '0') as install_day
+from
+	dws_overseas_gginstallbegin_contributor_attribution_th;
+
+
+
+@af :=
+select
+	game_uid as uid,
+	mediasource as af_mediasource
+from
+	dws_overseas_topheros_unique_uid
+where
+	app_package = 'com.greenmushroom.boomblitz.gp';
+
+
+
+@purchase :=
+select
+	game_uid as uid,
+	install_day,
+	DATEDIFF(
+		to_date(event_day, 'yyyymmdd'),
+		to_date(install_day, 'yyyymmdd')
+	) AS life_cycle,
+	revenue_value_usd
+from
+	dwd_overseas_revenue_allproject
+where
+	app = '116'
+	and zone = 0
+	and app_package = 'com.greenmushroom.boomblitz.gp';
+
+
+
+@purchase7 :=
+select
+	uid,
+	install_day,
+	sum(
+		CASE
+			WHEN life_cycle BETWEEN 0
+			AND 6 THEN revenue_value_usd
+			ELSE 0
+		END
+	) AS revenue_d7
+from
+	@purchase
+group by
+	uid,
+	install_day;
+
+
+
+@result01 :=
+select
+	af.uid,
+	af.af_mediasource,
+	gpir.gpir_mediasource,
+	gpir.install_day,
+	purchase7.revenue_d7
+from
+	@af as af
+	left join @gpir as gpir on af.uid = gpir.uid
+	left join @purchase7 as purchase7 on af.uid = purchase7.uid;
+
+
+@result02 :=
+select
+	uid,
+	af_mediasource,
+	gpir_mediasource,
+	install_day,
+	revenue_d7
+from
+	@result01
+where
+	install_day between '20240701' and '20240731'
+	and (af_mediasource is null or af_mediasource = 'Organic')
+	and gpir_mediasource = 'applovin_int'
+;
+
+@push :=
+select
+	get_json_object(
+		base64decode(base64decode(push_data)),
+		'$.customer_user_id'
+	) as uid,
+	get_json_object(
+		base64decode(base64decode(push_data)),
+		'$.event_time'
+	) as event_time,
+	get_json_object(
+		base64decode(base64decode(push_data)),
+		'$.gp_install_begin'
+	) as gp_install_begin
+from
+	rg_bi.ods_platform_appsflyer_push_event_total
+where
+	ds  > '20240920'
+	and get_json_object(
+		base64decode(base64decode(push_data)),
+		'$.event_name'
+	) = 'install'
+	and get_json_object(
+		base64decode(base64decode(push_data)),
+		'$.app_id'
+	) = 'com.greenmushroom.boomblitz.gp'
+;
+
+select
+	result02.uid,
+	result02.revenue_d7,
+	push.event_time,
+	push.gp_install_begin	
+from @result02 as result02
+	left join @push as push on result02.uid = push.uid
+;
+	'''
+	print(sql)
+	data = execSql(sql)
+
+	data.to_csv(f'/src/data/gpir_organic_debug2.csv', index=False)
+
+	return data
+
+
+def organicDebug2_step2():
+	df = pd.read_csv('/src/data/gpir_organic_debug2.csv')
+	
+	df['revenue_d7'] = df['revenue_d7'].fillna(0)
+
+	df0 = df[df['event_time'].isna()]
+	print(len(df0))
+
+	df = df[~df['event_time'].isna()]
+	# event_time 和 gp_install_begin 都是类似 '2024-07-07 06:43:08.804' 的字符串
+	# 转换为 datetime 类型
+	df['event_time'] = pd.to_datetime(df['event_time'])
+	df['gp_install_begin'] = pd.to_datetime(df['gp_install_begin'])
+	# print(df)
+	# 计算两个时间的差值
+	df['diff'] = df['event_time'] - df['gp_install_begin']
+	df['diffDays'] = df['diff'].dt.days
+
+	print(df['diffDays'].value_counts())
+
+	# # # 找到差值大于7天的记录
+	# df = df[df['diff'] > pd.Timedelta(days=7)]
+
+	# print(len(df))
+	print(df[df['diffDays'] < 7])
+
+def debugAF():
+	sql = '''
+select
+*
+from ods_platform_appsflyer_events_v3
+where app = 116
+and event_name = 'install'
+and customer_user_id in ('181626087255','38327101219','459773454276','460031272901','460034287556','466785413063','466792228807','466810972103','466820540359','466821261255'
+)
+;
+	'''
+	print(sql)
+	data = execSql(sql)
+	data.to_csv(f'/src/data/gpir_debug_af20240925.csv', index=False)
+
+def debugAF2():
+	df = pd.read_csv('/src/data/gpir_organic_debug2.csv')
+	installs = df['uid'].unique()
+	revenue = df['revenue_d7'].sum()
+	arpu = revenue / len(installs)
+	print(len(installs), revenue, arpu)
+
+def lingqiang20240927():
+	sql = '''
+select
+	*
+from
+	ods_platform_appsflyer_events_v3
+where
+	app = 116
+	and day > 20240901
+	and event_name = 'install'
+	and mediasource is null
+	and gp_referrer like '%applovin%'
+	and DATEDIFF(
+		to_date(event_time, 'yyyy-mm-dd hh:mi:ss'),
+		to_date(gg_install_begin_time, 'yyyy-mm-dd hh:mi:ss')
+	) <= 1
+	and advertising_id not in (
+		'0000-0000',
+		'00000000-0000-0000-0000-000000000000'
+	)
+order by
+	event_time desc
+limit
+	1000;
+	'''
+	df = execSql(sql)
+	df.to_csv('/src/data/lingqiang20240927.csv', index=False)
 
 if __name__ == '__main__':
 	# debug2('topheros')
@@ -773,8 +1005,14 @@ if __name__ == '__main__':
 
 	# debug2('topheros')
 	# f3('topheros')
-	f4('topheros')
+	# f4('topheros')
 
+
+	# organicDebug2()
+	# organicDebug2_step2()
+	# debugAF()
+	# debugAF2()
+	lingqiang20240927()
 
 
 
