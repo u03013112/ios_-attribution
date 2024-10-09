@@ -133,6 +133,14 @@ def predict(test_df, model):
     # 转换为DataFrame
     results_df = pd.DataFrame(results)
 
+    # 计算ARPPU的MAPE
+    results_df['arppu_real'] = test_df['revenue'].values[1:] / test_df['pud1'].values[1:]
+    results_df['arppu_predict'] = results_df['predicted_revenue'] / results_df['predicted_pud1']
+    results_df['arppu_mape'] = np.abs((results_df['arppu_real'] - results_df['arppu_predict']) / results_df['arppu_real']) * 100
+
+    # 计算付费用户MAPE
+    results_df['pud1_mape'] = np.abs((results_df['predicted_pud1'] - test_df['pud1'].values[1:]) / test_df['pud1'].values[1:]) * 100
+
     # 计算MAPE
     results_df['mape'] = np.abs((results_df['predicted_revenue'] - test_df['revenue'].values[1:]) / test_df['revenue'].values[1:]) * 100
 
@@ -163,7 +171,7 @@ def predict2(test_df, model):
             is_weekend_value = 1 if predict_date.weekday() in [5, 6] else 0  # 计算预测日期是否为周末
 
             # 生成可能的 cost_increase 数组
-            possible_cost_increases = np.arange(real_cost_increase - 0.1, real_cost_increase + 0.1, 0.01)
+            possible_cost_increases = np.arange(real_cost_increase - 0.15, real_cost_increase + 0.15, 0.01)
             
             best_forecast = None
             best_cost_increase = None
@@ -239,12 +247,51 @@ def predictOneDay(model,ds,ad_spend_pct,is_weekend):
     predictedpud1_pct = forecast['yhat'].values[0]
     return predictedpud1_pct
 
+def arppu(N):
+    historical_data = getHistoricalData()
+    historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
+    aggregated_data = historical_data.groupby('install_day').agg({
+        'usd': 'sum',
+        'd1': 'sum',
+        'ins': 'sum',
+        'pud1': 'sum',
+    }).reset_index()
+    df = pd.DataFrame({
+        'date': aggregated_data['install_day'],
+        'ad_spend': aggregated_data['usd'],
+        'revenue': aggregated_data['d1'], 
+        'ins': aggregated_data['ins'],
+        'pud1': aggregated_data['pud1'],
+    })
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date', ascending=True)
+
+    df['arppu'] = df['revenue'] / df['pud1']
+    # 计算最近N天的ARPPU平均值，包括计算当日
+    df['arppu_daily_mean'] = df['arppu'].shift(1).rolling(window=N).mean()
+    df = df.dropna(subset=['arppu_daily_mean'])
+
+    df['arppu_real'] = df['arppu']
+    df['arppu_predict'] = df['arppu_daily_mean']
+    df['arppu mape'] = np.abs((df['arppu_real'] - df['arppu_predict']) / df['arppu_real']) * 100
+
+    # test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
+    test_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
+
+    # print(test_df[['date','arppu mape']])
+    mape = test_df['arppu mape'].mean()
+    print(f"ARPPU MAPE: {mape:.2f}%")
+    return mape
+
+
+
 def main():
     # 设定N天的时间窗口
-    N = 30  # 例如过去30天
+    N = 16  # 例如过去30天
 
     # 获取历史数据
     historical_data = getHistoricalData()
+    # historical_data = getHistoricalDataIOS()
 
     # 转换 'install_day' 列为日期格式
     historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
@@ -280,7 +327,7 @@ def main():
     df['pud1_pct'] = df['pud1'].pct_change()
 
     # 计算最近N天的ARPPU平均值，包括计算当日
-    df['arppu_daily_mean'] = df['arppu'].rolling(window=N, min_periods=1).mean()
+    df['arppu_daily_mean'] = df['arppu'].shift(1).rolling(window=N, min_periods=1).mean()
 
     # 分割训练集和测试集
     train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
@@ -298,16 +345,25 @@ def main():
         model = train(train_df, model_path)
 
     # 进行预测
-    results_df = predict2(test_df, model)
+    results_df = predict(test_df, model)
 
     # 输出查询表单
     print("Results DataFrame:")
-    print(results_df)
+    print(results_df[['date', 'arppu_mape','pud1_mape','mape']])
+    results_df[['date', 'arppu_mape','pud1_mape','mape']].to_csv('/src/data/prediction_results_1.csv', index=False)
 
     # 输出到 CSV 文件
-    results_df.to_csv('prediction_results.csv', index=False)
+    results_df.to_csv('/src/data/prediction_results.csv', index=False)
 
     print(f"Results DataFrame has been saved")
+
+    # 计算并输出ARPPU的MAPE的平均值
+    average_arppu_mape = results_df['arppu_mape'].mean()
+    print(f"所有ARPPU的MAPE的平均值: {average_arppu_mape:.2f}%")
+
+    # 计算并输出付费用户数MAPE的平均值
+    average_pud1_mape = results_df['pud1_mape'].mean()
+    print(f"所有付费用户数MAPE的平均值: {average_pud1_mape:.2f}%")
 
     # 计算并输出所有MAPE的平均值
     average_mape = results_df['mape'].mean()
@@ -325,11 +381,25 @@ def test01():
     with open(model_path, 'r') as f:
         model = model_from_json(f.read())
 
-        for ad_spend_pct in [-0.3,0.2,0.1,-0.038563,0,0.1,0.2,0.3]:
+        for ad_spend_pct in [-0.3,0.2,0.1,0,0.1,0.2,0.3]:
             predictedpud1_pct = predictOneDay(model,ds,ad_spend_pct,is_weekend)
             print(f"{ad_spend_pct} predictedpud1_pct: {predictedpud1_pct}")
 
-    
+
+def arppuTest():
+    minN = 1
+    minMape = 100
+    for N in range(1,31):
+        print(f"N={N}")
+        mape = arppu(N)
+        if mape < minMape:
+            minN = N
+            minMape = mape
+    print('-----------------')
+    print(f"minN={minN},minMape={minMape}")
+
 if __name__ == "__main__":
-    main()
+    # main()
     # test01()
+    # arppu(30)
+    arppuTest()
