@@ -364,8 +364,8 @@ id6448786147,31,af_purchase_update_skan_on,0,1,972.22,2038.09,0,24,2024-07-05 09
 def main2Revenue(startDate = '20240710', endDate = '20240915'):
     totalDf = getTotalInstallCount(startDate, endDate)
 
-    paidTimeMin = 35*60*60
-    paidTimeMax = 45*60*60
+    paidTimeMin = 38*60*60
+    paidTimeMax = 50*60*60
     paidTimeList = [i for i in range(paidTimeMin, paidTimeMax, 30*60)]
 
     paidCorrMax = 0
@@ -399,11 +399,16 @@ def main2Revenue(startDate = '20240710', endDate = '20240915'):
         # print(df)
 
         # 计算差分
-        diff_total = df['total_revenue'].diff().dropna()
-        diff_skan = df['skan_revenue'].diff().dropna()
+        # diff_total = df['total_revenue'].diff().dropna()
+        # diff_skan = df['skan_revenue'].diff().dropna()
+
+        # 非差值版本
+        diff_total = df['total_revenue']
+        diff_skan = df['skan_revenue']
+
         # 计算差分后的相关系数
         paidCorr = diff_total.corr(diff_skan)
-        print(f'付费用户，向前推{paidTime/3600}小时 相关系数: {paidCorr}')
+        print(f'付费金额，向前推{paidTime/3600}小时 相关系数: {paidCorr}')
 
         if paidCorr > paidCorrMax:
             paidCorrMax = paidCorr
@@ -412,7 +417,7 @@ def main2Revenue(startDate = '20240710', endDate = '20240915'):
 
 
     print('------------------------------------')
-    print(f'>>付费用户相关系数最大值: {paidCorrMax}, 最大值对应时间: {paidCorrMaxTime}')
+    print(f'>>付费金额相关系数最大值: {paidCorrMax}, 最大值对应时间: {paidCorrMaxTime}')
     print('------------------------------------')
 
     # 画图，x轴是日期，y轴是 paid_install_count_total 和 paid_install_count_skan

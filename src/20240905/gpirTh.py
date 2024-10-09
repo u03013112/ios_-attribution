@@ -998,6 +998,36 @@ limit
 	df = execSql(sql)
 	df.to_csv('/src/data/lingqiang20240927.csv', index=False)
 
+def lingqiang20241006():
+	sql = '''
+select
+	*
+from
+	ods_platform_appsflyer_events_v3
+where
+	app = 116
+	and day = 20241006
+	and event_name = 'install'
+	and mediasource is null
+	and gp_referrer like '%applovin%'
+	and DATEDIFF(
+		to_date(event_time, 'yyyy-mm-dd hh:mi:ss'),
+		to_date(gg_install_begin_time, 'yyyy-mm-dd hh:mi:ss')
+	) <= 1
+	and advertising_id not in (
+		'0000-0000',
+		'00000000-0000-0000-0000-000000000000'
+	)
+order by
+	event_time desc
+limit
+	1000;
+	'''
+	df = execSql(sql)
+	df.to_csv('/src/data/lingqiang20241006.csv', index=False)
+
+
+
 if __name__ == '__main__':
 	# debug2('topheros')
 	# f3('topheros')
@@ -1012,7 +1042,8 @@ if __name__ == '__main__':
 	# organicDebug2_step2()
 	# debugAF()
 	# debugAF2()
-	lingqiang20240927()
+	# lingqiang20240927()
+	lingqiang20241006()
 
 
 
