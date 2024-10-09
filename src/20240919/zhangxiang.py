@@ -364,7 +364,7 @@ id6448786147,31,af_purchase_update_skan_on,0,1,972.22,2038.09,0,24,2024-07-05 09
 def main2Revenue(startDate = '20240710', endDate = '20240915'):
     totalDf = getTotalInstallCount(startDate, endDate)
 
-    paidTimeMin = 38*60*60
+    paidTimeMin = 36*60*60
     paidTimeMax = 50*60*60
     paidTimeList = [i for i in range(paidTimeMin, paidTimeMax, 30*60)]
 
@@ -395,6 +395,10 @@ def main2Revenue(startDate = '20240710', endDate = '20240915'):
 
         df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
         df = df.sort_values(by='install_day', ascending=True)
+
+        if paidTime == 48*60*60:
+            df.to_csv('/src/data/zhangxiangV1.csv', index=False)
+            
 
         # print(df)
 
