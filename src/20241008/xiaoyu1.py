@@ -63,11 +63,12 @@ def train(train_df, model_path='prophet_model.json'):
     prophet_train_df = train_df[['date', 'pud1_pct', 'ad_spend_pct', 'is_weekend']].copy()
     prophet_train_df.columns = ['ds', 'y', 'ad_spend_pct', 'is_weekend']
 
+    prophet_train_df['cap'] = 1
     # 移除含NaN的行
     prophet_train_df = prophet_train_df.dropna()
 
     # 创建和训练Prophet模型
-    model = Prophet()
+    model = Prophet(growth='logistic')
     model.add_regressor('ad_spend_pct')
     model.add_regressor('is_weekend')
     model.fit(prophet_train_df)
@@ -99,7 +100,7 @@ def predict(test_df, model):
             cost_increase = (next_day_row['ad_spend'] - current_ad_spend) / current_ad_spend
             
             # 获取该日期的周末特征
-            is_weekend_value = 1 if predict_date.weekday() in [5, 6] else 0  # 计算预测日期是否为周末
+            is_weekend_value = next_day_row['is_weekend']
 
             # 预测今日付费人数增幅
             future_df = pd.DataFrame({
@@ -108,6 +109,8 @@ def predict(test_df, model):
                 'is_weekend': [is_weekend_value]
             })
             
+            future_df['cap'] = 1
+
             # 调用模型进行预测
             forecast = model.predict(future_df)
             
@@ -124,6 +127,9 @@ def predict(test_df, model):
                 'arppu_daily_mean': row['arppu_daily_mean'],
                 'lastday_pud1': row['pud1'],
                 'predictedpud1_pct': forecast['yhat'].values[0],
+                'predictedpud1_pct_lower': forecast['yhat_lower'].values[0],
+                'predictedpud1_pct_upper': forecast['yhat_upper'].values[0],
+                'predictedpud1_pct_is_outlier': forecast['yhat'].values[0] < forecast['yhat_lower'].values[0] or forecast['yhat'].values[0] > forecast['yhat_upper'].values[0],
                 'predicted_spend': next_day_row['ad_spend'],
                 'predicted_pud1': predicted_pud1,
                 'predicted_revenue': predicted_revenue,
@@ -139,7 +145,9 @@ def predict(test_df, model):
     results_df['arppu_mape'] = np.abs((results_df['arppu_real'] - results_df['arppu_predict']) / results_df['arppu_real']) * 100
 
     # 计算付费用户MAPE
-    results_df['pud1_mape'] = np.abs((results_df['predicted_pud1'] - test_df['pud1'].values[1:]) / test_df['pud1'].values[1:]) * 100
+    results_df['pud1_read'] = test_df['pud1'].values[1:]
+    results_df.rename(columns={'predicted_pud1':'pud1_predict'},inplace=True)
+    results_df['pud1_mape'] = np.abs((results_df['pud1_predict'] - test_df['pud1'].values[1:]) / test_df['pud1'].values[1:]) * 100
 
     # 计算MAPE
     results_df['mape'] = np.abs((results_df['predicted_revenue'] - test_df['revenue'].values[1:]) / test_df['revenue'].values[1:]) * 100
@@ -275,10 +283,10 @@ def arppu(N):
     df['arppu_predict'] = df['arppu_daily_mean']
     df['arppu mape'] = np.abs((df['arppu_real'] - df['arppu_predict']) / df['arppu_real']) * 100
 
-    # test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
-    test_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
+    test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
+    # test_df = df[(df['date'] >= '2024-07-01') & (df['date'] <= '2024-09-12')]
 
-    # print(test_df[['date','arppu mape']])
+    # print(test_df)
     mape = test_df['arppu mape'].mean()
     print(f"ARPPU MAPE: {mape:.2f}%")
     return mape
@@ -287,7 +295,7 @@ def arppu(N):
 
 def main():
     # 设定N天的时间窗口
-    N = 16  # 例如过去30天
+    N = 15  # 例如过去30天
 
     # 获取历史数据
     historical_data = getHistoricalData()
@@ -330,27 +338,30 @@ def main():
     df['arppu_daily_mean'] = df['arppu'].shift(1).rolling(window=N, min_periods=1).mean()
 
     # 分割训练集和测试集
-    train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
+    # train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
+    train_df = df[(df['date'] >= '2024-06-01') & (df['date'] <= '2024-09-12')]
     test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
 
-    model_path = '/src/data/prophet_model.json'
+    model_path = '/src/data/prophet_model_6.json'
 
-    # 检查模型是否存在
-    if os.path.exists(model_path):
-        # 加载模型
-        with open(model_path, 'r') as f:
-            model = model_from_json(f.read())
-    else:
-        # 训练模型
-        model = train(train_df, model_path)
+    # # 检查模型是否存在
+    # if os.path.exists(model_path):
+    #     # 加载模型
+    #     with open(model_path, 'r') as f:
+    #         model = model_from_json(f.read())
+    # else:
+    #     # 训练模型
+    #     model = train(train_df, model_path)
+    
+    model = train(train_df, model_path)
 
     # 进行预测
     results_df = predict(test_df, model)
 
     # 输出查询表单
     print("Results DataFrame:")
-    print(results_df[['date', 'arppu_mape','pud1_mape','mape']])
-    results_df[['date', 'arppu_mape','pud1_mape','mape']].to_csv('/src/data/prediction_results_1.csv', index=False)
+    print(results_df[['date','weekday', 'arppu_mape','pud1_mape','mape']])
+    # results_df[['date', 'arppu_mape','pud1_mape','mape']].to_csv('/src/data/prediction_results_1.csv', index=False)
 
     # 输出到 CSV 文件
     results_df.to_csv('/src/data/prediction_results.csv', index=False)
@@ -399,7 +410,7 @@ def arppuTest():
     print(f"minN={minN},minMape={minMape}")
 
 if __name__ == "__main__":
-    # main()
+    main()
     # test01()
     # arppu(30)
-    arppuTest()
+    # arppuTest()
