@@ -33,7 +33,7 @@ def getHistoricalData():
         
     return data
 
-def preprocessData(data, N):
+def preprocessData(data):
     # 转换 'install_day' 列为日期格式
     data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
 
@@ -65,19 +65,17 @@ def preprocessData(data, N):
     # 计算ARPPU
     df['arppu'] = df['revenue'] / df['pud1']
 
-    # 计算前N天的平均值
-    df['avg_ad_spend_N'] = df['ad_spend'].rolling(window=N).mean().shift(1)
-    df['avg_revenue_N'] = df['revenue'].rolling(window=N).mean().shift(1)
-    df['avg_ins_N'] = df['ins'].rolling(window=N).mean().shift(1)
-    df['avg_pud1_N'] = df['pud1'].rolling(window=N).mean().shift(1)
-    df['avg_arppu_N'] = df['arppu'].rolling(window=N).mean().shift(1)
+    # 计算前3日的ARPPU
+    df['arppu_T_1'] = df['arppu'].shift(1)
+    df['arppu_T_2'] = df['arppu'].shift(2)
+    df['arppu_T_3'] = df['arppu'].shift(3)
 
     return df
 
 def train(train_df):
     # 准备Prophet所需的数据格式
-    prophet_train_df = train_df[['date', 'arppu', 'ad_spend', 'is_weekend', 'avg_ad_spend_N', 'avg_revenue_N', 'avg_ins_N', 'avg_pud1_N', 'avg_arppu_N']].copy()
-    prophet_train_df.columns = ['ds', 'y', 'ad_spend', 'is_weekend', 'avg_ad_spend_N', 'avg_revenue_N', 'avg_ins_N', 'avg_pud1_N', 'avg_arppu_N']
+    prophet_train_df = train_df[['date', 'arppu', 'ad_spend', 'is_weekend', 'arppu_T_1', 'arppu_T_2', 'arppu_T_3']].copy()
+    prophet_train_df.columns = ['ds', 'y', 'ad_spend', 'is_weekend', 'arppu_T_1', 'arppu_T_2', 'arppu_T_3']
 
     # 移除含NaN的行
     prophet_train_df = prophet_train_df.dropna()
@@ -86,11 +84,9 @@ def train(train_df):
     model = Prophet()
     model.add_regressor('ad_spend')
     model.add_regressor('is_weekend')
-    # model.add_regressor('avg_ad_spend_N')
-    # model.add_regressor('avg_revenue_N')
-    # model.add_regressor('avg_ins_N')
-    # model.add_regressor('avg_pud1_N')
-    model.add_regressor('avg_arppu_N')
+    model.add_regressor('arppu_T_1')
+    model.add_regressor('arppu_T_2')
+    model.add_regressor('arppu_T_3')
     model.fit(prophet_train_df)
 
     return model
@@ -104,11 +100,8 @@ def main():
     # 获取历史数据
     historical_data = getHistoricalData()
 
-    # 定义N值
-    N = 3  # 例如，使用前7天的平均值
-
     # 数据预处理
-    df = preprocessData(historical_data, N)
+    df = preprocessData(historical_data)
 
     # 定义测试集范围
     test_start_date = '2024-09-12'
@@ -120,7 +113,7 @@ def main():
     # 在测试集范围内逐天更新模型并进行预测
     for current_date in pd.date_range(start=test_start_date, end=test_end_date):
         # 训练集为从2024-04-01到当前日期的前一天
-        train_df = df[(df['date'] >= '2024-04-01') & (df['date'] < current_date)]
+        train_df = df[(df['date'] >= '2024-07-01') & (df['date'] < current_date)]
         
         # 训练模型
         model = train(train_df)
@@ -133,11 +126,9 @@ def main():
                 'ds': [next_date],
                 'ad_spend': [next_day_row['ad_spend']],
                 'is_weekend': [next_day_row['is_weekend']],
-                'avg_ad_spend_N': [next_day_row['avg_ad_spend_N']],
-                'avg_revenue_N': [next_day_row['avg_revenue_N']],
-                'avg_ins_N': [next_day_row['avg_ins_N']],
-                'avg_pud1_N': [next_day_row['avg_pud1_N']],
-                'avg_arppu_N': [next_day_row['avg_arppu_N']]
+                'arppu_T_1': [next_day_row['arppu_T_1']],
+                'arppu_T_2': [next_day_row['arppu_T_2']],
+                'arppu_T_3': [next_day_row['arppu_T_3']]
             })
             predicted_arppu = predict(model, future_df)
             real_arppu = next_day_row['revenue'] / next_day_row['pud1']
