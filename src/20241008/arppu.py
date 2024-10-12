@@ -70,12 +70,19 @@ def preprocessData(data):
     df['arppu_T_2'] = df['arppu'].shift(2)
     df['arppu_T_3'] = df['arppu'].shift(3)
 
+    # 修改列名以适应Prophet模型
+    df.rename(columns={
+        'date': 'ds',
+        'arppu': 'y'
+    }, inplace=True)
+
+    df = df.dropna()
+
     return df
 
 def train(train_df):
     # 准备Prophet所需的数据格式
-    prophet_train_df = train_df[['date', 'arppu', 'ad_spend', 'is_weekend', 'arppu_T_1', 'arppu_T_2', 'arppu_T_3']].copy()
-    prophet_train_df.columns = ['ds', 'y', 'ad_spend', 'is_weekend', 'arppu_T_1', 'arppu_T_2', 'arppu_T_3']
+    prophet_train_df = train_df[['ds', 'y', 'ad_spend', 'is_weekend', 'arppu_T_1', 'arppu_T_2', 'arppu_T_3']].copy()
 
     # 移除含NaN的行
     prophet_train_df = prophet_train_df.dropna()
@@ -104,36 +111,37 @@ def main():
     df = preprocessData(historical_data)
 
     # 定义测试集范围
-    test_start_date = '2024-09-12'
-    test_end_date = '2024-10-06'
+    # test_start_date = '2024-09-12'
+    test_start_date = '2024-07-01'
+    test_end_date = '2024-10-07'
 
     # 初始化结果列表
     results = []
 
     # 在测试集范围内逐天更新模型并进行预测
     for current_date in pd.date_range(start=test_start_date, end=test_end_date):
-        # 训练集为从2024-04-01到当前日期的前一天
-        train_df = df[(df['date'] >= '2024-07-01') & (df['date'] < current_date)]
+        # 训练集为从当前日期的前30天到前一天
+        train_start_date = current_date - pd.Timedelta(days=60)
+        train_df = df[(df['ds'] >= train_start_date) & (df['ds'] < current_date)]
         
         # 训练模型
         model = train(train_df)
         
-        # 预测下一天的ARPPU
-        next_date = current_date + pd.Timedelta(days=1)
-        if next_date in df['date'].values:
-            next_day_row = df[df['date'] == next_date].iloc[0]
+        # 预测当天的ARPPU
+        if current_date in df['ds'].values:
+            current_day_row = df[df['ds'] == current_date].iloc[0]
             future_df = pd.DataFrame({
-                'ds': [next_date],
-                'ad_spend': [next_day_row['ad_spend']],
-                'is_weekend': [next_day_row['is_weekend']],
-                'arppu_T_1': [next_day_row['arppu_T_1']],
-                'arppu_T_2': [next_day_row['arppu_T_2']],
-                'arppu_T_3': [next_day_row['arppu_T_3']]
+                'ds': [current_date],
+                'ad_spend': [current_day_row['ad_spend']],
+                'is_weekend': [current_day_row['is_weekend']],
+                'arppu_T_1': [current_day_row['arppu_T_1']],
+                'arppu_T_2': [current_day_row['arppu_T_2']],
+                'arppu_T_3': [current_day_row['arppu_T_3']]
             })
             predicted_arppu = predict(model, future_df)
-            real_arppu = next_day_row['revenue'] / next_day_row['pud1']
+            real_arppu = current_day_row['revenue'] / current_day_row['pud1']
             results.append({
-                'date': next_date,
+                'date': current_date,
                 'predicted_arppu': predicted_arppu,
                 'real_arppu': real_arppu
             })
