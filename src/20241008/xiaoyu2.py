@@ -60,7 +60,7 @@ def getHistoricalDataIOS():
 
     return data
 
-def train(train_df, model_path='prophet_model.json'):
+def train(train_df):
     # 准备Prophet所需的数据格式
     prophet_train_df = train_df[['date', 'revenue_pct', 'ad_spend_pct', 'is_weekend']].copy()
     prophet_train_df.columns = ['ds', 'y', 'ad_spend_pct', 'is_weekend']
@@ -73,10 +73,6 @@ def train(train_df, model_path='prophet_model.json'):
     model.add_regressor('ad_spend_pct')
     model.add_regressor('is_weekend')
     model.fit(prophet_train_df)
-
-    # 保存模型
-    with open(model_path, 'w') as f:
-        f.write(model_to_json(model))
 
     return model
 
@@ -178,16 +174,8 @@ def main():
     train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
     test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
 
-    model_path = '/src/data/prophet_model2.json'
-
-    # 检查模型是否存在
-    if os.path.exists(model_path):
-        # 加载模型
-        with open(model_path, 'r') as f:
-            model = model_from_json(f.read())
-    else:
-        # 训练模型
-        model = train(train_df, model_path)
+    
+    model = train(train_df)
 
     # 进行预测
     results_df = predict(test_df, model)

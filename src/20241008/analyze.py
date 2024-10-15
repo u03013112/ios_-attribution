@@ -188,12 +188,12 @@ def arppuCountryAnalysis():
     df['month'] = df['install_day'].dt.to_period('M')
 
     groupByMonthDf = df.groupby(['month', 'country']).agg({
-        'usd': 'sum',
+        'd1': 'sum',
         'pud1': 'sum',
     }).reset_index()
 
     # 计算每个国家 在不同的月 的arppu，看看是否存在波动
-    groupByMonthDf['arppu'] = groupByMonthDf['usd'] / groupByMonthDf['pud1']
+    groupByMonthDf['arppu'] = groupByMonthDf['d1'] / groupByMonthDf['pud1']
     groupByMonthDf = groupByMonthDf.sort_values(['country', 'month'], ascending=True)
     print(groupByMonthDf)
     groupByMonthDf.to_csv('/src/data/xy_arppu_country_analysis1.csv', index=False)
@@ -205,12 +205,12 @@ def arppuMediaAnalysis():
     df['month'] = df['install_day'].dt.to_period('M')
 
     groupByMonthDf = df.groupby(['month', 'mediasource']).agg({
-        'usd': 'sum',
+        'd1': 'sum',
         'pud1': 'sum',
     }).reset_index()
 
     # 计算每个媒体 在不同的月 的arppu，看看是否存在波动
-    groupByMonthDf['arppu'] = groupByMonthDf['usd'] / groupByMonthDf['pud1']
+    groupByMonthDf['arppu'] = groupByMonthDf['d1'] / groupByMonthDf['pud1']
     groupByMonthDf = groupByMonthDf.sort_values(['mediasource', 'month'], ascending=True)
     print(groupByMonthDf)
     groupByMonthDf.to_csv('/src/data/xy_arppu_media_analysis1.csv', index=False)
@@ -224,5 +224,5 @@ if __name__ == "__main__":
     # payUserCountryAnalysis2()
     # payUserMediaAnalysis2()
     
-    # arppuCountryAnalysis()
+    arppuCountryAnalysis()
     arppuMediaAnalysis()
