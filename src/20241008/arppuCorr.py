@@ -15,6 +15,7 @@ def getHistoricalData(startDate, endDate, limit):
 select
     to_char(from_unixtime(cast(install_timestamp as bigint)),'yyyymmdd') as date,
     sum(least(user_revenue_24h, {limit})) as 24hours_revenue_capped,
+    sum(user_revenue_24h) as revenue_24H,
     country,
     mediasource
 from (
@@ -62,11 +63,15 @@ def corr():
     df['arppu_d1'] = df['revenue_24H'] / df['payusers_d1']
     df['arpu_d1'] = df['revenue_24H'] / df['installs']
 
+    print(df.head())
+    print('------')
+    return
+
     print(df.corr())
 
 def Corr2():
     df = pd.read_csv('lw.csv')
-    df = df[df['date'] >= 20240701]
+    df = df[(df['date'] >= 20240701) & (df['date'] <= 20241012)]
     df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
     
     df['cost'] = df['cost'].str.replace(',', '').astype(float)
@@ -81,7 +86,7 @@ def Corr2():
     df['ROI_24H'] = df['ROI_24H'].str.replace('%', '').astype(float)
 
     # 定义首日付费金额上限
-    limits = [100, 200, 300, 400, 500, 3000]
+    limits = [100, 200, 300, 400, 500, 9999]
     # limits = [5000]
     startDate = '20240601'
     endDate = '20241015'
@@ -104,10 +109,10 @@ def Corr2():
         print(f'Revenue reduction ratio: {revenue_reduction_ratio:.2%}')
         
         # # 计算削弱后的ARPPU相关系数
-        # capped_corr = merged_df.corr()[f'arppu_d1_capped_{limit}']
-        # print(f'Correlation with capped ARPPU (limit {limit}):')
         # print(capped_corr)
-        print(merged_df.corr()[['24hours_revenue_capped',f'arppu_d1_capped_{limit}']])
+        # print(merged_df.corr()[['24hours_revenue_capped',f'arppu_d1_capped_{limit}']])
+        # print(merged_df.corr()[[f'arppu_d1_capped_{limit}']])
+        print(merged_df.corr()[['24hours_revenue_capped']])
         print()
 
 if __name__ == '__main__':

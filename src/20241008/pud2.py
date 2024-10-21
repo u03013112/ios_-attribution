@@ -125,8 +125,11 @@ def main(group_by_media=False, group_by_country=False):
     historical_data = getHistoricalData()
 
     # 获取所有媒体和国家的列表
-    mediaList = ['Facebook Ads','applovin_int','googleadwords_int']
-    countryList = ['GCC','JP','KR','T1','T2','T3','TW','US']
+    # mediaList = ['Facebook Ads','applovin_int','googleadwords_int']
+    # countryList = ['GCC','JP','KR','T1','T2','T3','TW','US']
+
+    mediaList = ['applovin_int']
+    countryList = ['T2']
     
     medias = mediaList if group_by_media else [None]
     countries = countryList if group_by_country else [None]
@@ -202,8 +205,26 @@ def main(group_by_media=False, group_by_country=False):
     average_mape = results_df['mape'].mean()
     print(f"所有pud1_pct的MAPE的平均值: {average_mape:.2f}%")
 
+def test():
+    all_all_df = pd.read_csv('/src/data/pud1_pct_prediction_results_all_all.csv')
+    print('大盘付费用户数预测 MAPE：',all_all_df['mape'].mean())
+
+    media_all_df = pd.read_csv('/src/data/pud1_pct_prediction_results_media_all.csv')
+    print('媒体大盘付费用户数预测 MAPE：')
+    print(media_all_df.groupby('media')['mape'].mean())
+
+    all_country_df = pd.read_csv('/src/data/pud1_pct_prediction_results_all_country.csv')
+    print('国家大盘付费用户数预测 MAPE：')
+    print(all_country_df.groupby('country')['mape'].mean())
+
+    media_country_df = pd.read_csv('/src/data/pud1_pct_prediction_results_media_country.csv')
+    print('媒体国家付费用户数预测 MAPE：')
+    print(media_country_df.groupby(['media','country'])['mape'].mean())
+
 if __name__ == "__main__":
     # main(False, False)
     # main(True, False)
     # main(False, True)
     main(True, True)
+    # test()
+# 
