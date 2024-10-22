@@ -7,7 +7,6 @@ from prophet.serialize import model_to_json, model_from_json
 def init():
     global execSql
     global dayStr
-    global days
 
     if 'o' in globals():
         print('this is online version')
