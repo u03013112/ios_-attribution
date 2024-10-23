@@ -31,7 +31,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20241016'  # 本地测试时的日期，可自行修改
+        dayStr = '20241021'  # 本地测试时的日期，可自行修改
 
     # 定义 app 的字典
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
@@ -170,7 +170,7 @@ def calculateDailySpendProportions(past_spend_data):
     past_spend_data['weekday'] = past_spend_data.index.weekday  # 周一=0，周日=6
 
     weekly_spend = past_spend_data.groupby(['week']).agg({'usd': 'sum'}).rename(columns={'usd': 'usd_week_total'})
-    past_spend_data = past_spend_data.merge(weekly_spend, on='week', left_index=True)
+    past_spend_data = past_spend_data.merge(weekly_spend, on='week')
 
     past_spend_data['daily_proportion'] = past_spend_data['usd'] / past_spend_data['usd_week_total']
 
@@ -194,7 +194,7 @@ def calculateSpendBaseline(past_spend_data):
     return baseline
 
 def generateSpendLevels(baseline, daily_proportions):
-    adjustment_levels = [-0.2, -0.15, -0.1, 0, 0.1, 0.15, 0.2]
+    adjustment_levels = [-0.3, -0.2, -0.15, -0.1, 0, 0.1, 0.15, 0.2, 0.3]
     spend_levels = []
     for adj in adjustment_levels:
         adjusted_baseline = baseline * (1 + adj)
