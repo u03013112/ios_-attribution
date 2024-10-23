@@ -36,6 +36,56 @@ def init():
     # 定义 app 的字典
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
 
+def createTable():
+    if 'o' in globals():
+        from odps.models import Schema, Column, Partition
+        # 创建表格（如果不存在）
+        columns = [
+            Column(name='app', type='string', comment='app identifier'),
+            Column(name='media', type='string', comment='media source'),
+            Column(name='country', type='string', comment='country'),
+            Column(name='install_day', type='string', comment='install day'),
+            Column(name='predicted_level', type='double', comment='predicted level'),
+            Column(name='predicted_spend', type='double', comment='predicted spend amount'),
+            Column(name='predicted_revenue', type='double', comment='predicted revenue amount'),
+            Column(name='predicted_roi', type='double', comment='predicted ROI'),
+        ]
+        partitions = [
+            Partition(name='day', type='string', comment='prediction date, like 20221018')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table_name = 'lastwar_predict_revenue_day1_by_spend_suggestion'
+        o.create_table(table_name, schema, if_not_exists=True)
+        print(f"表 {table_name} 创建成功或已存在。")
+    else:
+        print('本地版本不创建表格')
+
+def deletePartition(dayStr):
+    if 'o' in globals():
+        table_name = 'lastwar_predict_revenue_day1_by_spend_suggestion'
+        t = o.get_table(table_name)
+        # 删除分区（如果存在）
+        t.delete_partition('day=%s' % (dayStr), if_exists=True)
+        print(f"分区 day={dayStr} 已从表 {table_name} 中删除。")
+    else:
+        print('本地版本不删除分区')
+
+def writeTable(df, dayStr):
+    print('尝试将结果写入表格:')
+    print(df.head(5))
+    if 'o' in globals():
+        table_name = 'lastwar_predict_revenue_day1_by_spend_suggestion'
+        t = o.get_table(table_name)
+        with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
+            # 确保列的类型正确
+            df['install_day'] = df['install_day'].astype(str)
+            writer.write(df)
+        print(f"结果已写入表 {table_name} 的分区 day={dayStr}。")
+    else:
+        print('writeTable 失败，o 未定义')
+        print(dayStr)
+        print(df)
+
 def fetchModel(current_monday_str, app, media='ALL', country='ALL'):
     media_condition = f"and media = '{media}'" if media != 'ALL' else "and media = 'ALL'"
     country_condition = f"and country = '{country}'" if country != 'ALL' else "and country = 'ALL'"
@@ -53,7 +103,7 @@ where
     {media_condition}
     {country_condition}
 ;
-        '''
+    '''
     print("执行 SQL 获取模型：")
     print(sql)
     models_df = execSql(sql)
@@ -81,11 +131,12 @@ def getPast4WeeksData(dayStr, platform, media='ALL', country='ALL'):
     media_mapping = {
         'FACEBOOK': 'Facebook Ads',
         'GOOGLE': 'googleadwords_int',
-        'APPLOVIN': 'applovin_int'
+        'APPLOVIN': 'applovin_int',
+        'ALL': 'ALL'
     }
     mapped_media = media_mapping.get(media, media)
 
-    media_condition = f"and mediasource = '{mapped_media}'" if media != 'ALL' else ""
+    media_condition = f"and mediasource = '{mapped_media}'" if mapped_media != 'ALL' else ""
     country_condition = f"and country = '{country}'" if country != 'ALL' else ""
 
     sql = f'''
@@ -101,7 +152,7 @@ where
 group by
     install_day
 ;
-        '''
+    '''
     print("执行 SQL 获取过去4周的数据：")
     print(sql)
     data = execSql(sql)
@@ -135,8 +186,6 @@ def calculateDailySpendProportions(past_spend_data):
 
 def calculateSpendBaseline(past_spend_data):
     past_spend_data['week'] = past_spend_data.index.isocalendar().week
-    # weekly_totals = past_spend_data.groupby('week').agg({'usd': 'sum'})
-    # baseline = weekly_totals['usd'].mean()
 
     # 找到最后一周的花费总额
     last_week = past_spend_data['week'].max()
@@ -174,7 +223,7 @@ def predictRevenueForLevel(spend_level, model, current_week_monday):
     total_revenue = prediction_df['predicted_revenue'].sum()
     total_spend = spend_level['total_spend']
 
-    # 计算 ROI 为收益率，即（收入 - 花费）/ 花费
+    # 计算 ROI 为收益率，即（收入）/ 花费
     roi = (total_revenue) / total_spend if total_spend != 0 else np.nan
     spend_level['predicted_revenue'] = total_revenue
     spend_level['roi'] = roi  # 例如，1.5 表示 ROI 为 1.5
@@ -218,8 +267,11 @@ where
         return 0.02
     return roi_threshold_df.iloc[0]['roi_001_best']
 
-def main(group_by_media=False, group_by_country=False):
+def main(group_by_media=False, group_by_country=False, all_results=None):
     global dayStr
+
+    if all_results is None:
+        all_results = []
 
     current_date = pd.to_datetime(dayStr, format='%Y%m%d')
     current_week_monday = current_date - pd.Timedelta(days=current_date.weekday())
@@ -234,7 +286,7 @@ def main(group_by_media=False, group_by_country=False):
     for platform in platformList:
 
         if platform == 'ios' and group_by_media == True:
-            print('ios 平台不支持按媒体分组')
+            print('iOS 平台不支持按媒体分组')
             continue
 
         app = appDict[platform]
@@ -313,40 +365,76 @@ def main(group_by_media=False, group_by_country=False):
                     roi_value = level['roi']
                     print(f"调整 {adj_percent:.0f}%：预测ROI = {roi_value*100:.2f}%")
 
-                # 第9步：获取 ROI 阈值
-                roi_threshold = getRoiThreshold(lastSundayStr, app, media, country)
+                # # 第9步：获取 ROI 阈值
+                # roi_threshold = getRoiThreshold(lastSundayStr, app, media, country)
                 
-                print(f"ROI 阈值：{roi_threshold*100:.2f}%")
-                # 保守起见，将 ROI 阈值 升高一些
-                # 鉴于之前经验的误差范围，将阈值提高 10%
-                roi_threshold *= 1.1
-                print(f"保守的 ROI 阈值：{roi_threshold*100:.2f}%")
+                # print(f"ROI 阈值：{roi_threshold*100:.2f}%")
+                # # 保守起见，将 ROI 阈值 升高一些
+                # # 鉴于之前经验的误差范围，将阈值提高 10%
+                # roi_threshold *= 1.1
+                # print(f"保守的 ROI 阈值：{roi_threshold*100:.2f}%")
 
-                # 找到 ROI 大于等于阈值的最高档位并打印结果
-                best_level = findBestLevel(spend_levels, roi_threshold)
-                if best_level:
-                    adjustment_percent = best_level['adjustment'] * 100
-                    print(f"最佳调整档位：{adjustment_percent:.0f}%")
-                    print(f"总花费：{best_level['total_spend']:.2f}")
-                    print(f"预测总收入：{best_level['predicted_revenue']:.2f}")
-                    print(f"预测ROI：{best_level['roi']*100:.2f}%")
-                    print("每日预计花费和预测收入：")
-                    daily_preds = best_level['daily_predictions']
+                # # 找到 ROI 大于等于阈值的最高档位并打印结果
+                # best_level = findBestLevel(spend_levels, roi_threshold)
+                # if best_level:
+                #     adjustment_percent = best_level['adjustment'] * 100
+                #     print(f"最佳调整档位：{adjustment_percent:.0f}%")
+                #     print(f"总花费：{best_level['total_spend']:.2f}")
+                #     print(f"预测总收入：{best_level['predicted_revenue']:.2f}")
+                #     print(f"预测ROI：{best_level['roi']*100:.2f}%")
+                #     print("每日预计花费和预测收入：")
+                #     daily_preds = best_level['daily_predictions']
+                #     daily_preds['install_day'] = daily_preds['install_day'].dt.strftime('%Y-%m-%d')
+                #     daily_preds['ad_spend'] = daily_preds['ad_spend'].round(2)
+                #     daily_preds['predicted_revenue'] = daily_preds['predicted_revenue'].round(2)
+                #     print(daily_preds[['install_day', 'ad_spend', 'predicted_revenue']].to_string(index=False))
+                # else:
+                #     print(f"没有档位的预测ROI能达到或超过 {roi_threshold*100:.2f}%。")
+                #     print("各档位的预测ROI如下：")
+                #     for level in sorted(spend_levels, key=lambda x: x['adjustment']):
+                #         adj_percent = level['adjustment'] * 100
+                #         roi_value = level['roi']
+                #         print(f"调整 {adj_percent:.0f}%：预测ROI = {roi_value*100:.2f}%")
+
+                # 将每个档位的结果收集到 all_results 中
+                for level in spend_levels:
+                    adj_percent = level['adjustment'] * 100
+                    roi_value = level['roi']
+
+                    daily_preds = level['daily_predictions']
                     daily_preds['install_day'] = daily_preds['install_day'].dt.strftime('%Y-%m-%d')
                     daily_preds['ad_spend'] = daily_preds['ad_spend'].round(2)
                     daily_preds['predicted_revenue'] = daily_preds['predicted_revenue'].round(2)
-                    print(daily_preds[['install_day', 'ad_spend', 'predicted_revenue']].to_string(index=False))
-                else:
-                    print(f"没有档位的预测ROI能达到或超过 {roi_threshold*100:.2f}%。")
-                    print("各档位的预测ROI如下：")
-                    for level in sorted(spend_levels, key=lambda x: x['adjustment']):
-                        adj_percent = level['adjustment'] * 100
-                        roi_value = level['roi']
-                        print(f"调整 {adj_percent:.0f}%：预测ROI = {roi_value*100:.2f}%")
+
+                    for idx, row in daily_preds.iterrows():
+                        result = {
+                            'app': app,
+                            'media': media,
+                            'country': country,
+                            'install_day': row['install_day'],
+                            'predicted_level': level['adjustment'],
+                            'predicted_spend': row['ad_spend'],
+                            'predicted_revenue': row['predicted_revenue'],
+                            'predicted_roi': level['roi']
+                        }
+                        all_results.append(result)
+
+def run_all():
+    createTable()
+    deletePartition(dayStr)
+    all_results = []
+
+    main(False, False, all_results)
+    main(True, False, all_results)
+    main(False, True, all_results)
+    main(True, True, all_results)
+
+    if all_results:
+        results_df = pd.DataFrame(all_results)
+        writeTable(results_df, dayStr)
+    else:
+        print("没有需要写入的结果。")
 
 if __name__ == "__main__":
     init()
-    main(False, False)
-    main(True, False)
-    main(False, True)
-    main(True, True)
+    run_all()
