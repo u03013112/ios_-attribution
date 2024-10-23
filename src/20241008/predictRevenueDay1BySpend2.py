@@ -77,7 +77,15 @@ def getPast4WeeksData(dayStr, platform, media='ALL', country='ALL'):
 
     table_name = 'tmp_lw_cost_and_roi_by_day' if platform == 'android' else 'tmp_lw_cost_and_roi_by_day_ios'
 
-    media_condition = f"and mediasource = '{media}'" if media != 'ALL' else ""
+    # 媒体映射，从模型表的媒体名称映射为实际数据表中的媒体名称
+    media_mapping = {
+        'FACEBOOK': 'Facebook Ads',
+        'GOOGLE': 'googleadwords_int',
+        'APPLOVIN': 'applovin_int'
+    }
+    mapped_media = media_mapping.get(media, media)
+
+    media_condition = f"and mediasource = '{mapped_media}'" if media != 'ALL' else ""
     country_condition = f"and country = '{country}'" if country != 'ALL' else ""
 
     sql = f'''
@@ -224,6 +232,11 @@ def main(group_by_media=False, group_by_country=False):
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
 
     for platform in platformList:
+
+        if platform == 'ios' and group_by_media == True:
+            print('ios 平台不支持按媒体分组')
+            continue
+
         app = appDict[platform]
         mediaList = ['ALL']
         countryList = ['ALL']
@@ -324,7 +337,7 @@ def main(group_by_media=False, group_by_country=False):
                     daily_preds['predicted_revenue'] = daily_preds['predicted_revenue'].round(2)
                     print(daily_preds[['install_day', 'ad_spend', 'predicted_revenue']].to_string(index=False))
                 else:
-                    print(f"没有档位的预测ROI能达到或超过 {roi_threshold:.2f}。")
+                    print(f"没有档位的预测ROI能达到或超过 {roi_threshold*100:.2f}%。")
                     print("各档位的预测ROI如下：")
                     for level in sorted(spend_levels, key=lambda x: x['adjustment']):
                         adj_percent = level['adjustment'] * 100
@@ -334,6 +347,6 @@ def main(group_by_media=False, group_by_country=False):
 if __name__ == "__main__":
     init()
     main(False, False)
-    # main(True, False)
-    # main(False, True)
-    # main(True, True)
+    main(True, False)
+    main(False, True)
+    main(True, True)
