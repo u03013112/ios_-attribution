@@ -29,7 +29,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241014'  # 本地测试时的日期，可自行修改
+        dayStr = '20241013'  # 本地测试时的日期，可自行修改
 
     # 定义 app 的字典
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
@@ -202,7 +202,7 @@ def makePredictionsAndCalculateErrors(actual_data, model, app, media, country):
     results_df['mape_week'] = np.abs(results_df['revenue_d1_predicted'].sum() - results_df['revenue_d1_read'].sum()) / results_df['revenue_d1_read'].replace(0, np.nan).sum()
     
     # 添加 week 列
-    results_df['week'] = results_df['install_day'].dt.strftime('%Y%U')
+    results_df['week'] = results_df['install_day'].dt.strftime('%Y%W')
     # 处理无限值和 NaN
     results_df['mape_day'] = results_df['mape_day'].replace([np.inf, -np.inf], np.nan)
 
@@ -235,6 +235,9 @@ def main(isMedia, isCountry):
     install_day_start = last_week_monday.strftime('%Y%m%d')
     last_week_sunday = last_week_monday + pd.Timedelta(days=6)
     install_day_end = last_week_sunday.strftime('%Y%m%d')
+
+    print('install_day_start:', install_day_start)
+    print('install_day_end:', install_day_end)
 
     # 获取上周一的字符串表示，用于加载模型
     models_monday = last_week_monday.strftime('%Y%m%d')

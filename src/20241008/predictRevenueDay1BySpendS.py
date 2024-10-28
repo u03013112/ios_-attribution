@@ -351,6 +351,9 @@ def main(group_by_media=False, group_by_country=False, all_results=None):
                 # 第4步：计算花费基线
                 baseline = calculateSpendBaseline(past_spend_data)
                 print(f"花费基线：{baseline:.2f}")
+                if baseline < 1000:
+                    print("花费基线过低，跳过此组合。")
+                    continue
 
                 # 第5步和第6步：生成花费档位并计算每日预计花费
                 spend_levels = generateSpendLevels(baseline, daily_proportions)
