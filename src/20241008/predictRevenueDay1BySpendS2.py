@@ -204,7 +204,7 @@ def getLastWeekData(platform, media='ALL', country='ALL'):
     total_revenue = data['total_revenue'].iloc[0]
     return total_spend, total_revenue
 
-def getLastNWeekMapeData(dayStr, n=1):
+def getLastNWeekMapeData(dayStr, n=8):
     currentMonday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=pd.to_datetime(dayStr, format='%Y%m%d').weekday())
     lastMonday = currentMonday - pd.Timedelta(days=7)
     lastNWeekMonday = currentMonday - pd.Timedelta(days=7*n)
@@ -224,10 +224,9 @@ group by app, media, country
 
     return execSql(sql)
 
-
 def main(group_by_media=False, group_by_country=False, all_results=None, reports=None):
-    print('group_by_media:',group_by_media)
-    print('group_by_country:',group_by_country)
+    print('group_by_media:', group_by_media)
+    print('group_by_country:', group_by_country)
 
     global dayStr
 
@@ -251,6 +250,12 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
 
     last8WeekMapeDf = getLastNWeekMapeData(dayStr, 8)
 
+    # 创建一个字典，用于快速查找特定 app, media, country 的 mape
+    mape_dict = {}
+    for _, row in last8WeekMapeDf.iterrows():
+        key = (row['app'], row['media'], row['country'])
+        mape_dict[key] = row['mape_week']
+
     if 'o' not in globals():
         from src.report.feishu.feishu import sendMessageDebug
         last8WeekMapeList = last8WeekMapeDf.to_dict(orient='records')
@@ -259,14 +264,20 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
             mapeStr += f"{row['app']} {row['media']} {row['country']} {row['mape_week']*100:.2f}%\n"
         sendMessageDebug(mapeStr)
 
-        # 获取不可靠的媒体和国家列表
-        unreliableMediaAndCountryList = last8WeekMapeDf[last8WeekMapeDf['mape_week'] > .2].to_dict(orient='records')
-        mapeStr = f'lastwar {dayStr} 最近8周 不可靠的媒体和国家列表：\n'
-        for row in unreliableMediaAndCountryList:
-            mapeStr += f"{row['app']} {row['media']} {row['country']} {row['mape_week']*100:.2f}%\n"
-        sendMessageDebug(mapeStr)
+    # 固定媒体和国家列表
+    fixed_media_list = ['GOOGLE', 'APPLOVIN', 'FACEBOOK']
+    fixed_country_list = ['T1', 'US', 'JP', 'KR']
 
-    unreliableMediaAndCountryList = last8WeekMapeDf[last8WeekMapeDf['mape_week'] > .2][['app','media','country']].to_dict(orient='records')
+    # 如果固定媒体和国家参数提供，覆盖默认的固定列表
+    if group_by_media == True:
+        mediaList = fixed_media_list
+    else:
+        mediaList = ['ALL']
+    
+    if group_by_country == True:
+        countryList = fixed_country_list
+    else:
+        countryList = ['ALL']
 
     for platform in platformList:
 
@@ -275,55 +286,11 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
             continue
 
         app = appDict[platform]
-        mediaList = ['ALL']
-        countryList = ['ALL']
-
-        if group_by_media or group_by_country:
-            # 从建议表中获取媒体和国家列表
-            media_condition = "" if group_by_media else "and media = 'ALL'"
-            country_condition = "" if group_by_country else "and country = 'ALL'"
-
-            sql_models = f'''
-            select distinct
-                media,
-                country
-            from
-                lastwar_predict_revenue_day1_by_spend_suggestion
-            where
-                day = '{currentMondayStr}'
-                and app = '{app}'
-                {media_condition}
-                {country_condition}
-            '''
-            print(sql_models)
-            models_df = execSql(sql_models)
-
-            if group_by_media:
-                mediaList = models_df['media'].unique().tolist()
-                mediaList = [media if media else 'ALL' for media in mediaList]
-                # 排除 'ALL'，避免重复
-                mediaList = [media for media in mediaList if media != 'ALL']
-
-            if group_by_country:
-                countryList = models_df['country'].unique().tolist()
-                countryList = [country if country else 'ALL' for country in countryList]
-                countryList = [country for country in countryList if country != 'ALL']
-
-            # 如果列表为空，则设置为 ['ALL']
-            if not mediaList:
-                mediaList = ['ALL']
-            if not countryList:
-                countryList = ['ALL']
 
         print(f"平台：{platform}，媒体列表：{mediaList}，国家列表：{countryList}")
-        # continue
 
         for media in mediaList:
             for country in countryList:
-                if {'app':app,'media': media, 'country': country} in unreliableMediaAndCountryList:
-                    print(f"跳过不可靠的媒体和国家组合：{media} - {country}")
-                    continue
-
                 print(f"\n处理平台：{platform}，媒体：{media}，国家：{country}")
                 # 获取建议数据
                 suggestion_df = getSuggestionData(platform, media, country)
@@ -341,6 +308,21 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
                 print('所有建议数据：')
                 print(suggestion_df.groupby(['predicted_level', 'predicted_roi']).sum())
 
+                # 获取上周的实际花费和收入，计算上周的实际 ROI
+                last_week_spend, last_week_revenue = getLastWeekData(platform, media, country)
+                if last_week_spend is not None and last_week_spend != 0:
+                    last_week_roi = last_week_revenue / last_week_spend
+                else:
+                    last_week_roi = 0
+                print(f"上周花费：{last_week_spend:.2f}，上周收入：{last_week_revenue:.2f}，上周 ROI：{last_week_roi*100:.2f}%")
+
+                # 获取最近8周的MAPE
+                mape = mape_dict.get((app, media, country), None)
+                if mape is not None:
+                    mape_str = f"最近8周MAPE：{mape*100:.2f}%"
+                else:
+                    mape_str = "最近8周MAPE：N/A"
+
                 # 选择最佳档位
                 best_level_df = selectBestLevel(suggestion_df, conservative_roi_threshold)
                 if best_level_df is not None:
@@ -349,14 +331,6 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
                     predicted_level = best_level_df['predicted_level'].iloc[0]
                     percentage_change = predicted_level * 100  # 修改此处，直接乘以 100
                     increase_or_decrease = "增长" if percentage_change > 0 else "降低"
-
-                    # 获取上周的实际花费和收入，计算上周的实际 ROI
-                    last_week_spend, last_week_revenue = getLastWeekData(platform, media, country)
-                    if last_week_spend is not None and last_week_spend != 0:
-                        last_week_roi = last_week_revenue / last_week_spend
-                    else:
-                        last_week_roi = 0
-                    print(f"上周花费：{last_week_spend:.2f}，上周收入：{last_week_revenue:.2f}，上周 ROI：{last_week_roi*100:.2f}%")
 
                     # 收集结果
                     for idx, row in best_level_df.iterrows():
@@ -372,30 +346,17 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
                         all_results.append(result)
 
                     # 更新报告行，按照新的格式
-                    if percentage_change <= 0.01 or percentage_change >= -0.01:
-                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比 保持不变），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"    
+                    if percentage_change <= 1 and percentage_change >= -1:
+                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比 保持不变），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n    {mape_str}\n"    
                     else:
-                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比{increase_or_decrease}{abs(percentage_change):.0f}%），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"
+                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比 {increase_or_decrease} {abs(percentage_change):.0f}%），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n    {mape_str}\n"
                     reports.append(report_line)
                 else:
                     # 如果没有满足条件的档位，不做任何建议
                     print("未找到满足条件的档位。")
-                    continue
-                    # 如果没有满足条件的档位，建议适度减少花费，不提供预计 ROI
-                    report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议适度减少花费。"
-
-                    # 获取上周的实际花费和收入，计算上周的实际 ROI
-                    last_week_spend, last_week_revenue = getLastWeekData(platform, media, country)
-                    if last_week_spend is not None and last_week_spend != 0:
-                        last_week_roi = last_week_revenue / last_week_spend
-                    else:
-                        last_week_roi = 0
-                    print(f"上周花费：{last_week_spend:.2f}，上周收入：{last_week_revenue:.2f}，上周 ROI：{last_week_roi*100:.2f}%")
-
-                    # 添加上周 ROI 和倒推 1 日 ROI 到报告
-                    report_line += f"\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"
+                    report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    所有预测均不能达到目标ROI。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n    {mape_str}\n"
                     reports.append(report_line)
-
+                    
 def run_all():
     createTable()
     deletePartition(dayStr)
@@ -414,13 +375,13 @@ def run_all():
     # 大盘
     reports.append('**大盘：**\n')
     main(False, False, all_results, reports)
-    # 分媒体
+    # 按媒体
     reports.append('**分媒体：**\n')
     main(True, False, all_results, reports)
-    # 分国家（如果需要可以取消注释）
+    # 按国家
     reports.append('**分国家：**\n')
     main(False, True, all_results, reports)
-    # 分媒体国家（如果需要可以取消注释）
+    # 按媒体和国家
     reports.append('**分媒体国家：**\n')
     main(True, True, all_results, reports)
 
@@ -432,12 +393,12 @@ def run_all():
         
         # 添加飞书报告
         if 'o' not in globals():
-            from src.report.feishu.feishu import sendMessageDebug, sendMessage,getTenantAccessToken
+            from src.report.feishu.feishu import sendMessageDebug, sendMessage, getTenantAccessToken
             message = '**Lastwar 花费建议：**\n\n'
             message += ('\n'.join(reports))
             # sendMessageDebug(message)
             token = getTenantAccessToken()
-            sendMessage(token,message,'oc_bc74e631c1d907b76d11bc511403c2e0')
+            sendMessage(token, message, 'oc_bc74e631c1d907b76d11bc511403c2e0')
     else:
         print("没有生成任何报告。")
 
