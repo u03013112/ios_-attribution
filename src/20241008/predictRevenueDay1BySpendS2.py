@@ -372,7 +372,10 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
                         all_results.append(result)
 
                     # 更新报告行，按照新的格式
-                    report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比{increase_or_decrease}{abs(percentage_change):.0f}%），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"
+                    if percentage_change <= 0.01 or percentage_change >= -0.01:
+                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比 保持不变），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"    
+                    else:
+                        report_line = f"{platform.upper()} 媒体：{media} 国家：{country} \n    建议总花费 {total_spend:.2f} 美元（与上周相比{increase_or_decrease}{abs(percentage_change):.0f}%），预计 ROI：{predicted_roi*100:.2f}%。\n    上周 ROI：{last_week_roi*100:.2f}% ，倒推 1 日 ROI：{roi_threshold*100:.2f}%。\n"
                     reports.append(report_line)
                 else:
                     # 如果没有满足条件的档位，不做任何建议
