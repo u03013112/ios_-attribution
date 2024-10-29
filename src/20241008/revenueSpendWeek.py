@@ -291,12 +291,12 @@ def test():
 
 
 if __name__ == "__main__":
-    # main(False, False)
-    # main(True, False)
-    # main(False, True)
-    # main(True, True)
+    main(False, False)
+    main(True, False)
+    main(False, True)
+    main(True, True)
 
     # test()
 
     # corr()
-    corrMedia()
+    # corrMedia()
