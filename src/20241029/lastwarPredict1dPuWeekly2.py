@@ -133,9 +133,9 @@ GROUP BY
 ;
 
 SELECT
-    r.install_day,
-    r.country,
-    r.mediasource,
+    COALESCE(r.install_day, c.install_day) AS install_day,
+    COALESCE(r.country, c.country) AS country,
+    COALESCE(r.mediasource, c.mediasource) AS mediasource,
     {', '.join([f"r.revenue_1d_{group['name']}" for group in payUserGroupList])},
     {', '.join([f"r.pu_1d_{group['name']}" for group in payUserGroupList])},
     r.revenue_1d,
@@ -143,7 +143,7 @@ SELECT
     c.usd AS cost
 FROM
     @result AS r
-    LEFT JOIN @cost_data AS c 
+    FULL OUTER JOIN @cost_data AS c 
         ON r.install_day = c.install_day
         AND r.country = c.country
         AND r.mediasource = c.mediasource
@@ -241,7 +241,7 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     # 计算预测 ARPPU：先shift一天，再计算过去56天的均值
     merged_long = merged_long.sort_values(['pay_user_group_name', 'install_day'])
     merged_long['actual_ARPPU_shifted'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU'].shift(1)
-    merged_long['predicted_ARPPU'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU_shifted'].rolling(window=56, min_periods=1).mean().reset_index(level=0, drop=True)
+    merged_long['predicted_ARPPU'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
     
     # 8. 重命名和选择最终列
     merged_long = merged_long.rename(columns={'install_day': 'ds', 'pu_change_ratio': 'y'})
@@ -261,8 +261,17 @@ def train_model(train_df):
     # 创建和训练Prophet模型
     model = Prophet()
     model.add_regressor('cost_change_ratio')
-    model.add_regressor('is_weekend')
-    model.fit(train_df[['ds', 'y', 'cost_change_ratio','is_weekend']])
+    # model.add_regressor('is_weekend')
+
+    train_df2 = train_df[['ds', 'y', 'cost_change_ratio','is_weekend']]
+    # 去掉输入列中NaN和inf
+    train_df2 = train_df2.replace([np.inf, -np.inf], np.nan).dropna()
+
+    if len(train_df2) < 30:
+        print("训练数据不足（少于30条），跳过训练。")
+        return None
+
+    model.fit(train_df2)
     
     # 打印模型训练日志
     print("Model Training Completed")
@@ -332,19 +341,19 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
                 # 过滤当前组的数据
                 group_df = df[df['pay_user_group_name'] == group_name_single].copy()
                 
+                # group_df 按照ds升序排序
+                group_df = group_df.sort_values('ds')
+                group_df['lastday_pu_1d'] = group_df['pu_1d'].shift(1)
+
                 # 初始化预测日期
                 temp_current_date = current_date
 
                 while temp_current_date <= end_date:
                     # 定义训练集为过去60天
-                    # train_start_date = temp_current_date - timedelta(days=210)
-                    # train_end_date = temp_current_date - timedelta(days=1)
-                    train_start_date = pd.to_datetime('2024-04-01')
-                    train_end_date = pd.to_datetime('2024-08-04')
-
+                    train_start_date = temp_current_date - timedelta(days=60)
+                    train_end_date = temp_current_date - timedelta(days=1)
+                    
                     train_subset = group_df[(group_df['ds'] >= train_start_date) & (group_df['ds'] <= train_end_date)]
-                    print(train_subset)
-                    return
 
                     if train_subset.empty:
                         print(f"    训练数据为空，跳过日期: {temp_current_date.date()}")
@@ -359,9 +368,12 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
                     # 训练模型
                     model = train_model(train_subset)
 
+                    if model is None:
+                        temp_current_date += timedelta(days=7)
+                        continue
+
                     # 定义未来7天的预测集
-                    # future_dates = pd.date_range(start=temp_current_date, periods=7)
-                    future_dates = pd.date_range(start='2024-08-05', end='2024-10-13', freq='D')
+                    future_dates = pd.date_range(start=temp_current_date, periods=7)
                     
                     # 从 group_df 中获取未来的 cost_change_ratio
                     future_df = group_df[group_df['ds'].isin(future_dates)][['ds', 'cost_change_ratio','is_weekend']].copy()
@@ -378,25 +390,12 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
                     predictions['media'] = media if media else 'all'
                     predictions['pay_user_group_name'] = group_name_single
 
-                    # 获取已知的最后一天的 pu_1d，用于递推预测
-                    last_known_pu = train_subset['pu_1d'].iloc[-1]
-
-                    # 根据预测的变动比例，计算预测的 pu_1d
-                    predicted_pu = []
-                    previous_pu = last_known_pu
-                    for idx, row in predictions.iterrows():
-                        predicted_change_ratio = row['yhat']
-                        new_pu = previous_pu * (1 + predicted_change_ratio)
-                        predicted_pu.append(new_pu)
-                        previous_pu = new_pu
-
-                    predictions['predicted_pu'] = predicted_pu
-
                     # 获取实际的 pu 值（如果可用）
-                    actuals = group_df[group_df['ds'].isin(future_dates)][['ds', 'cost_change_ratio', 'y', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']].copy()
+                    actuals = group_df[group_df['ds'].isin(future_dates)][['ds', 'cost_change_ratio', 'y', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'lastday_pu_1d', 'revenue_1d']].copy()
 
                     # 合并预测与实际数据
                     merged = pd.merge(predictions, actuals, on='ds', how='left', suffixes=('', '_actual'))
+                    merged['predicted_pu'] = merged['lastday_pu_1d'] * (1 + merged['yhat'])
 
                     # 填充缺失的 predicted_ARPPU
                     merged['predicted_ARPPU'] = merged['predicted_ARPPU'].fillna(train_subset['predicted_ARPPU'].iloc[-1])
@@ -412,12 +411,12 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
                     merged['mape_revenue'] = calculate_mape(merged['actual_revenue'], merged['predicted_revenue'])
                     merged['mape_arppu'] = calculate_mape(merged['actual_ARPPU'], merged['predicted_ARPPU'])
 
+
                     # 添加结果到列表
                     results.append(merged)
 
                     # 移动到下一周
                     temp_current_date += timedelta(days=7)
-                    break
 
     # 将所有结果合并
     if results:
@@ -596,17 +595,75 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
 
 
 if __name__ == '__main__':
-    # 定义不同的 payUserGroupList 和对应的前缀
     configurations = [
         {
             'payUserGroupList': [
                 {'name': 'all', 'min': 0, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pu_all1',
+            'prefix': 'lw20241030_pudt_all1',
             'group_by_media': False,
             'group_by_country': False
         },
-        # 可以添加更多的配置
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_all1_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_all1_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_all1_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_two2',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_two2_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_two2_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_two2_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
     ]
 
     # 运行每个配置
