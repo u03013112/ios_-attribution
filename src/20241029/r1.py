@@ -61,10 +61,16 @@ def main():
         'lw20241030_pudt_all1_media',
         'lw20241030_pudt_all1_country',
         'lw20241030_pudt_all1_media_country',
+        
         'lw20241030_pudt_two2',
         'lw20241030_pudt_two2_media',
         'lw20241030_pudt_two2_country',
-        'lw20241030_pudt_two2_media_country'
+        'lw20241030_pudt_two2_media_country',
+
+        'lw20241030_pudt_3',
+        'lw20241030_pudt_3_media',
+        'lw20241030_pudt_3_country',
+        'lw20241030_pudt_3_media_country'
     ]
 
     # 读取并汇总MAPE结果

@@ -518,10 +518,12 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
         actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
         predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
         actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum'),
-        actual_arppu=pd.NamedAgg(column='actual_ARPPU', aggfunc='mean'),
-        predicted_arppu=pd.NamedAgg(column='predicted_ARPPU', aggfunc='mean'),
+        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum')
     ).reset_index()
+
+    install_day_mape['actual_arppu'] = install_day_mape['actual_revenue'] / install_day_mape['actual_pu']
+    install_day_mape['predicted_arppu'] = install_day_mape['predicted_revenue'] / install_day_mape['predicted_pu']
+
     install_day_mape['mape_pu'] = calculate_mape(install_day_mape['actual_pu'], install_day_mape['predicted_pu'])
     install_day_mape['mape_arppu'] = calculate_mape(install_day_mape['actual_arppu'], install_day_mape['predicted_arppu'])
     install_day_mape['mape_revenue'] = calculate_mape(install_day_mape['actual_revenue'], install_day_mape['predicted_revenue'])
@@ -559,10 +561,11 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
         actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
         predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
         actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum'),
-        actual_arppu=pd.NamedAgg(column='actual_ARPPU', aggfunc='mean'),
-        predicted_arppu=pd.NamedAgg(column='predicted_ARPPU', aggfunc='mean'),
+        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum')
     ).reset_index()
+
+    install_week_mape['actual_arppu'] = install_week_mape['actual_revenue'] / install_week_mape['actual_pu']
+    install_week_mape['predicted_arppu'] = install_week_mape['predicted_revenue'] / install_week_mape['predicted_pu']
 
     # 计算周 MAPE
     install_week_mape['mape_pu'] = calculate_mape(install_week_mape['actual_pu'], install_week_mape['predicted_pu'])
@@ -595,75 +598,118 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
 
 
 if __name__ == '__main__':
+    import logging
+
+    logging.getLogger("prophet").setLevel(logging.WARNING)
+    logging.getLogger("cmdstanpy").disabled=True
+    
     configurations = [
-        {
-            'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_all1',
-            'group_by_media': False,
-            'group_by_country': False
-        },
-        {
-            'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_all1_media',
-            'group_by_media': True,
-            'group_by_country': False
-        },
-        {
-            'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_all1_country',
-            'group_by_media': False,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_all1_media_country',
-            'group_by_media': True,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_two2',
-            'group_by_media': False,
-            'group_by_country': False
-        },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': 'all', 'min': 0, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_all1',
+        #     'group_by_media': False,
+        #     'group_by_country': False
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': 'all', 'min': 0, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_all1_media',
+        #     'group_by_media': True,
+        #     'group_by_country': False
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': 'all', 'min': 0, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_all1_country',
+        #     'group_by_media': False,
+        #     'group_by_country': True
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': 'all', 'min': 0, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_all1_media_country',
+        #     'group_by_media': True,
+        #     'group_by_country': True
+        # },
         {
             'payUserGroupList': [
                 {'name': '0_2', 'min': 0, 'max': 2},
                 {'name': '2_inf', 'min': 2, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pudt_two2_media',
-            'group_by_media': True,
-            'group_by_country': False
+            'prefix': 'lw20241030_pudt_2',
         },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_two2_country',
-            'group_by_media': False,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_two2_media_country',
-            'group_by_media': True,
-            'group_by_country': True
-        },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_2_media',
+        #     'group_by_media': True,
+        #     'group_by_country': False
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_2_country',
+        #     'group_by_media': False,
+        #     'group_by_country': True
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_2_media_country',
+        #     'group_by_media': True,
+        #     'group_by_country': True
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_10', 'min': 2, 'max': 10},
+        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_3',
+        #     'group_by_media': False,
+        #     'group_by_country': False
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_10', 'min': 2, 'max': 10},
+        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_3_media',
+        #     'group_by_media': True,
+        #     'group_by_country': False
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_10', 'min': 2, 'max': 10},
+        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_3_country',
+        #     'group_by_media': False,
+        #     'group_by_country': True
+        # },
+        # {
+        #     'payUserGroupList': [
+        #         {'name': '0_2', 'min': 0, 'max': 2},
+        #         {'name': '2_10', 'min': 2, 'max': 10},
+        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
+        #     ],
+        #     'prefix': 'lw20241030_pudt_3_media_country',
+        #     'group_by_media': True,
+        #     'group_by_country': True
+        # },
     ]
 
     # 运行每个配置
