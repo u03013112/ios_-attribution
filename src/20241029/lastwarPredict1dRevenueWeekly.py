@@ -46,8 +46,18 @@ def generate_case_statements(group_list, value_field, aggregate='SUM', is_count=
         statements.append(statement)
     return "\n".join(statements)
 
-def getHistoricalData(payUserGroupList, force=False, install_day_start=20240401, install_day_end=20241025):
-    filename = '/src/data/lastwar_historical_data_20240401_20241025.csv'
+def getHistoricalData(payUserGroupList, prefix, force=False, install_day_start=20240401, install_day_end=20241025):
+    """
+    获取历史数据，如果缓存存在且不强制更新，则直接读取缓存，否则执行SQL查询并缓存结果。
+
+    :param payUserGroupList: 用户支付组列表，每个组包含'name', 'min', 'max'。
+    :param prefix: 文件前缀，用于区分不同的组配置。
+    :param force: 是否强制重新查询数据，默认为False。
+    :param install_day_start: 数据起始日期。
+    :param install_day_end: 数据结束日期。
+    :return: 获取到的历史数据 DataFrame。
+    """
+    filename = f'/src/data/{prefix}_historical_data_{install_day_start}_{install_day_end}.csv'
     if os.path.exists(filename) and not force:
         data = pd.read_csv(filename)
     else:
@@ -259,7 +269,13 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
 
     return df
 
-def train(train_df):    
+def train_model(train_df):
+    """
+    训练 Prophet 模型。
+
+    :param train_df: 训练数据的 DataFrame。
+    :return: 训练好的 Prophet 模型。
+    """
     # 创建和训练Prophet模型
     model = Prophet()
     model.add_regressor('cost')
@@ -271,6 +287,13 @@ def train(train_df):
     return model
 
 def predict(model, future_df):
+    """
+    使用训练好的模型进行预测。
+
+    :param model: 训练好的 Prophet 模型。
+    :param future_df: 未来数据的 DataFrame，包含需要预测的日期及回归变量。
+    :return: 预测结果的 DataFrame，包含 'ds' 和 'yhat' 列。
+    """
     # 调用模型进行预测
     forecast = model.predict(future_df)
     return forecast[['ds', 'yhat']]
@@ -285,24 +308,17 @@ def calculate_mape(actual, predicted):
     """
     return np.abs((actual - predicted) / (actual + 1)) * 100  # 加1以避免除以0
 
-def main(group_by_media=False, group_by_country=False):
+def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False):
     """
     主函数，实现按 pay_user_group_name 单独训练和预测，并计算误差。
 
+    :param payUserGroupList: 用户支付组列表，每个组包含'name', 'min', 'max'。
+    :param prefix: 文件名前缀，用于区分不同的支付用户分组配置。
     :param group_by_media: 是否按媒体分组，默认为False
     :param group_by_country: 是否按国家分组，默认为False
     """
-    payUserGroupList = [
-        {'name': 'all', 'min': 0, 'max': 999999999},
-        # 如需多个支付分组，请取消以下注释并根据需要调整
-        # {'name': '0_1', 'min': 0, 'max': 1},
-        # {'name': '1_2', 'min': 1, 'max': 2},
-        # {'name': '2_3', 'min': 2, 'max': 3},
-        # {'name': '3_inf', 'min': 3, 'max': np.inf},
-    ]
-
     # 获取历史数据
-    historical_data = getHistoricalData(payUserGroupList, force=False)
+    historical_data = getHistoricalData(payUserGroupList, prefix, force=True)
 
     # 获取所有媒体和国家的列表
     if group_by_media:
@@ -311,7 +327,7 @@ def main(group_by_media=False, group_by_country=False):
         mediaList = [None]
 
     if group_by_country:
-        countryList = ['GCC', 'JP', 'KR', 'T1', 'T2', 'T3', 'TW', 'US']
+        countryList = ['JP', 'KR', 'US', 'T1']
     else:
         countryList = [None]
 
@@ -331,7 +347,7 @@ def main(group_by_media=False, group_by_country=False):
             # 获取所有 pay_user_group_name 的唯一值
             pay_user_group_names = df['pay_user_group_name'].unique()
 
-            # 定义预测的日期范围
+            # 定义预测的日期范围（根据用户要求修改）
             test_start_date = '2024-08-05'
             test_end_date = '2024-10-13'
 
@@ -361,7 +377,7 @@ def main(group_by_media=False, group_by_country=False):
                         continue
 
                     # 训练模型
-                    model = train(train_subset)
+                    model = train_model(train_subset)
 
                     # 定义未来7天的预测集
                     future_dates = pd.date_range(start=temp_current_date, periods=7)
@@ -381,7 +397,7 @@ def main(group_by_media=False, group_by_country=False):
                         # 合并预测结果与测试数据
                         merged = pd.merge(predictions, actuals, on='ds', how='left')
 
-                        # 计算MAPE
+                        # 计算日度 MAPE
                         merged['mape'] = calculate_mape(merged['actual_y'], merged['yhat'])
 
                         # 添加结果到列表
@@ -402,110 +418,211 @@ def main(group_by_media=False, group_by_country=False):
     # ===========================
 
     # 1. 按 pay_user_group_name 和天计算误差统计
-    pay_group_day_mape = results_df.groupby(['pay_user_group_name', 'ds']).agg(
+    print(f"\n[{prefix}] 按 pay_user_group_name 和天计算误差统计:")
+    pay_group_day_mape = results_df.groupby(['pay_user_group_name', 'ds', 'media', 'country']).agg(
         actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
         yhat=pd.NamedAgg(column='yhat', aggfunc='sum'),
         mape=pd.NamedAgg(column='mape', aggfunc='mean')
     ).reset_index()
 
     # 保存到 CSV
-    pay_group_day_mape_filename = '/src/data/mape_by_pay_user_group_by_day.csv'
+    pay_group_day_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_by_day.csv'
     pay_group_day_mape.to_csv(pay_group_day_mape_filename, index=False)
-    print(f"\n按 pay_user_group_name 和天统计的MAPE已保存到 {pay_group_day_mape_filename}")
+    print(f"按天结果已保存到 {pay_group_day_mape_filename}")
+
+    # 计算并保存按 pay_user_group_name、country 和 media 的天平均 MAPE
+    country_media_daily_avg_mape = pay_group_day_mape.groupby(['pay_user_group_name', 'country', 'media']).agg(
+        avg_daily_mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    ).reset_index()
+    # 保存到 CSV
+    country_media_daily_avg_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_country_media_daily_avg.csv'
+    country_media_daily_avg_mape.to_csv(country_media_daily_avg_mape_filename, index=False)
+    print(f"结果已保存到： {country_media_daily_avg_mape_filename}")
+
+    # 打印按 pay_user_group_name 和国家和媒体分组的天平均MAPE
+    print(f"\n[{prefix}] 按 pay_user_group_name 和国家和媒体分组的天平均MAPE:")
+    print(country_media_daily_avg_mape)
+    print("------------------------------------------------------\n")
+
 
     # 2. 按 pay_user_group_name 和周计算误差统计
+    print(f"\n[{prefix}] 按 pay_user_group_name 和周计算误差统计:")
+    # 将 'ds' 转换为周标识（例如，使用年-周格式）
+    results_df['year'] = results_df['ds'].dt.isocalendar().year
     results_df['week'] = results_df['ds'].dt.isocalendar().week
-    pay_group_week_mape = results_df.groupby(['pay_user_group_name', 'week']).agg(
-        actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
-        yhat=pd.NamedAgg(column='yhat', aggfunc='sum'),
-        mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    results_df['year_week'] = results_df['year'].astype(str) + '-' + results_df['week'].astype(str)
+
+    # 按 pay_user_group_name 和 year_week 汇总 y 和 yhat
+    pay_group_week_mape = results_df.groupby(['pay_user_group_name', 'year_week', 'country', 'media']).agg(
+        sum_actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
+        sum_yhat=pd.NamedAgg(column='yhat', aggfunc='sum')
     ).reset_index()
 
+    # 计算周 MAPE
+    pay_group_week_mape['mape'] = np.abs((pay_group_week_mape['sum_actual_y'] - pay_group_week_mape['sum_yhat']) / pay_group_week_mape['sum_actual_y'].replace(0, 1)) * 100
+
     # 保存到 CSV
-    pay_group_week_mape_filename = '/src/data/mape_by_pay_user_group_by_week.csv'
+    pay_group_week_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_by_week.csv'
     pay_group_week_mape.to_csv(pay_group_week_mape_filename, index=False)
-    print(f"按 pay_user_group_name 和周统计的MAPE已保存到 {pay_group_week_mape_filename}")
+    print(f"按周结果已保存到  {pay_group_week_mape_filename}")
+
+    # 计算并保存按 pay_user_group_name、country 和 media 的周平均 MAPE
+    country_media_weekly_avg_mape = pay_group_week_mape.groupby(['pay_user_group_name', 'country', 'media']).agg(
+        avg_weekly_mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    ).reset_index()
+    # 保存到 CSV
+    country_media_weekly_avg_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_country_media_weekly_avg.csv'
+    country_media_weekly_avg_mape.to_csv(country_media_weekly_avg_mape_filename, index=False)
+    print(f"结果已保存到： {country_media_weekly_avg_mape_filename}")
+
+    # 打印按 pay_user_group_name 和国家和媒体分组的周平均MAPE
+    print(f"\n[{prefix}] 按 pay_user_group_name 和国家和媒体分组的周平均MAPE:")
+    print(country_media_weekly_avg_mape)
+    print("------------------------------------------------------\n")
 
     # 3. 按安装日期（天）计算误差统计
-    daily_mape = results_df.groupby('ds').agg(
+    print(f"\n[{prefix}] 按安装日期（天）计算误差统计:")
+    daily_mape = results_df.groupby(['ds', 'country', 'media']).agg(
         actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
         yhat=pd.NamedAgg(column='yhat', aggfunc='sum'),
-        mape=pd.NamedAgg(column='mape', aggfunc='mean')
     ).reset_index()
 
+    # 计算 MAPE
+    daily_mape['mape'] = np.abs((daily_mape['actual_y'] - daily_mape['yhat']) / daily_mape['actual_y'].replace(0, 1)) * 100
+
     # 保存到 CSV
-    daily_mape_filename = '/src/data/mape_by_day.csv'
+    daily_mape_filename = f'/src/data/{prefix}_mape_by_day.csv'
     daily_mape.to_csv(daily_mape_filename, index=False)
-    print(f"按天统计的MAPE已保存到 {daily_mape_filename}")
+    print(f"按天结果已保存到 {daily_mape_filename}")
+
+    # 计算并保存按 country 和 media 的天平均 MAPE
+    country_media_daily_avg_mape_day = daily_mape.groupby(['country', 'media']).agg(
+        avg_daily_mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    ).reset_index()
+    # 保存到 CSV
+    country_media_daily_avg_mape_day_filename = f'/src/data/{prefix}_mape_by_country_media_daily_avg.csv'
+    country_media_daily_avg_mape_day.to_csv(country_media_daily_avg_mape_day_filename, index=False)
+    print(f"结果已保存到： {country_media_daily_avg_mape_day_filename}")
+
+    # 打印按国家和媒体分组的天平均MAPE
+    print(f"\n[{prefix}] 按国家和媒体分组的天平均MAPE:")
+    print(country_media_daily_avg_mape_day)
+    print("------------------------------------------------------\n")
 
     # 4. 按周统计 MAPE
-    weekly_mape = results_df.groupby('week').agg(
-        actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
-        yhat=pd.NamedAgg(column='yhat', aggfunc='sum'),
-        mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    print(f"\n[{prefix}] 按周统计 MAPE:")
+    weekly_mape = results_df.groupby(['year_week', 'country', 'media']).agg(
+        sum_actual_y=pd.NamedAgg(column='actual_y', aggfunc='sum'),
+        sum_yhat=pd.NamedAgg(column='yhat', aggfunc='sum')
     ).reset_index()
+
+    # 计算周 MAPE
+    weekly_mape['mape'] = np.abs((weekly_mape['sum_actual_y'] - weekly_mape['sum_yhat']) / weekly_mape['sum_actual_y'].replace(0, 1)) * 100
 
     # 保存到 CSV
-    weekly_mape_filename = '/src/data/mape_by_week.csv'
+    weekly_mape_filename = f'/src/data/{prefix}_mape_by_week.csv'
     weekly_mape.to_csv(weekly_mape_filename, index=False)
-    print(f"按周统计的MAPE已保存到 {weekly_mape_filename}")
+    print(f"按周结果已保存到 {weekly_mape_filename}")
 
-    # 5. 按国家和媒体分组后统计MAPE的天平均和周平均
-    # 确保 'week' 列已存在
-    if 'week' not in results_df.columns:
-        results_df['week'] = results_df['ds'].dt.isocalendar().week
-
-    # 按国家和媒体分组，计算天平均MAPE
-    country_media_daily_mape = results_df.groupby(['country', 'media', 'ds']).agg(
-        daily_mape=pd.NamedAgg(column='mape', aggfunc='mean')
+    # 计算并保存按 country 和 media 的周平均 MAPE
+    country_media_weekly_avg_mape_week = weekly_mape.groupby(['country', 'media']).agg(
+        avg_weekly_mape=pd.NamedAgg(column='mape', aggfunc='mean')
     ).reset_index()
+    # 保存到 CSV
+    country_media_weekly_avg_mape_week_filename = f'/src/data/{prefix}_mape_by_country_media_weekly_avg.csv'
+    country_media_weekly_avg_mape_week.to_csv(country_media_weekly_avg_mape_week_filename, index=False)
+    print(f"结果已保存到： {country_media_weekly_avg_mape_week_filename}")
 
-    # 计算天平均MAPE
-    country_media_daily_avg_mape = country_media_daily_mape.groupby(['country', 'media']).agg(
-        avg_daily_mape=pd.NamedAgg(column='daily_mape', aggfunc='mean')
-    ).reset_index()
+    # 打印按国家和媒体分组的周平均MAPE
+    print(f"\n[{prefix}] 按国家和媒体分组的周平均MAPE:")
+    print(country_media_weekly_avg_mape_week)
+    print("------------------------------------------------------\n")
 
-    # 按国家和媒体分组，计算周平均MAPE
-    country_media_weekly_mape = results_df.groupby(['country', 'media', 'week']).agg(
-        weekly_mape=pd.NamedAgg(column='mape', aggfunc='mean')
-    ).reset_index()
-
-    # 计算周平均MAPE
-    country_media_weekly_avg_mape = country_media_weekly_mape.groupby(['country', 'media']).agg(
-        avg_weekly_mape=pd.NamedAgg(column='weekly_mape', aggfunc='mean')
-    ).reset_index()
-
-    # 打印结果到终端
-    print("\n按国家和媒体分组的天平均MAPE:")
-    print(country_media_daily_avg_mape)
-
-    print("\n按国家和媒体分组的周平均MAPE:")
-    print(country_media_weekly_avg_mape)
-
-    # 6. 保存按国家和媒体分组的MAPE统计到 CSV
-    country_media_daily_avg_mape_filename = '/src/data/mape_by_country_media_daily_avg.csv'
-    country_media_daily_avg_mape.to_csv(country_media_daily_avg_mape_filename, index=False)
-    print(f"\n按国家和媒体分组的天平均MAPE已保存到 {country_media_daily_avg_mape_filename}")
-
-    country_media_weekly_avg_mape_filename = '/src/data/mape_by_country_media_weekly_avg.csv'
-    country_media_weekly_avg_mape.to_csv(country_media_weekly_avg_mape_filename, index=False)
-    print(f"按国家和媒体分组的周平均MAPE已保存到 {country_media_weekly_avg_mape_filename}")
-
-    # 7. 保存所有结果到 CSV 文件
-    # 建议保存 `results_df` 以便进一步分析
-    all_results_filename = '/src/data/all_predictions_and_errors.csv'
+    # 5. 保存所有结果到 CSV 文件（可选）
+    all_results_filename = f'/src/data/{prefix}_all_predictions_and_errors.csv'
     results_df.to_csv(all_results_filename, index=False)
-    print(f"\n所有预测结果及误差已保存到 {all_results_filename}")
-
-    # 8. 计算并输出每组的MAPE的平均值
-    overall_average_mape = results_df['mape'].mean()
-    print(f"\n整体模型的MAPE的平均值: {overall_average_mape:.2f}%")
-
-    # 额外计算按付费分组的平均 MAPE 并打印
-    pay_group_average_mape = pay_group_day_mape['mape'].mean()
-    print(f"按 pay_user_group_name 分组的整体平均 MAPE: {pay_group_average_mape:.2f}%")
+    print(f"所有预测结果及误差已保存到 {all_results_filename}")
+    print("======================================================\n")
 
 if __name__ == '__main__':
-    main()
-    # 例如，如需按媒体和国家分组进行，可以调用：
-    # main(group_by_media=True, group_by_country=True)
+    # 定义不同的 payUserGroupList 和对应的前缀
+    configurations = [
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_all1_',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_all1_media_',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_all1_country_',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_all1_media_country_',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_two2_',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_two2_media_',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_two2_country_',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_two2_media_country_',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+    ]
+
+    # 运行每个配置
+    for config in configurations:
+        print(f"##### 运行配置: {config['prefix']} #####")
+        main(
+            payUserGroupList=config['payUserGroupList'],
+            prefix=config['prefix'],
+            group_by_media=config.get('group_by_media', False),
+            group_by_country=config.get('group_by_country', False)
+        )

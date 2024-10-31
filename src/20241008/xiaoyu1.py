@@ -9,7 +9,7 @@ sys.path.append('/src')
 from src.maxCompute import execSql
 
 def getHistoricalData():
-    filename = '/src/data/xiaoyu_historical_data_20240401_20241007.csv'
+    filename = '/src/data/xiaoyu_historical_data_20240401_20241025.csv'
     if os.path.exists(filename):
         data = pd.read_csv(filename)
     else:
@@ -24,7 +24,7 @@ def getHistoricalData():
             tmp_lw_cost_and_roi_by_day
         where
             install_day between 20240401
-            and 20241007
+            and 20241025
         group by
             install_day;
         '''
@@ -67,8 +67,11 @@ def train(train_df, model_path='prophet_model.json'):
     # 移除含NaN的行
     prophet_train_df = prophet_train_df.dropna()
 
+    print(prophet_train_df)
+
     # 创建和训练Prophet模型
-    model = Prophet(growth='logistic')
+    # model = Prophet(growth='logistic')
+    model = Prophet()
     model.add_regressor('ad_spend_pct')
     model.add_regressor('is_weekend')
     model.fit(prophet_train_df)
@@ -338,10 +341,12 @@ def main():
     df['arppu_daily_mean'] = df['arppu'].shift(1).rolling(window=N, min_periods=1).mean()
 
     # 分割训练集和测试集
-    # train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-09-12')]
-    train_df = df[(df['date'] >= '2024-06-01') & (df['date'] <= '2024-09-12')]
-    test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
+    # train_df = df[(df['date'] >= '2024-06-01') & (df['date'] <= '2024-09-12')]
+    # test_df = df[(df['date'] >= '2024-09-13') & (df['date'] <= '2024-10-07')]
 
+    train_df = df[(df['date'] >= '2024-04-01') & (df['date'] <= '2024-08-04')]
+    test_df = df[(df['date'] >= '2024-08-05') & (df['date'] <= '2024-10-13')]
+    
     model_path = '/src/data/prophet_model_6.json'
 
     # # 检查模型是否存在
@@ -354,7 +359,7 @@ def main():
     #     model = train(train_df, model_path)
     
     model = train(train_df, model_path)
-
+    return
     # 进行预测
     results_df = predict(test_df, model)
 
