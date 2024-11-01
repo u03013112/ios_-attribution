@@ -47,7 +47,10 @@ def read_and_process_csv(prefix):
     return data
 
 def calculate_mape(actual, predicted):
-    return np.abs((actual - predicted) / actual) * 100
+    if actual == 0:
+        return 0
+    
+    return np.abs((actual - predicted) / actual)
 
 def process_group(prefix_group):
     results = []
@@ -56,6 +59,9 @@ def process_group(prefix_group):
         data = read_and_process_csv(prefix)
         if data is None:
             continue
+
+        # 获取所有的 pay_user_group_name
+        pay_user_groups = data['pay_user_group_name'].unique()
 
         # 总误差（天）
         total_mape_day = data.groupby(['country', 'media', 'ds']).apply(
@@ -66,6 +72,13 @@ def process_group(prefix_group):
         total_mape_week = data.groupby(['country', 'media', 'week']).apply(
             lambda x: calculate_mape(x['actual_revenue'].sum(), x['predicted_revenue'].sum()).mean()
         ).groupby(['country', 'media']).mean().reset_index(name='total_mape_week')
+
+        # 创建一个包含所有 pay_user_group_name 的 DataFrame
+        pay_user_group_df = pd.DataFrame({'pay_user_group_name': pay_user_groups})
+
+        # 为每个 country 和 media 分配 pay_user_group_name
+        total_mape_day = total_mape_day.assign(key=1).merge(pay_user_group_df.assign(key=1), on='key').drop('key', axis=1)
+        total_mape_week = total_mape_week.assign(key=1).merge(pay_user_group_df.assign(key=1), on='key').drop('key', axis=1)
 
         # 分组误差（天）
         group_mape_day = data.groupby(['country', 'media', 'pay_user_group_name', 'ds']).apply(
@@ -108,7 +121,7 @@ def process_group(prefix_group):
         ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='group_arppu_mape_week')
 
         # 合并结果
-        merged = total_mape_day.merge(total_mape_week, on=['country', 'media'], how='left')
+        merged = total_mape_day.merge(total_mape_week, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_mape_day, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_mape_week, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_weight_day, on=['country', 'media', 'pay_user_group_name'], how='left')
@@ -139,6 +152,11 @@ def main():
 
     if all_results:
         final_df = pd.concat(all_results, ignore_index=True)
+
+        # 调整列顺序
+        final_df = final_df[['分组名','prefix','country','media','total_mape_day','total_mape_week','pay_user_group_name','group_mape_day','group_mape_week','group_weight_day','group_weight_week','group_pu_mape_day','group_pu_mape_week','group_arppu_mape_day','group_arppu_mape_week']]
+        final_df = final_df.sort_values(by=['分组名','prefix','country','media','pay_user_group_name'])
+
         final_df.to_csv('/src/data/final_results.csv', index=False)
         print("结果已保存到 /src/data/final_results.csv")
     else:
