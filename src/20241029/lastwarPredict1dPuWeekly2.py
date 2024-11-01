@@ -391,7 +391,7 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
                     predictions['pay_user_group_name'] = group_name_single
 
                     # 获取实际的 pu 值（如果可用）
-                    actuals = group_df[group_df['ds'].isin(future_dates)][['ds', 'cost_change_ratio', 'y', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'lastday_pu_1d', 'revenue_1d']].copy()
+                    actuals = group_df[group_df['ds'].isin(future_dates)][['ds','cost','cost_change_ratio', 'y', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'lastday_pu_1d', 'revenue_1d']].copy()
 
                     # 合并预测与实际数据
                     merged = pd.merge(predictions, actuals, on='ds', how='left', suffixes=('', '_actual'))
@@ -434,166 +434,19 @@ def main(payUserGroupList, prefix, group_by_media=False, group_by_country=False)
     # 1. 按 pay_user_group_name 和天计算误差统计
     print(f"\n[{prefix}] 按 pay_user_group_name 和天计算误差统计:")
     pay_group_day_mape = results_df.groupby(['pay_user_group_name', 'ds', 'media', 'country']).agg(
-        cost=pd.NamedAgg(column='cost_change_ratio', aggfunc='sum'),
+        cost=pd.NamedAgg(column='cost', aggfunc='sum'),
         actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
         predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
-        actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum'),
         actual_arppu=pd.NamedAgg(column='actual_ARPPU', aggfunc='mean'),
         predicted_arppu=pd.NamedAgg(column='predicted_ARPPU', aggfunc='mean'),
+        actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
+        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum'),
     ).reset_index()
-    pay_group_day_mape['mape_pu'] = calculate_mape(pay_group_day_mape['actual_pu'], pay_group_day_mape['predicted_pu'])
-    pay_group_day_mape['mape_arppu'] = calculate_mape(pay_group_day_mape['actual_arppu'], pay_group_day_mape['predicted_arppu'])
-    pay_group_day_mape['mape_revenue'] = calculate_mape(pay_group_day_mape['actual_revenue'], pay_group_day_mape['predicted_revenue'])
     
     # 保存到 CSV
     pay_group_day_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_by_day.csv'
     pay_group_day_mape.to_csv(pay_group_day_mape_filename, index=False)
     print(f"按天结果已保存到 {pay_group_day_mape_filename}")
-
-    # 计算并保存按 pay_user_group_name、country 和 media 的天平均 MAPE
-    country_media_daily_avg_mape = pay_group_day_mape.groupby(['pay_user_group_name', 'country', 'media']).agg(
-        avg_daily_mape_pu=pd.NamedAgg(column='mape_pu', aggfunc='mean'),
-        avg_daily_mape_revenue=pd.NamedAgg(column='mape_revenue', aggfunc='mean'),
-        avg_daily_mape_arppu=pd.NamedAgg(column='mape_arppu', aggfunc='mean')
-    ).reset_index()
-    # 保存到 CSV
-    country_media_daily_avg_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_country_media_daily_avg.csv'
-    country_media_daily_avg_mape.to_csv(country_media_daily_avg_mape_filename, index=False)
-    print(f"结果已保存到： {country_media_daily_avg_mape_filename}")
-
-    # 打印按 pay_user_group_name 和国家和媒体分组的天平均MAPE
-    print(f"\n[{prefix}] 按 pay_user_group_name 和国家和媒体分组的天平均MAPE:")
-    print(country_media_daily_avg_mape)
-    print("------------------------------------------------------\n")
-
-
-    # 2. 按 pay_user_group_name 和周计算误差统计
-    print(f"\n[{prefix}] 按 pay_user_group_name 和周计算误差统计:")
-    # 将 'ds' 转换为周标识（例如，使用年-周格式）
-    results_df['year'] = results_df['ds'].dt.isocalendar().year
-    results_df['week'] = results_df['ds'].dt.isocalendar().week
-    results_df['year_week'] = results_df['year'].astype(str) + '-' + results_df['week'].astype(str)
-
-    # 按 pay_user_group_name 和 year_week 汇总
-    pay_group_week_mape = results_df.groupby(['pay_user_group_name', 'year_week', 'country', 'media']).agg(
-        actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
-        predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
-        actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum'),
-        actual_arppu=pd.NamedAgg(column='actual_ARPPU', aggfunc='mean'),
-        predicted_arppu=pd.NamedAgg(column='predicted_ARPPU', aggfunc='mean'),
-    ).reset_index()
-
-    # 计算周 MAPE
-    pay_group_week_mape['mape_pu'] = calculate_mape(pay_group_week_mape['actual_pu'], pay_group_week_mape['predicted_pu'])
-    pay_group_week_mape['mape_arppu'] = calculate_mape(pay_group_week_mape['actual_arppu'], pay_group_week_mape['predicted_arppu'])
-    pay_group_week_mape['mape_revenue'] = calculate_mape(pay_group_week_mape['actual_revenue'], pay_group_week_mape['predicted_revenue'])
-
-    # 保存到 CSV
-    pay_group_week_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_by_week.csv'
-    pay_group_week_mape.to_csv(pay_group_week_mape_filename, index=False)
-    print(f"按周结果已保存到  {pay_group_week_mape_filename}")
-
-    # 计算并保存按 pay_user_group_name、country 和 media 的周平均 MAPE
-    country_media_weekly_avg_mape = pay_group_week_mape.groupby(['pay_user_group_name', 'country', 'media']).agg(
-        avg_weekly_mape_pu=pd.NamedAgg(column='mape_pu', aggfunc='mean'),
-        avg_weekly_mape_revenue=pd.NamedAgg(column='mape_revenue', aggfunc='mean'),
-        avg_weekly_mape_arppu=pd.NamedAgg(column='mape_arppu', aggfunc='mean')
-    ).reset_index()
-    # 保存到 CSV
-    country_media_weekly_avg_mape_filename = f'/src/data/{prefix}_mape_by_pay_user_group_country_media_weekly_avg.csv'
-    country_media_weekly_avg_mape.to_csv(country_media_weekly_avg_mape_filename, index=False)
-    print(f"结果已保存到： {country_media_weekly_avg_mape_filename}")
-
-    # 打印按 pay_user_group_name 和国家和媒体分组的周平均MAPE
-    print(f"\n[{prefix}] 按 pay_user_group_name 和国家和媒体分组的周平均MAPE:")
-    print(country_media_weekly_avg_mape)
-    print("------------------------------------------------------\n")
-
-    # 3. 按安装日期（天）计算误差统计
-    print(f"\n[{prefix}] 按安装日期（天）计算误差统计:")
-    install_day_mape = results_df.groupby(['ds', 'country', 'media']).agg(
-        cost=pd.NamedAgg(column='cost_change_ratio', aggfunc='sum'),
-        actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
-        predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
-        actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum')
-    ).reset_index()
-
-    install_day_mape['actual_arppu'] = install_day_mape['actual_revenue'] / install_day_mape['actual_pu']
-    install_day_mape['predicted_arppu'] = install_day_mape['predicted_revenue'] / install_day_mape['predicted_pu']
-
-    install_day_mape['mape_pu'] = calculate_mape(install_day_mape['actual_pu'], install_day_mape['predicted_pu'])
-    install_day_mape['mape_arppu'] = calculate_mape(install_day_mape['actual_arppu'], install_day_mape['predicted_arppu'])
-    install_day_mape['mape_revenue'] = calculate_mape(install_day_mape['actual_revenue'], install_day_mape['predicted_revenue'])
-
-    # 保存到 CSV
-    install_day_mape_filename = f'/src/data/{prefix}_mape_by_install_day.csv'
-    install_day_mape.to_csv(install_day_mape_filename, index=False)
-    print(f"按安装日期（天）结果已保存到 {install_day_mape_filename}")
-
-    # 计算并保存按安装日期、country 和 media 的平均 MAPE
-    country_media_install_day_avg_mape = install_day_mape.groupby(['country', 'media']).agg(
-        avg_daily_mape_pu=pd.NamedAgg(column='mape_pu', aggfunc='mean'),
-        avg_daily_mape_revenue=pd.NamedAgg(column='mape_revenue', aggfunc='mean'),
-        avg_daily_mape_arppu=pd.NamedAgg(column='mape_arppu', aggfunc='mean')
-    ).reset_index()
-    # 保存到 CSV
-    country_media_install_day_avg_mape_filename = f'/src/data/{prefix}_mape_by_install_day_country_media_avg.csv'
-    country_media_install_day_avg_mape.to_csv(country_media_install_day_avg_mape_filename, index=False)
-    print(f"结果已保存到： {country_media_install_day_avg_mape_filename}")
-
-    # 打印按安装日期、country 和 media 的平均 MAPE
-    print(f"\n[{prefix}] 按安装日期、country 和 media 的平均 MAPE:")
-    print(country_media_install_day_avg_mape)
-    print("------------------------------------------------------\n")
-
-    # 4. 按安装日期（周）计算误差统计
-    print(f"\n[{prefix}] 按安装日期（周）计算误差统计:")
-    # 将 'ds' 转换为周标识（例如，使用年-周格式）
-    results_df['year'] = results_df['ds'].dt.isocalendar().year
-    results_df['week'] = results_df['ds'].dt.isocalendar().week
-    results_df['year_week'] = results_df['year'].astype(str) + '-' + results_df['week'].astype(str)
-
-    # 按 year_week 汇总
-    install_week_mape = results_df.groupby(['year_week', 'country', 'media']).agg(
-        actual_pu=pd.NamedAgg(column='pu_1d', aggfunc='sum'),
-        predicted_pu=pd.NamedAgg(column='predicted_pu', aggfunc='sum'),
-        actual_revenue=pd.NamedAgg(column='actual_revenue', aggfunc='sum'),
-        predicted_revenue=pd.NamedAgg(column='predicted_revenue', aggfunc='sum')
-    ).reset_index()
-
-    install_week_mape['actual_arppu'] = install_week_mape['actual_revenue'] / install_week_mape['actual_pu']
-    install_week_mape['predicted_arppu'] = install_week_mape['predicted_revenue'] / install_week_mape['predicted_pu']
-
-    # 计算周 MAPE
-    install_week_mape['mape_pu'] = calculate_mape(install_week_mape['actual_pu'], install_week_mape['predicted_pu'])
-    install_week_mape['mape_arppu'] = calculate_mape(install_week_mape['actual_arppu'], install_week_mape['predicted_arppu'])
-    install_week_mape['mape_revenue'] = calculate_mape(install_week_mape['actual_revenue'], install_week_mape['predicted_revenue'])
-
-    # 保存到 CSV
-    install_week_mape_filename = f'/src/data/{prefix}_mape_by_install_week.csv'
-    install_week_mape.to_csv(install_week_mape_filename, index=False)
-    print(f"按安装日期（周）结果已保存到 {install_week_mape_filename}")
-
-    # 计算并保存按安装日期、country 和 media 的周平均 MAPE
-    country_media_install_week_avg_mape = install_week_mape.groupby(['country', 'media']).agg(
-        avg_weekly_mape_pu=pd.NamedAgg(column='mape_pu', aggfunc='mean'),
-        avg_weekly_mape_revenue=pd.NamedAgg(column='mape_revenue', aggfunc='mean'),
-        avg_weekly_mape_arppu=pd.NamedAgg(column='mape_arppu', aggfunc='mean')
-    ).reset_index()
-
-    # 保存到 CSV
-    country_media_install_week_avg_mape_filename = f'/src/data/{prefix}_mape_by_install_week_country_media_avg.csv'
-    country_media_install_week_avg_mape.to_csv(country_media_install_week_avg_mape_filename, index=False)
-    print(f"结果已保存到： {country_media_install_week_avg_mape_filename}")
-
-    # 打印按安装日期、country 和 media 的周平均 MAPE
-    print(f"\n[{prefix}] 按安装日期、country 和 media 的周平均 MAPE:")
-    print(country_media_install_week_avg_mape)
-    print("------------------------------------------------------\n")
-
 
 
 
@@ -602,40 +455,40 @@ if __name__ == '__main__':
 
     logging.getLogger("prophet").setLevel(logging.WARNING)
     logging.getLogger("cmdstanpy").disabled=True
-    
+
     configurations = [
-        # {
-        #     'payUserGroupList': [
-        #         {'name': 'all', 'min': 0, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_all1',
-        #     'group_by_media': False,
-        #     'group_by_country': False
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': 'all', 'min': 0, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_all1_media',
-        #     'group_by_media': True,
-        #     'group_by_country': False
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': 'all', 'min': 0, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_all1_country',
-        #     'group_by_media': False,
-        #     'group_by_country': True
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': 'all', 'min': 0, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_all1_media_country',
-        #     'group_by_media': True,
-        #     'group_by_country': True
-        # },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_1',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_1_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_1_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': 'all', 'min': 0, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_1_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
         {
             'payUserGroupList': [
                 {'name': '0_2', 'min': 0, 'max': 2},
@@ -643,73 +496,73 @@ if __name__ == '__main__':
             ],
             'prefix': 'lw20241030_pudt_2',
         },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_2_media',
-        #     'group_by_media': True,
-        #     'group_by_country': False
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_2_country',
-        #     'group_by_media': False,
-        #     'group_by_country': True
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_inf', 'min': 2, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_2_media_country',
-        #     'group_by_media': True,
-        #     'group_by_country': True
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_10', 'min': 2, 'max': 10},
-        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_3',
-        #     'group_by_media': False,
-        #     'group_by_country': False
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_10', 'min': 2, 'max': 10},
-        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_3_media',
-        #     'group_by_media': True,
-        #     'group_by_country': False
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_10', 'min': 2, 'max': 10},
-        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_3_country',
-        #     'group_by_media': False,
-        #     'group_by_country': True
-        # },
-        # {
-        #     'payUserGroupList': [
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_10', 'min': 2, 'max': 10},
-        #         {'name': '10_inf', 'min': 10, 'max': np.inf},
-        #     ],
-        #     'prefix': 'lw20241030_pudt_3_media_country',
-        #     'group_by_media': True,
-        #     'group_by_country': True
-        # },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_2_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_2_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_2_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_10', 'min': 2, 'max': 10},
+                {'name': '10_inf', 'min': 10, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_3',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_10', 'min': 2, 'max': 10},
+                {'name': '10_inf', 'min': 10, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_3_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_10', 'min': 2, 'max': 10},
+                {'name': '10_inf', 'min': 10, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_3_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_10', 'min': 2, 'max': 10},
+                {'name': '10_inf', 'min': 10, 'max': np.inf},
+            ],
+            'prefix': 'lw20241030_pudt_3_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
     ]
 
     # 运行每个配置
