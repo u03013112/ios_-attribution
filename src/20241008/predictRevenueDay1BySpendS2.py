@@ -115,6 +115,7 @@ def getSuggestionData(platform, media, country):
         {country_condition}
     ;
     '''
+    print(sql)
     suggestion_df = execSql(sql)
     if suggestion_df.empty:
         print("未找到符合条件的建议数据。")
@@ -302,7 +303,8 @@ def main(group_by_media=False, group_by_country=False, all_results=None, reports
                 roi_threshold = getRoiThreshold(lastSundayStr, app, media, country)
                 print(f"倒推 1 日 ROI（roi_threshold）：{roi_threshold*100:.2f}%")
                 # 为了后续选择档位时使用保守的 ROI 阈值，可以在这里调整
-                conservative_roi_threshold = roi_threshold * 1.05
+                # conservative_roi_threshold = roi_threshold * 1.05
+                conservative_roi_threshold = roi_threshold
                 print(f"保守的 ROI 阈值：{conservative_roi_threshold*100:.2f}%")
 
                 print('所有建议数据：')

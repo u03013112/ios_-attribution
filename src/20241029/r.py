@@ -30,6 +30,33 @@ prefix_groups = [
             'lw20241030_pudt_3_country',
             'lw20241030_pudt_3_media_country'
         ]
+    },
+    {
+        'name': '付费用户分50组',
+        'prefixList': [
+            'lw20241101_pudt_50',
+            'lw20241101_pudt_50_media',
+            'lw20241101_pudt_50_country',
+            'lw20241101_pudt_50_media_country'
+        ]
+    },
+    {
+        'name': '付费用户分33_66组',
+        'prefixList': [
+            'lw20241101_pudt_33_66',
+            'lw20241101_pudt_33_66_media',
+            'lw20241101_pudt_33_66_country',
+            'lw20241101_pudt_33_66_media_country'
+        ]
+    },
+    {
+        'name': '付费用户分25_50_75组',
+        'prefixList': [
+            'lw20241101_pudt_25_50_75',
+            'lw20241101_pudt_25_50_75_media',
+            'lw20241101_pudt_25_50_75_country',
+            'lw20241101_pudt_25_50_75_media_country'
+        ]
     }
 ]
 
@@ -40,6 +67,7 @@ def read_and_process_csv(prefix):
         print(f"文件 {filename} 不存在，跳过。")
         return None
 
+    print(f"处理文件: {filename}")
     data = pd.read_csv(filename)
     data['ds'] = pd.to_datetime(data['ds'])
     data['week'] = data['ds'].dt.isocalendar().week
@@ -47,10 +75,10 @@ def read_and_process_csv(prefix):
     return data
 
 def calculate_mape(actual, predicted):
-    if actual == 0:
-        return 0
-    
-    return np.abs((actual - predicted) / actual)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        mape = np.abs((actual - predicted) / actual)
+        mape = np.where(actual == 0, 0, mape)
+    return mape
 
 def process_group(prefix_group):
     results = []
@@ -90,15 +118,18 @@ def process_group(prefix_group):
             lambda x: calculate_mape(x['actual_revenue'].sum(), x['predicted_revenue'].sum()).mean()
         ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='group_mape_week')
 
-        # 分组权重（天）
+        # 分组收入金额占比（天）
         group_weight_day = data.groupby(['country', 'media', 'pay_user_group_name', 'ds']).apply(
             lambda x: x['actual_revenue'].sum() / data.groupby(['country', 'media', 'ds'])['actual_revenue'].sum().loc[(x['country'].iloc[0], x['media'].iloc[0], x['ds'].iloc[0])]
-        ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='group_weight_day')
+        ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='收入金额占比')
 
-        # 分组权重（周）
-        group_weight_week = data.groupby(['country', 'media', 'pay_user_group_name', 'week']).apply(
-            lambda x: x['actual_revenue'].sum() / data.groupby(['country', 'media', 'week'])['actual_revenue'].sum().loc[(x['country'].iloc[0], x['media'].iloc[0], x['week'].iloc[0])]
-        ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='group_weight_week')
+        # 分组付费用户数占比（天）
+        group_pu_weight_day = data.groupby(['country', 'media', 'pay_user_group_name', 'ds']).apply(
+            lambda x: x['actual_pu'].sum() / data.groupby(['country', 'media', 'ds'])['actual_pu'].sum().loc[(x['country'].iloc[0], x['media'].iloc[0], x['ds'].iloc[0])]
+        ).groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='付费用户数占比')
+
+        # 分组付费用户数（天）
+        group_pu_count_day = data.groupby(['country', 'media', 'pay_user_group_name', 'ds'])['actual_pu'].sum().groupby(['country', 'media', 'pay_user_group_name']).mean().reset_index(name='付费用户数')
 
         # 分组pu误差（天）
         group_pu_mape_day = data.groupby(['country', 'media', 'pay_user_group_name', 'ds']).apply(
@@ -125,7 +156,8 @@ def process_group(prefix_group):
         merged = merged.merge(group_mape_day, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_mape_week, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_weight_day, on=['country', 'media', 'pay_user_group_name'], how='left')
-        merged = merged.merge(group_weight_week, on=['country', 'media', 'pay_user_group_name'], how='left')
+        merged = merged.merge(group_pu_weight_day, on=['country', 'media', 'pay_user_group_name'], how='left')
+        merged = merged.merge(group_pu_count_day, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_pu_mape_day, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_pu_mape_week, on=['country', 'media', 'pay_user_group_name'], how='left')
         merged = merged.merge(group_arppu_mape_day, on=['country', 'media', 'pay_user_group_name'], how='left')
@@ -154,8 +186,8 @@ def main():
         final_df = pd.concat(all_results, ignore_index=True)
 
         # 调整列顺序
-        final_df = final_df[['分组名','prefix','country','media','total_mape_day','total_mape_week','pay_user_group_name','group_mape_day','group_mape_week','group_weight_day','group_weight_week','group_pu_mape_day','group_pu_mape_week','group_arppu_mape_day','group_arppu_mape_week']]
-        final_df = final_df.sort_values(by=['分组名','prefix','country','media','pay_user_group_name'])
+        final_df = final_df[['country', 'media', '分组名', 'prefix', 'total_mape_day', 'total_mape_week', 'pay_user_group_name', 'group_mape_day', 'group_mape_week', '收入金额占比', '付费用户数占比', '付费用户数', 'group_pu_mape_day', 'group_pu_mape_week', 'group_arppu_mape_day', 'group_arppu_mape_week']]
+        final_df = final_df.sort_values(by=['分组名', 'prefix', 'country', 'media', 'pay_user_group_name'])
 
         final_df.to_csv('/src/data/final_results.csv', index=False)
         print("结果已保存到 /src/data/final_results.csv")

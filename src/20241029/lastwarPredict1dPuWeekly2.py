@@ -456,114 +456,248 @@ if __name__ == '__main__':
     logging.getLogger("prophet").setLevel(logging.WARNING)
     logging.getLogger("cmdstanpy").disabled=True
 
-    configurations = [
+    # configurations = [
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': 'all', 'min': 0, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_1',
+    #         'group_by_media': False,
+    #         'group_by_country': False
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': 'all', 'min': 0, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_1_media',
+    #         'group_by_media': True,
+    #         'group_by_country': False
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': 'all', 'min': 0, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_1_country',
+    #         'group_by_media': False,
+    #         'group_by_country': True
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': 'all', 'min': 0, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_1_media_country',
+    #         'group_by_media': True,
+    #         'group_by_country': True
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_inf', 'min': 2, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_2',
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_inf', 'min': 2, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_2_media',
+    #         'group_by_media': True,
+    #         'group_by_country': False
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_inf', 'min': 2, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_2_country',
+    #         'group_by_media': False,
+    #         'group_by_country': True
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_inf', 'min': 2, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_2_media_country',
+    #         'group_by_media': True,
+    #         'group_by_country': True
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_10', 'min': 2, 'max': 10},
+    #             {'name': '10_inf', 'min': 10, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_3',
+    #         'group_by_media': False,
+    #         'group_by_country': False
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_10', 'min': 2, 'max': 10},
+    #             {'name': '10_inf', 'min': 10, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_3_media',
+    #         'group_by_media': True,
+    #         'group_by_country': False
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_10', 'min': 2, 'max': 10},
+    #             {'name': '10_inf', 'min': 10, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_3_country',
+    #         'group_by_media': False,
+    #         'group_by_country': True
+    #     },
+    #     {
+    #         'payUserGroupList': [
+    #             {'name': '0_2', 'min': 0, 'max': 2},
+    #             {'name': '2_10', 'min': 2, 'max': 10},
+    #             {'name': '10_inf', 'min': 10, 'max': np.inf},
+    #         ],
+    #         'prefix': 'lw20241030_pudt_3_media_country',
+    #         'group_by_media': True,
+    #         'group_by_country': True
+    #     },
+    # ]
+
+    # 中位数分组
+    configuration1 = [
         {
             'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
+                {'name': '0_median', 'min': 0, 'max': 1.12650001200627},
+                {'name': 'median_inf', 'min': 1.12650001200627, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pudt_1',
+            'prefix': 'lw20241101_pudt_50',
             'group_by_media': False,
             'group_by_country': False
         },
         {
             'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
+                {'name': '0_median', 'min': 0, 'max': 1.12650001200627},
+                {'name': 'median_inf', 'min': 1.12650001200627, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pudt_1_media',
+            'prefix': 'lw20241101_pudt_50_media',
             'group_by_media': True,
             'group_by_country': False
         },
         {
             'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
+                {'name': '0_median', 'min': 0, 'max': 1.12650001200627},
+                {'name': 'median_inf', 'min': 1.12650001200627, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pudt_1_country',
+            'prefix': 'lw20241101_pudt_50_country',
             'group_by_media': False,
             'group_by_country': True
         },
         {
             'payUserGroupList': [
-                {'name': 'all', 'min': 0, 'max': np.inf},
+                {'name': '0_median', 'min': 0, 'max': 1.12650001200627},
+                {'name': 'median_inf', 'min': 1.12650001200627, 'max': np.inf},
             ],
-            'prefix': 'lw20241030_pudt_1_media_country',
-            'group_by_media': True,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_2',
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_2_media',
-            'group_by_media': True,
-            'group_by_country': False
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_2_country',
-            'group_by_media': False,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_2_media_country',
-            'group_by_media': True,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_10', 'min': 2, 'max': 10},
-                {'name': '10_inf', 'min': 10, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_3',
-            'group_by_media': False,
-            'group_by_country': False
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_10', 'min': 2, 'max': 10},
-                {'name': '10_inf', 'min': 10, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_3_media',
-            'group_by_media': True,
-            'group_by_country': False
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_10', 'min': 2, 'max': 10},
-                {'name': '10_inf', 'min': 10, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_3_country',
-            'group_by_media': False,
-            'group_by_country': True
-        },
-        {
-            'payUserGroupList': [
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_10', 'min': 2, 'max': 10},
-                {'name': '10_inf', 'min': 10, 'max': np.inf},
-            ],
-            'prefix': 'lw20241030_pudt_3_media_country',
+            'prefix': 'lw20241101_pudt_50_media_country',
             'group_by_media': True,
             'group_by_country': True
         },
     ]
+
+    # 三等分分组
+    configuration2 = [
+        {
+            'payUserGroupList': [
+                {'name': '0_33', 'min': 0, 'max': 1.0229999861621764},
+                {'name': '33_66', 'min': 1.0229999861621764, 'max': 1.3156878316402434},
+                {'name': '66_inf', 'min': 1.3156878316402434, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_33_66',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_33', 'min': 0, 'max': 1.0229999861621764},
+                {'name': '33_66', 'min': 1.0229999861621764, 'max': 1.3156878316402434},
+                {'name': '66_inf', 'min': 1.3156878316402434, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_33_66_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_33', 'min': 0, 'max': 1.0229999861621764},
+                {'name': '33_66', 'min': 1.0229999861621764, 'max': 1.3156878316402434},
+                {'name': '66_inf', 'min': 1.3156878316402434, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_33_66_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_33', 'min': 0, 'max': 1.0229999861621764},
+                {'name': '33_66', 'min': 1.0229999861621764, 'max': 1.3156878316402434},
+                {'name': '66_inf', 'min': 1.3156878316402434, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_33_66_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+    ]
+
+    # 四等分分组
+    configuration3 = [
+        {
+            'payUserGroupList': [
+                {'name': '0_25', 'min': 0, 'max': 0.99},
+                {'name': '25_50', 'min': 0.99, 'max': 1.12650001200627},
+                {'name': '50_75', 'min': 1.12650001200627, 'max': 2.98},
+                {'name': '75_inf', 'min': 2.98, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_25_50_75',
+            'group_by_media': False,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_25', 'min': 0, 'max': 0.99},
+                {'name': '25_50', 'min': 0.99, 'max': 1.12650001200627},
+                {'name': '50_75', 'min': 1.12650001200627, 'max': 2.98},
+                {'name': '75_inf', 'min': 2.98, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_25_50_75_media',
+            'group_by_media': True,
+            'group_by_country': False
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_25', 'min': 0, 'max': 0.99},
+                {'name': '25_50', 'min': 0.99, 'max': 1.12650001200627},
+                {'name': '50_75', 'min': 1.12650001200627, 'max': 2.98},
+                {'name': '75_inf', 'min': 2.98, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_25_50_75_country',
+            'group_by_media': False,
+            'group_by_country': True
+        },
+        {
+            'payUserGroupList': [
+                {'name': '0_25', 'min': 0, 'max': 0.99},
+                {'name': '25_50', 'min': 0.99, 'max': 1.12650001200627},
+                {'name': '50_75', 'min': 1.12650001200627, 'max': 2.98},
+                {'name': '75_inf', 'min': 2.98, 'max': np.inf},
+            ],
+            'prefix': 'lw20241101_pudt_25_50_75_media_country',
+            'group_by_media': True,
+            'group_by_country': True
+        },
+    ]
+
+    configurations = configuration1 + configuration2 + configuration3
 
     # 运行每个配置
     for config in configurations:
