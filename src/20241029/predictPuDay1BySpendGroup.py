@@ -112,7 +112,7 @@ def getHistoricalData(install_day_start, install_day_end, platform='android', pa
         app = 502
         AND app_package = '{app_package}'
         AND zone = 0
-        AND day > {install_day_start}
+        AND day >= {install_day_start}
         AND install_day BETWEEN {install_day_start} AND {install_day_end}
         AND DATEDIFF(
             FROM_UNIXTIME(event_time),
@@ -243,8 +243,8 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     merged_long = merged_long.sort_values(['pay_user_group_name', 'install_day'])
     
     # 6. 计算 cost_change_ratio 和 pu_change_ratio
-    merged_long['cost_change_ratio'] = merged_long['cost'].pct_change()
-    merged_long['pu_change_ratio'] = merged_long['pu_1d'].pct_change()
+    merged_long['cost_change_ratio'] = merged_long.groupby('pay_user_group_name')['cost'].pct_change()
+    merged_long['pu_change_ratio'] = merged_long.groupby('pay_user_group_name')['pu_1d'].pct_change()
     
     # 移除第一天（无法计算变动比例）
     merged_long = merged_long.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
@@ -254,8 +254,7 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     merged_long['actual_ARPPU'] = merged_long['revenue_1d'] / merged_long['pu_1d']
     merged_long['actual_ARPPU'].replace([np.inf, -np.inf], np.nan, inplace=True)
     
-    # 计算预测 ARPPU：先shift一天，再计算过去56天的均值
-    merged_long = merged_long.sort_values(['pay_user_group_name', 'install_day'])
+    # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
     merged_long['actual_ARPPU_shifted'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU'].shift(1)
     merged_long['predicted_ARPPU'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
     
@@ -263,7 +262,7 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     merged_long = merged_long.rename(columns={'install_day': 'ds', 'pu_change_ratio': 'y'})
     
     # 最终选择列
-    df = merged_long[['ds', 'cost','cost_change_ratio', 'y', 'pay_user_group_name', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']]
+    df = merged_long[['ds', 'cost', 'cost_change_ratio', 'y', 'pay_user_group_name', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']]
     
     # 添加周末特征
     df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
