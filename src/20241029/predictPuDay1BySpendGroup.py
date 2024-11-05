@@ -436,28 +436,163 @@ def main(configurations,group_by_media=False, group_by_country=False):
     # 写入表格
     writeTable(modelDf, mondayStr)
 
+# 获取配置
+# 从最近8周的数据中获取
+# 12.5% 25% 37.5% 50% 62.5% 75% 87.5% 分位数
+def getConfigurations(platform = 'android'):
+
+    app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
+    day = pd.to_datetime(dayStr, format='%Y%m%d')
+    startDay = day - pd.Timedelta(weeks=8)
+    startDayStr = startDay.strftime('%Y%m%d')
+
+    sql = f'''
+WITH d1_purchase_data AS (
+	SELECT
+		install_day,
+		game_uid,
+		SUM(revenue_value_usd) AS revenue_1d
+	FROM
+		dwd_overseas_revenue_allproject
+	WHERE
+		app = 502
+		AND app_package = '{app_package}'
+		AND zone = 0
+		AND day >= {startDayStr}
+		AND install_day BETWEEN {startDayStr} AND {dayStr}
+		AND DATEDIFF(
+			FROM_UNIXTIME(event_time),
+			FROM_UNIXTIME(CAST(install_timestamp AS BIGINT)),
+			'dd'
+		) = 0
+	GROUP BY
+		install_day,
+		game_uid
+),
+ranked_data AS (
+	SELECT
+		revenue_1d,
+		NTILE(100) OVER (
+			ORDER BY
+				revenue_1d
+		) AS percentile_rank
+	FROM
+		d1_purchase_data
+)
+SELECT
+    MAX(
+		CASE
+			WHEN percentile_rank = 12 THEN revenue_1d
+		END
+	) AS p12_revenue_1d,
+	MAX(
+		CASE
+			WHEN percentile_rank = 25 THEN revenue_1d
+		END
+	) AS p25_revenue_1d,
+	MAX(
+        CASE
+            WHEN percentile_rank = 37 THEN revenue_1d
+        END
+    ) AS p37_revenue_1d,
+    MAX(
+        CASE
+            WHEN percentile_rank = 50 THEN revenue_1d
+        END
+    ) AS p50_revenue_1d,
+    MAX(
+        CASE
+            WHEN percentile_rank = 62 THEN revenue_1d
+        END
+    ) AS p62_revenue_1d,
+    MAX(
+        CASE
+            WHEN percentile_rank = 75 THEN revenue_1d
+        END
+    ) AS p75_revenue_1d,
+    MAX(
+        CASE
+            WHEN percentile_rank = 87 THEN revenue_1d
+        END
+    ) AS p87_revenue_1d,
+    MAX(
+        CASE
+            WHEN percentile_rank = 100 THEN revenue_1d
+        END
+    ) AS p100_revenue_1d
+FROM
+	ranked_data;
+    '''
+    print("执行的SQL语句如下：\n")
+    print(sql)
+    data = execSql(sql)
+    
+    p12 = data['p12_revenue_1d'].values[0]
+    p25 = data['p25_revenue_1d'].values[0]
+    p37 = data['p37_revenue_1d'].values[0]
+    p50 = data['p50_revenue_1d'].values[0]
+    p62 = data['p62_revenue_1d'].values[0]
+    p75 = data['p75_revenue_1d'].values[0]
+    p87 = data['p87_revenue_1d'].values[0]
+
+    configurations = [
+        {
+            'group_name':'g1__all',
+            'payUserGroupList':[
+                {'name': 'all', 'min': 0, 'max': np.inf}
+            ],
+        },
+        {
+            'group_name':'g2__2',
+            'payUserGroupList':[
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 10, 'max': np.inf}
+            ],
+        },
+        {
+            'group_name': 'g2__percentile50',
+            'payUserGroupList': [
+                {'name': '0_50', 'min': 0, 'max': p50},
+                {'name': '50_inf', 'min': p50, 'max': np.inf}
+            ]
+        },
+        {
+            'group_name': 'g4__percentile25_50_75',
+            'payUserGroupList': [
+                {'name': '0_25', 'min': 0, 'max': p25},
+                {'name': '25_50', 'min': p25, 'max': p50},
+                {'name': '50_75', 'min': p50, 'max': p75},
+                {'name': '75_inf', 'min': p75, 'max': np.inf}
+            ]
+        },
+        {
+            'group_name': 'g8__percentile12_25_37_50_62_75_87',
+            'payUserGroupList': [
+                {'name': '0_12', 'min': 0, 'max': p12},
+                {'name': '12_25', 'min': p12, 'max': p25},
+                {'name': '25_37', 'min': p25, 'max': p37},
+                {'name': '37_50', 'min': p37, 'max': p50},
+                {'name': '50_62', 'min': p50, 'max': p62},
+                {'name': '62_75', 'min': p62, 'max': p75},
+                {'name': '75_87', 'min': p75, 'max': p87},
+                {'name': '87_inf', 'min': p87, 'max': np.inf}
+            ]
+        }
+    ]
+
+    return configurations
+
 if __name__ == "__main__":
     init()
     createTable()
     # 删除指定分区
     deletePartition(dayStr)
     
-    configurations = [
-        {
-            'group_name':'g3__2_10',
-            'payUserGroupList':[
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_10', 'min': 2, 'max': 10},
-                {'name': '10_inf', 'min': 10, 'max': np.inf}
-            ],
-        }
-    ]
-
+    configurations = getConfigurations()
     
     # 依次调用 main 函数
-
     for configuration in configurations:
         main(configuration, False, False)
-        # main(configuration, True, False)
-        # main(configuration, False, True)
-        # main(configuration, True, True)
+        main(configuration, True, False)
+        main(configuration, False, True)
+        main(configuration, True, True)
