@@ -2,11 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 from prophet import Prophet
-from prophet.serialize import model_to_json, model_from_json
+from prophet.serialize import model_from_json
 
 def init():
     global execSql
     global dayStr
+
 
     if 'o' in globals():
         print('this is online version')
@@ -35,9 +36,48 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241021'
+        dayStr = '20240624'  # 本地测试时的日期，可自行修改
 
-    print('dayStr:', dayStr)
+
+def createTable():
+    if 'o' in globals():
+        from odps.models import Schema, Column, Partition
+        # 创建表格（如果不存在）
+        columns = [
+            Column(name='app', type='string', comment='app identifier'),
+            Column(name='media', type='string', comment='media source'),
+            Column(name='country', type='string', comment='country'),
+            Column(name='install_day', type='string', comment='install day'),
+            Column(name='group_name', type='string', comment='group name'),
+            Column(name='pay_user_group_name', type='string', comment='pay user group name'),
+            Column(name='actual_pu', type='double', comment='actual pay users'),
+            Column(name='predicted_pu', type='double', comment='predicted pay users'),
+            Column(name='actual_arppu', type='double', comment='actual ARPPU'),
+            Column(name='predicted_arppu', type='double', comment='predicted ARPPU'),
+            Column(name='actual_revenue', type='double', comment='actual revenue'),
+            Column(name='predicted_revenue', type='double', comment='predicted revenue')
+        ]
+        partitions = [
+            Partition(name='day', type='string', comment='prediction date, like 20221018')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_verification'
+        o.create_table(table_name, schema, if_not_exists=True)
+    else:
+        print('No table creation in local version')
+
+def deletePartition(dayStr):
+    if 'o' in globals():
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_verification'
+        t = o.get_table(table_name)
+        # 删除分区（如果存在）
+        t.delete_partition('day=%s' % (dayStr), if_exists=True)
+        print(f"Partition day={dayStr} deleted from table {table_name}.")
+    else:
+        print('No partition deletion in local version')
+
+
+# generate_case_statements 和 getHistoricalData 都是从predictPuDay1BySpendGroup.py 抄过来的，保持数据一致性
 
 def generate_case_statements(group_list, value_field, aggregate='SUM', is_count=False):
     """
@@ -250,97 +290,108 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     merged_long = merged_long.sort_values(['pay_user_group_name', 'install_day'])
     
     # 6. 计算 cost_change_ratio 和 pu_change_ratio
+    merged_long['actual_cost_shifted'] = merged_long.groupby('pay_user_group_name')['cost'].shift(1)
     merged_long['cost_change_ratio'] = merged_long.groupby('pay_user_group_name')['cost'].pct_change()
+    merged_long['actual_pu_shifted'] = merged_long.groupby('pay_user_group_name')['pu_1d'].shift(1)
     merged_long['pu_change_ratio'] = merged_long.groupby('pay_user_group_name')['pu_1d'].pct_change()
     
     # 移除第一天（无法计算变动比例）
     merged_long = merged_long.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
     
-    # 7. 计算 actual_ARPPU 和 predicted_ARPPU
+    # 7. 计算 actual_arppu 和 predicted_arppu
     # 计算实际 ARPPU
-    merged_long['actual_ARPPU'] = merged_long['revenue_1d'] / merged_long['pu_1d']
-    merged_long['actual_ARPPU'].replace([np.inf, -np.inf], np.nan, inplace=True)
+    merged_long['actual_arppu'] = merged_long['revenue_1d'] / merged_long['pu_1d']
+    merged_long['actual_arppu'].replace([np.inf, -np.inf], np.nan, inplace=True)
     
     # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
-    merged_long['actual_ARPPU_shifted'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU'].shift(1)
-    merged_long['predicted_ARPPU'] = merged_long.groupby('pay_user_group_name')['actual_ARPPU_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
+    merged_long['actual_arppu_shifted'] = merged_long.groupby('pay_user_group_name')['actual_arppu'].shift(1)
+    merged_long['predicted_arppu'] = merged_long.groupby('pay_user_group_name')['actual_arppu_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
     
     # 8. 重命名和选择最终列
-    merged_long = merged_long.rename(columns={'install_day': 'ds', 'pu_change_ratio': 'y'})
-    
+    merged_long = merged_long.rename(columns={'install_day': 'ds'})
     # 最终选择列
-    df = merged_long[['ds', 'cost', 'cost_change_ratio', 'y', 'pay_user_group_name', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']]
+    df = merged_long[['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'pu_change_ratio', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'revenue_1d']]
     
     # 添加周末特征
     df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
 
     return df
 
-def train_model(train_df):
-    """
-    训练 Prophet 模型。
-    """
-    # 创建和训练Prophet模型
-    model = Prophet()
-    model.add_regressor('cost_change_ratio')
-    # model.add_regressor('is_weekend')
-
-    train_df2 = train_df[['ds', 'y', 'cost_change_ratio','is_weekend']]
-    # 去掉输入列中NaN和inf
-    train_df2 = train_df2.replace([np.inf, -np.inf], np.nan).dropna()
-
-    if len(train_df2) < 30:
-        print("训练数据不足（少于30条），跳过训练。")
+def loadModels(app, media, country,group_name,pay_user_group_name,dayStr):
+    sql = f'''
+        select
+            model
+        from
+            lastwar_predict_day1_pu_pct_by_cost_pct
+        where
+            day = '{dayStr}'
+            and app = '{app}'
+            and media = '{media}'
+            and country = '{country}'
+            and group_name = '{group_name}'
+            and pay_user_group_name = '{pay_user_group_name}'
+        '''
+    print(sql)
+    models_df = execSql(sql)
+    if models_df.empty:
+        print("No models found for the given conditions.")
         return None
-
-    model.fit(train_df2)
-    
-    # 打印模型训练日志
-    print("Model Training Completed")
-
+    # 取出第一个模型
+    row = models_df.iloc[0]
+    model = model_from_json(row['model'])
     return model
 
+def makePredictions(preprocessed_data, model, app, media, country, group_name, pay_user_group_name):
+    # 准备用于预测的特征
+    model_df = preprocessed_data.copy()
 
-def createTable():
-    if 'o' in globals():
-        # 下面部分就只有线上环境可以用了
-        from odps.models import Schema, Column, Partition
-        columns = [
-            Column(name='app', type='string', comment='app identifier'),
-            Column(name='media', type='string', comment=''),
-            Column(name='country', type='string', comment=''),
-            Column(name='model', type='string', comment=''),
-            Column(name='group_name', type='string', comment='g3__2_10'),
-            Column(name='pay_user_group_name', type='string', comment='like:0~2,2~10 or 10~inf'),
-        ]
-        
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('lastwar_predict_day1_pu_pct_by_cost_pct', schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
+    # 使用模型预测付费用户变化率
+    forecast = model.predict(model_df)
+    
+    # 保证ds的数据类型是datetime64[ns]
+    model_df['ds'] = pd.to_datetime(model_df['ds'])
+    forecast['ds'] = pd.to_datetime(forecast['ds'])
 
-def deletePartition(dayStr):
-    if 'o' in globals():
-        t = o.get_table('lastwar_predict_day1_pu_pct_by_cost_pct')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        print(f"Partition day={dayStr} deleted.")
-    else:
-        print('deletePartition failed, o is not defined')
+    model_df = model_df.merge(forecast[['ds', 'yhat']], on='ds', how='left')
+    
+    # 重命名预测列
+    model_df = model_df.rename(columns={
+        'yhat': 'pu_change_ratio_predicted',
+        'pu_1d': 'actual_pu',
+        'revenue_1d': 'actual_revenue'
+    })
 
-def writeTable(df, dayStr):
-    print('try to write table:')
+    # 计算预测的付费用户数
+    model_df['predicted_pu'] = model_df['actual_pu_shifted'] * (1 + model_df['pu_change_ratio_predicted'])
+    
+    # 预测收入 = 预测付费用户数 * 预测ARPPU
+    model_df['predicted_revenue'] = model_df['predicted_pu'] * model_df['predicted_arppu']
+    
+    # 添加其他必要信息
+    model_df['app'] = app
+    model_df['media'] = media
+    model_df['country'] = country
+    model_df['group_name'] = group_name
+    model_df['pay_user_group_name'] = pay_user_group_name
+    
+    # 选择并重命名最终需要的列
+    final_df = model_df[['app' ,'ds', 'media', 'country', 'group_name' , 'pay_user_group_name', 'actual_pu', 'predicted_pu', 'actual_arppu', 'predicted_arppu', 'actual_revenue', 'predicted_revenue']]
+    
+    return final_df
+
+def writeVerificationResultsToTable(df, dayStr):
+    print('try to write verification results to table:')
     print(df.head(5))
     if 'o' in globals():
-        t = o.get_table('lastwar_predict_day1_pu_pct_by_cost_pct')
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_verification'
+        t = o.get_table(table_name)
+        with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
+            # 将 install_day 转换为字符串
+            df['install_day'] = df['install_day'].dt.strftime('%Y%m%d')
             writer.write(df)
-        print(f"Data written to table partition day={dayStr}.")
+        print(f"Verification results written to table partition day={dayStr}.")
     else:
-        print('writeTable failed, o is not defined')
+        print('writeVerificationResultsToTable failed, o is not defined')
         print(dayStr)
         print(df)
 
@@ -350,21 +401,19 @@ def main(configurations,group_by_media=False, group_by_country=False):
     groupName = configurations['group_name']
     payUserGroupList = configurations['payUserGroupList']
 
-    # 找到本周的周一
-    monday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=pd.to_datetime(dayStr, format='%Y%m%d').dayofweek)
-    mondayStr = monday.strftime('%Y%m%d')
-
-    print(f"本周一： {mondayStr}")
-
-    # 向前推8周
-    # start_date = monday - pd.Timedelta(weeks=8)
-    start_date = monday - pd.Timedelta(days=60)
-    startDateStr = start_date.strftime('%Y%m%d')
-
-    lastSunday = monday - pd.Timedelta(days=1)
+    # 找到上周的周一和周日
+    currentMonday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=pd.to_datetime(dayStr, format='%Y%m%d').dayofweek)
+    lastMonday = currentMonday - pd.Timedelta(weeks=1)
+    lastMondayStr = lastMonday.strftime('%Y%m%d')
+    lastSunday = lastMonday + pd.Timedelta(days=6)
     lastSundayStr = lastSunday.strftime('%Y%m%d')
 
-    print(f'向前推60天：{startDateStr}~{lastSundayStr}')
+    # 往前多取一些数据，是为了估算ARPPU
+    startDate = pd.to_datetime(lastMondayStr, format='%Y%m%d') - pd.Timedelta(days=20)
+    startDateStr = startDate.strftime('%Y%m%d')
+
+    print('lastMondayStr:', lastMondayStr)
+    print('lastSundayStr:', lastSundayStr)
 
     platformList = ['android', 'ios']
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
@@ -374,23 +423,26 @@ def main(configurations,group_by_media=False, group_by_country=False):
     mediaList = ['Facebook Ads', 'applovin_int', 'googleadwords_int'] if group_by_media else [None]
     countryList = ['JP', 'KR', 'US', 'T1'] if group_by_country else [None]
 
-    modelDf = pd.DataFrame(columns=['app', 'media', 'country', 'model', 'group_name','pay_user_group_name'])
+
+    verification_results = []
 
     for platform in platformList:
         app = appDict[platform]
-        # 获取当前平台的历史数据
+        print(f"\nProcessing platform: {platform}, app: {app}")
         historical_data = getHistoricalData(startDateStr, lastSundayStr, platform, payUserGroupList)
         print(f"Platform: {platform}, App: {app}, Data Length: {len(historical_data)}")
         print(historical_data.head())
-        # 按照分组进行遍历
+        
         for media in mediaList:
             for country in countryList:
                 print('\n\n')
                 print(f"platform: {platform}, app: {app}, media: {media}, country: {country}")
                 # 数据预处理
+                
                 df = preprocessData(historical_data, payUserGroupList, media, country)
-                print(f"Data Length After Preprocessing: {len(df)}")
-                print(df.head())
+                lastWeekDf = df[(df['ds'] >= lastMonday) & (df['ds'] <= lastSunday)]
+                print(f"Data Length After Preprocessing: {len(lastWeekDf)}")
+                print(lastWeekDf.head())
 
                 # 遍历每个 pay_user_group_name
                 for payUserGroup in payUserGroupList:
@@ -398,50 +450,35 @@ def main(configurations,group_by_media=False, group_by_country=False):
                     print(f"\n正在处理 pay_user_group_name: {payUserGroupName}")
 
                     # 过滤当前组的数据
-                    train_subset = df[df['pay_user_group_name'] == payUserGroupName].copy()
+                    test_subset = lastWeekDf[lastWeekDf['pay_user_group_name'] == payUserGroupName].copy()
+
+                    if len(test_subset) == 0:
+                        print(f"No data for pay_user_group_name: {payUserGroupName}")
+                        continue
+
+                    # test_subset 按照ds升序排序
+                    test_subset = test_subset.sort_values('ds')
+                    print(f"Data Length After Filtering: {len(test_subset)}")
+                    print(test_subset.head())
+
+                    
+
+                    # 加载模型
+                    model = loadModels(app, media if media else 'ALL', country if country else 'ALL', groupName, payUserGroupName, lastMondayStr)
+                    if model is None:
+                        print(f"No models found for app: {app}, media: {media}, country: {country}")
+                        continue
+                    
+                    # 进行预测
+                    predictions_df = makePredictions(test_subset, model, app, media if media else 'ALL', country if country else 'ALL', groupName, payUserGroupName)
                 
-                    # train_subset 按照ds升序排序
-                    train_subset = train_subset.sort_values('ds')
-                    print(f"Data Length After Filtering: {len(train_subset)}")
-                    print(train_subset.head())
-
-                    # 训练模型
-                    model = train_model(train_subset)
-
-                    # 保存模型
-                    if model is not None:
-                        model_json = model_to_json(model)
-                        print(model_json)
-                        media_mapped = media if media else 'ALL'
-                        country_mapped = country if country else 'ALL'
-
-
-                        # 对 media 进行重命名
-                        media_mapping = {
-                            'Facebook Ads': 'FACEBOOK',
-                            'applovin_int': 'APPLOVIN',
-                            'googleadwords_int': 'GOOGLE',
-                            'ALL': 'ALL'
-                        }
-                        media_mapped = media_mapping.get(media_mapped, media_mapped)
-
-                        modelDf = modelDf.append({
-                            'app': app, 
-                            'media': media_mapped, 
-                            'country': country_mapped, 
-                            'model': model_json,
-                            'group_name': groupName,
-                            'pay_user_group_name': payUserGroupName,
-                        }, ignore_index=True)
+                    if predictions_df is not None:
+                        # 写入DB
+                        predictions_df.rename(columns={'ds': 'install_day'}, inplace=True)
+                        writeVerificationResultsToTable(predictions_df, dayStr)
                     else:
-                        print(f"Skipping model for platform: {platform}, media: {media}, country: {country} due to insufficient data.")
+                        print(f"No predictions for pay_user_group_name: {payUserGroupName}")
 
-    # 写入表格前打印 modelDf
-    print("\nFinal modelDf before writing to table:")
-    print(modelDf.head())
-
-    # 写入表格
-    writeTable(modelDf, mondayStr)
 
 # 获取配置
 # 从最近8周的数据中获取
@@ -592,9 +629,7 @@ FROM
 if __name__ == "__main__":
     init()
     createTable()
-    # 删除指定分区
     deletePartition(dayStr)
-    
     configurations = getConfigurations()
     
     # 依次调用 main 函数
