@@ -36,7 +36,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20240624'  # 本地测试时的日期，可自行修改
+        dayStr = '20241021'  # 本地测试时的日期，可自行修改
 
 
 def createTable():
@@ -226,11 +226,11 @@ def getHistoricalData(install_day_start, install_day_end, platform='android', pa
     data = execSql(sql)
     return data
 
-def preprocessData(data, payUserGroupList, media=None, country=None):
+def preprocessData(data0, payUserGroupList, media=None, country=None):
     """
     预处理数据，包括日期转换、过滤、聚合、重塑和特征工程。
     """
-
+    data = data0.copy()
     # 1. 转换 'install_day' 列为日期格式
     data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
     
@@ -442,9 +442,6 @@ def main(configurations,group_by_media=False, group_by_country=False):
                 
                 df = preprocessData(historical_data, payUserGroupList, media, country)
                 lastWeekDf = df[(df['ds'] >= lastMonday) & (df['ds'] <= lastSunday)]
-                # print(f"Data Length After Preprocessing: {len(lastWeekDf)}")
-                # print(lastWeekDf.head())
-
                 # 遍历每个 pay_user_group_name
                 for payUserGroup in payUserGroupList:
                     payUserGroupName = payUserGroup['name']
@@ -467,17 +464,17 @@ def main(configurations,group_by_media=False, group_by_country=False):
                         'applovin_int': 'APPLOVIN',
                         'googleadwords_int': 'GOOGLE'
                     }
-                    media = mediaMap[media] if media in mediaMap else media
+                    mediaMaped = mediaMap[media] if media in mediaMap else media
                     
 
                     # 加载模型
-                    model = loadModels(app, media if media else 'ALL', country if country else 'ALL', groupName, payUserGroupName, lastMondayStr)
+                    model = loadModels(app, mediaMaped if mediaMaped else 'ALL', country if country else 'ALL', groupName, payUserGroupName, lastMondayStr)
                     if model is None:
-                        print(f"No models found for app: {app}, media: {media}, country: {country}")
+                        print(f"No models found for app: {app}, media: {mediaMaped}, country: {country}")
                         continue
                     
                     # 进行预测
-                    predictions_df = makePredictions(test_subset, model, app, media if media else 'ALL', country if country else 'ALL', groupName, payUserGroupName)
+                    predictions_df = makePredictions(test_subset, model, app, mediaMaped if mediaMaped else 'ALL', country if country else 'ALL', groupName, payUserGroupName)
                 
                     if predictions_df is not None:
                         # 写入DB
