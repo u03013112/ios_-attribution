@@ -717,13 +717,13 @@ def main():
 
                     model = loadModel(app_package, 'ALL', 'ALL', allGroupName, payUserGroupName, currentMondayStr)
                     if model:
-                        print(f'大盘{allGroupName}->{payUserGroupName}->{currentMondayStr}模型加载成功')
+                        # print(f'大盘{allGroupName}->{payUserGroupName}->{currentMondayStr}模型加载成功')
                         
                         for cost_change_ratio in [-0.3,-0.2,-0.1,0,0.1,0.2,0.3]:
 
                             # 计算预测话费金额
                             cost = allYesterdayCost * (1 + cost_change_ratio)
-                            print(f'预测花费金额: {cost}，相比昨日（{allYesterdayCost}）变化: {cost_change_ratio}')
+                            # print(f'预测花费金额: {cost}，相比昨日（{allYesterdayCost}）变化: {cost_change_ratio}')
 
                             inputDf = pd.DataFrame({
                                 'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
@@ -737,15 +737,15 @@ def main():
                             # 计算预测付费用户数
                             lastPu = predictArppuAndLastPu[(predictArppuAndLastPu['platform'] == platform) & (predictArppuAndLastPu['country'] == 'ALL') & (predictArppuAndLastPu['media'] == 'ALL') & (predictArppuAndLastPu['group_name'] == allGroupName) & (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)]['last_pu'].values[0]
                             predictedPu = lastPu * (1 + yhat)
-                            print(f'预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
+                            # print(f'预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
 
                             # 计算预测ARPPU
                             predictedArppu = predictArppuAndLastPu[(predictArppuAndLastPu['platform'] == platform) & (predictArppuAndLastPu['country'] == 'ALL') & (predictArppuAndLastPu['media'] == 'ALL') & (predictArppuAndLastPu['group_name'] == allGroupName) & (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)]['predicted_arppu'].values[0]
-                            print(f'预测ARPPU: {predictedArppu}')
+                            # print(f'预测ARPPU: {predictedArppu}')
 
                             # 计算预测收入
                             predictedRevenue = predictedPu * predictedArppu
-                            print(f'预测收入: {predictedRevenue}')
+                            # print(f'预测收入: {predictedRevenue}')
 
                             ret = pd.DataFrame({
                                 'platform': [platform],
