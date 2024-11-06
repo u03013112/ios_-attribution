@@ -69,52 +69,57 @@ and app = '{app_package}'
 def main():
     global dayStr
 
-    # 统计往前推N天的数据
-    N = 60
+    # 统计往前推N周的数据
+    N = 8
 
     # 找到上周的周一
     currentMonday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=pd.to_datetime(dayStr, format='%Y%m%d').dayofweek)
-    lastMonday = currentMonday - pd.Timedelta(weeks=1)
-    lastMondayStr = lastMonday.strftime('%Y%m%d')
+    lastSunday = currentMonday - pd.Timedelta(days=1)
+    lastSundayStr = lastSunday.strftime('%Y%m%d')
 
-    nDaysAgo = pd.to_datetime(lastMonday, format='%Y%m%d') - pd.Timedelta(days=N)
+    nDaysAgo = pd.to_datetime(currentMonday, format='%Y%m%d') - pd.Timedelta(weeks=N)
     nDaysAgoStr = nDaysAgo.strftime('%Y%m%d')
 
     # 获取历史数据
-    historical_data = getHistoricalData(nDaysAgoStr,lastMondayStr)
+    historical_data = getHistoricalData(nDaysAgoStr,lastSundayStr)
     historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
+    # print(historical_data)
 
-    # # 1. 计算 天MAPE
-    # dayDf = historical_data.groupby(['install_day', 'media', 'country', 'group_name']).agg({
-    #     'actual_revenue': 'sum',
-    #     'predicted_revenue': 'sum'
-    # }).reset_index()
-
-    # dayDf['mape_revenue'] = np.abs((dayDf['actual_revenue'] - dayDf['predicted_revenue']) / dayDf['actual_revenue']) * 100
-    # dayDf2 = dayDf.groupby(['media', 'country','group_name']).agg({
-    #     'mape_revenue': 'mean'
-    # }).reset_index()
-    
-    # # 找到按照 media 和 country 分组的最小 MAPE 对应的 group_name，以及最小的 MAPE 值
-    # minMapeDf = dayDf2.groupby(['media', 'country']).agg(
-    #     minMape=('mape_revenue', 'min')
-    # ).reset_index()
-    # minMapeDf = minMapeDf.merge(dayDf2, on=['media', 'country'], how='left')
-    # minMapeDf = minMapeDf[minMapeDf['mape_revenue'] == minMapeDf['minMape']]
-    # print('按天的最小MAPE')
-    # print(minMapeDf)
-
-    # 2. 计算 周MAPE
-    historical_data['week'] = historical_data['install_day'].dt.strftime('%Y-%U')
-    weekDf = historical_data.groupby(['week', 'media', 'country', 'group_name']).agg({
+    # 1. 计算 天MAPE
+    dayDf = historical_data.groupby(['install_day', 'media', 'country', 'group_name']).agg({
         'actual_revenue': 'sum',
         'predicted_revenue': 'sum'
     }).reset_index()
 
-    weekDf['mape_revenue'] = np.abs((weekDf['actual_revenue'] - weekDf['predicted_revenue']) / weekDf['actual_revenue']) * 100
+    dayDf['mape_revenue'] = np.abs((dayDf['actual_revenue'] - dayDf['predicted_revenue']) / dayDf['actual_revenue']) * 100
+    dayDf2 = dayDf.groupby(['media', 'country','group_name']).agg({
+        'mape_revenue': 'mean'
+    }).reset_index()
+    
+    # 找到按照 media 和 country 分组的最小 MAPE 对应的 group_name，以及最小的 MAPE 值
+    minMapeDf = dayDf2.groupby(['media', 'country']).agg(
+        minMape=('mape_revenue', 'min')
+    ).reset_index()
+    minMapeDf = minMapeDf.merge(dayDf2, on=['media', 'country'], how='left')
+    minMapeDf = minMapeDf[minMapeDf['mape_revenue'] == minMapeDf['minMape']]
+    print('按天的最小MAPE')
+    print(minMapeDf)
+
+    # 2. 计算 周MAPE
+    historical_data['week'] = historical_data['install_day'].dt.strftime('%Y-%W')
+    weekDf = historical_data.groupby(['week', 'media', 'country', 'group_name']).agg({
+        'actual_revenue': 'sum',
+        'predicted_revenue': 'sum'
+    }).reset_index()
+    weekDf['mape_revenue'] = np.abs((weekDf['actual_revenue'] - weekDf['predicted_revenue']) / weekDf['actual_revenue'])
+    # print('weekDf:')
+    # print(weekDf[(weekDf['media'] == 'ALL') & (weekDf['country'] == 'ALL')])
+
     weekDf2 = weekDf.groupby(['media', 'country','group_name']).agg({
         'mape_revenue': 'mean'
     }).reset_index()
+    # print('weekDf2:')
+    # print(weekDf2[(weekDf2['media'] == 'ALL') & (weekDf2['country'] == 'ALL')])
 
     # 找到按照 media 和 country 分组的最小 MAPE 对应的 group_name，以及最小的 MAPE 值
     minMapeDf2 = weekDf2.groupby(['media', 'country']).agg(
