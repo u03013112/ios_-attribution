@@ -385,6 +385,10 @@ def main(configurations,group_by_media=False, group_by_country=False):
         # 按照分组进行遍历
         for media in mediaList:
             for country in countryList:
+                if platform == 'ios' and media :
+                    print(f"ios平台不支持media过滤，跳过 media: {media}")
+                    continue
+                
                 print('\n\n')
                 print(f"platform: {platform}, app: {app}, media: {media}, country: {country}")
                 # 数据预处理

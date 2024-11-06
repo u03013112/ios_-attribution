@@ -423,9 +423,6 @@ def main(configurations,group_by_media=False, group_by_country=False):
     mediaList = ['Facebook Ads', 'applovin_int', 'googleadwords_int'] if group_by_media else [None]
     countryList = ['JP', 'KR', 'US', 'T1'] if group_by_country else [None]
 
-
-    verification_results = []
-
     for platform in platformList:
         app = appDict[platform]
         print(f"\nProcessing platform: {platform}, app: {app}")
@@ -435,14 +432,18 @@ def main(configurations,group_by_media=False, group_by_country=False):
         
         for media in mediaList:
             for country in countryList:
+                if platform == 'ios' and media:
+                    print(f"Skip media: {media} for iOS")
+                    continue
+
                 print('\n\n')
                 print(f"platform: {platform}, app: {app}, media: {media}, country: {country}")
                 # 数据预处理
                 
                 df = preprocessData(historical_data, payUserGroupList, media, country)
                 lastWeekDf = df[(df['ds'] >= lastMonday) & (df['ds'] <= lastSunday)]
-                print(f"Data Length After Preprocessing: {len(lastWeekDf)}")
-                print(lastWeekDf.head())
+                # print(f"Data Length After Preprocessing: {len(lastWeekDf)}")
+                # print(lastWeekDf.head())
 
                 # 遍历每个 pay_user_group_name
                 for payUserGroup in payUserGroupList:
@@ -458,9 +459,15 @@ def main(configurations,group_by_media=False, group_by_country=False):
 
                     # test_subset 按照ds升序排序
                     test_subset = test_subset.sort_values('ds')
-                    print(f"Data Length After Filtering: {len(test_subset)}")
+                    print(f"过滤后准备预测数据: 长度 {len(test_subset)}")
                     print(test_subset.head())
 
+                    mediaMap = {
+                        'Facebook Ads': 'FACEBOOK',
+                        'applovin_int': 'APPLOVIN',
+                        'googleadwords_int': 'GOOGLE'
+                    }
+                    media = mediaMap[media] if media in mediaMap else media
                     
 
                     # 加载模型
