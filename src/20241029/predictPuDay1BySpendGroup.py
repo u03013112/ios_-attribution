@@ -366,17 +366,13 @@ def main(configurations,group_by_media=False, group_by_country=False):
 
     print(f'向前推60天：{startDateStr}~{lastSundayStr}')
 
-    # platformList = ['android', 'ios']
-    platformList = ['android']
+    platformList = ['android', 'ios']
     appDict = {'android': 'com.fun.lastwar.gp', 'ios': 'id6448786147'}
 
     # mediaList = ['Facebook Ads', 'applovin_int', 'googleadwords_int'] if group_by_media else [None]
     # countryList = ['GCC', 'JP', 'KR', 'T1', 'T2', 'T3', 'TW', 'US'] if group_by_country else [None]
-    # mediaList = ['Facebook Ads', 'applovin_int', 'googleadwords_int'] if group_by_media else [None]
-    # countryList = ['JP', 'KR', 'US', 'T1'] if group_by_country else [None]
-
-    mediaList = ['Facebook Ads'] if group_by_media else [None]
-    countryList = ['T1'] if group_by_country else [None]
+    mediaList = ['Facebook Ads', 'applovin_int', 'googleadwords_int'] if group_by_media else [None]
+    countryList = ['JP', 'KR', 'US', 'T1'] if group_by_country else [None]
 
     modelDf = pd.DataFrame(columns=['app', 'media', 'country', 'model', 'group_name','pay_user_group_name'])
 
@@ -551,26 +547,26 @@ FROM
     p87 = data['p87_revenue_1d'].values[0]
 
     configurations = [
-        # {
-        #     'group_name':'g1__all',
-        #     'payUserGroupList':[
-        #         {'name': 'all', 'min': 0, 'max': np.inf}
-        #     ],
-        # },
-        # {
-        #     'group_name':'g2__2',
-        #     'payUserGroupList':[
-        #         {'name': '0_2', 'min': 0, 'max': 2},
-        #         {'name': '2_inf', 'min': 2, 'max': np.inf}
-        #     ],
-        # },
-        # {
-        #     'group_name': 'g2__percentile50',
-        #     'payUserGroupList': [
-        #         {'name': '0_50', 'min': 0, 'max': p50},
-        #         {'name': '50_inf', 'min': p50, 'max': np.inf}
-        #     ]
-        # },
+        {
+            'group_name':'g1__all',
+            'payUserGroupList':[
+                {'name': 'all', 'min': 0, 'max': np.inf}
+            ],
+        },
+        {
+            'group_name':'g2__2',
+            'payUserGroupList':[
+                {'name': '0_2', 'min': 0, 'max': 2},
+                {'name': '2_inf', 'min': 2, 'max': np.inf}
+            ],
+        },
+        {
+            'group_name': 'g2__percentile50',
+            'payUserGroupList': [
+                {'name': '0_50', 'min': 0, 'max': p50},
+                {'name': '50_inf', 'min': p50, 'max': np.inf}
+            ]
+        },
         {
             'group_name': 'g4__percentile25_50_75',
             'payUserGroupList': [
@@ -580,19 +576,19 @@ FROM
                 {'name': '75_inf', 'min': p75, 'max': np.inf}
             ]
         },
-        # {
-        #     'group_name': 'g8__percentile12_25_37_50_62_75_87',
-        #     'payUserGroupList': [
-        #         {'name': '0_12', 'min': 0, 'max': p12},
-        #         {'name': '12_25', 'min': p12, 'max': p25},
-        #         {'name': '25_37', 'min': p25, 'max': p37},
-        #         {'name': '37_50', 'min': p37, 'max': p50},
-        #         {'name': '50_62', 'min': p50, 'max': p62},
-        #         {'name': '62_75', 'min': p62, 'max': p75},
-        #         {'name': '75_87', 'min': p75, 'max': p87},
-        #         {'name': '87_inf', 'min': p87, 'max': np.inf}
-        #     ]
-        # }
+        {
+            'group_name': 'g8__percentile12_25_37_50_62_75_87',
+            'payUserGroupList': [
+                {'name': '0_12', 'min': 0, 'max': p12},
+                {'name': '12_25', 'min': p12, 'max': p25},
+                {'name': '25_37', 'min': p25, 'max': p37},
+                {'name': '37_50', 'min': p37, 'max': p50},
+                {'name': '50_62', 'min': p50, 'max': p62},
+                {'name': '62_75', 'min': p62, 'max': p75},
+                {'name': '75_87', 'min': p75, 'max': p87},
+                {'name': '87_inf', 'min': p87, 'max': np.inf}
+            ]
+        }
     ]
 
     return configurations
@@ -614,7 +610,7 @@ if __name__ == "__main__":
     for configuration in configurations:
         print(configuration)
 
-        # main(configuration, False, False)
-        # main(configuration, True, False)
-        # main(configuration, False, True)
+        main(configuration, False, False)
+        main(configuration, True, False)
+        main(configuration, False, True)
         main(configuration, True, True)
