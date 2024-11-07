@@ -38,6 +38,58 @@ def init():
         execSql = execSql_local
         dayStr = '20241104'  # 本地测试时的日期，可自行修改
 
+    print('dayStr:', dayStr)
+
+def createTable():
+    if 'o' in globals():
+        from odps.models import Schema, Column, Partition
+        # 创建表格（如果不存在）
+        columns = [
+            Column(name='app', type='string', comment='app identifier'),
+            Column(name='media', type='string', comment='media source'),
+            Column(name='country', type='string', comment='country'),
+            Column(name='install_day', type='string', comment='被预测日期，比如20241104日预测20241105日数据，这里会是20241105'),
+            Column(name='type', type='string', comment='-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3,best。其中best是满足倒推1日ROI的最大花费。'),
+            Column(name='predicted_pu', type='double', comment='predicted pay users'),
+            Column(name='predicted_arppu', type='double', comment='predicted ARPPU'),
+            Column(name='predicted_revenue', type='double', comment='predicted revenue'),
+            Column(name='predicted_roi', type='double', comment='predicted roi')
+        ]
+        partitions = [
+            Partition(name='day', type='string', comment='预测日期，比如20241104日预测20241105日数据，这里会是20241104')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        o.create_table(table_name, schema, if_not_exists=True)
+    else:
+        print('No table creation in local version')
+
+def deletePartition(dayStr):
+    if 'o' in globals():
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        t = o.get_table(table_name)
+        # 删除分区（如果存在）
+        t.delete_partition('day=%s' % (dayStr), if_exists=True)
+        print(f"Partition day={dayStr} deleted from table {table_name}.")
+    else:
+        print('No partition deletion in local version')
+
+def writeToTable(df, dayStr):
+    print('try to write verification results to table:')
+    print(df.head(5))
+    if 'o' in globals():
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        t = o.get_table(table_name)
+        with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
+            # 将 install_day 转换为字符串
+            df['install_day'] = df['install_day'].dt.strftime('%Y%m%d')
+            writer.write(df)
+        print(f"Verification results written to table partition day={dayStr}.")
+    else:
+        print('writeToTable failed, o is not defined')
+        print(dayStr)
+        print(df)
+
 def getHistoricalData(installDayStart,installDayEnd,platform='android'):
     app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
 
@@ -55,7 +107,7 @@ select
     predicted_arppu,
     actual_revenue,
     predicted_revenue
-from lastwar_predict_day1_pu_pct_by_cost_pct_verification
+from lastwar_predict_day1_pu_pct_by_cost_pct_report
 where day > 0
 and install_day between {installDayStart} and {installDayEnd}
 and app = '{app_package}'
@@ -695,7 +747,7 @@ GROUP BY
     data['media'] = data['media'].map(media_mapping)
     return data
 
-def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, yesterdayIsWeekend, predictArppuAndLastPu):
+def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, todayIsWeekend, predictArppuAndLastPu):
     """
     执行大盘（media='ALL' & country='ALL'）的预测任务。
 
@@ -707,7 +759,7 @@ def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
         currentMondayStr (str): 当前星期一的日期字符串。
         dayStr (str): 目标日期字符串，例如 '20241104'。
         platform (str): 平台名称，如 'android' 或 'ios'。
-        yesterdayIsWeekend (bool): 昨天是否是周末。
+        todayIsWeekend (bool): 是否是周末。
         predictArppuAndLastPu (pd.DataFrame): getPredictArppuAndLastPu 函数的结果。
 
     返回：
@@ -748,7 +800,7 @@ def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
                     inputDf = pd.DataFrame({
                         'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
                         'cost_change_ratio': [cost_change_ratio],
-                        'is_weekend': [yesterdayIsWeekend]
+                        'is_weekend': [todayIsWeekend]
                     })
                     
                     # 进行预测
@@ -821,7 +873,7 @@ def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
     
     return allRet
 
-def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, yesterdayIsWeekend, predictArppuAndLastPu):
+def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, todayIsWeekend, predictArppuAndLastPu):
     """
     执行按国家分组的预测任务。
 
@@ -833,7 +885,7 @@ def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, c
         currentMondayStr (str): 当前星期一的日期字符串。
         dayStr (str): 目标日期字符串，例如 '20241104'。
         platform (str): 平台名称，如 'android' 或 'ios'。
-        yesterdayIsWeekend (bool): 昨天是否是周末。
+        todayIsWeekend (bool): 昨天是否是周末。
         predictArppuAndLastPu (pd.DataFrame): getPredictArppuAndLastPu 函数的结果。
 
     返回：
@@ -885,7 +937,7 @@ def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, c
                         inputDf = pd.DataFrame({
                             'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
                             'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [yesterdayIsWeekend]
+                            'is_weekend': [todayIsWeekend]
                         })
                         
                         # 进行预测
@@ -958,7 +1010,7 @@ def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, c
     
     return allRet
 
-def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, yesterdayIsWeekend, predictArppuAndLastPu):
+def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, todayIsWeekend, predictArppuAndLastPu):
     """
     执行按媒体分组的预测任务。
 
@@ -970,7 +1022,7 @@ def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
         currentMondayStr (str): 当前星期一的日期字符串。
         dayStr (str): 目标日期字符串，例如 '20241104'。
         platform (str): 平台名称，如 'android' 或 'ios'。
-        yesterdayIsWeekend (bool): 昨天是否是周末。
+        todayIsWeekend (bool): 昨天是否是周末。
         predictArppuAndLastPu (pd.DataFrame): getPredictArppuAndLastPu 函数的结果。
 
     返回：
@@ -1022,7 +1074,7 @@ def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
                         inputDf = pd.DataFrame({
                             'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
                             'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [yesterdayIsWeekend]
+                            'is_weekend': [todayIsWeekend]
                         })
                         
                         # 进行预测
@@ -1095,7 +1147,7 @@ def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
     
     return allRet
 
-def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, yesterdayIsWeekend, predictArppuAndLastPu):
+def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_package, currentMondayStr, dayStr, platform, todayIsWeekend, predictArppuAndLastPu):
     """
     执行按国家和媒体组合分组的预测任务。
 
@@ -1107,7 +1159,7 @@ def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_pack
         currentMondayStr (str): 当前星期一的日期字符串。
         dayStr (str): 目标日期字符串，例如 '20241104'。
         platform (str): 平台名称，如 'android' 或 'ios'。
-        yesterdayIsWeekend (bool): 昨天是否是周末。
+        todayIsWeekend (bool): 昨天是否是周末。
         predictArppuAndLastPu (pd.DataFrame): getPredictArppuAndLastPu 函数的结果。
 
     返回：
@@ -1163,7 +1215,7 @@ def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_pack
                         inputDf = pd.DataFrame({
                             'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
                             'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [yesterdayIsWeekend]
+                            'is_weekend': [todayIsWeekend]
                         })
                         
                         # 进行预测
@@ -1326,9 +1378,11 @@ def find_max_cost_meeting_roi(predict_df, lastDayStr, platform):
 def main():
     global dayStr
 
+    today = pd.to_datetime(dayStr, format='%Y%m%d')
+    todayIsWeekend = today.dayofweek in [5, 6]
+
     yesterday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=1)
     yesterdayStr = yesterday.strftime('%Y%m%d')
-    yesterdayIsWeekend = yesterday.dayofweek in [5, 6]
 
     # 统计往前推N周的数据
     N = 8
@@ -1371,23 +1425,10 @@ def main():
             currentMondayStr=currentMondayStr,
             dayStr=dayStr,
             platform=platform,
-            yesterdayIsWeekend=yesterdayIsWeekend,
+            todayIsWeekend=todayIsWeekend,
             predictArppuAndLastPu=predictArppuAndLastPu
         )
-        if macro_prediction.empty == False:
-            # 使用封装的新函数找到满足 ROI 条件的最大预测花费金额
-            max_roi_prediction = find_max_cost_meeting_roi(
-                predict_df=macro_prediction,
-                lastDayStr=yesterdayStr,
-                platform=platform
-            )
-            if not max_roi_prediction.empty:
-                print("满足 ROI 条件的最大预测花费金额记录：")
-                print(max_roi_prediction)
-            else:
-                print("没有满足 ROI 条件的预测记录。")
-            
-
+        
         # 调用封装后的按国家预测函数
         country_prediction = predict_country(
             minWeekMapeDf=minWeekMapeDf,
@@ -1397,22 +1438,12 @@ def main():
             currentMondayStr=currentMondayStr,
             dayStr=dayStr,
             platform=platform,
-            yesterdayIsWeekend=yesterdayIsWeekend,
+            todayIsWeekend=todayIsWeekend,
             predictArppuAndLastPu=predictArppuAndLastPu
         )
 
-        if country_prediction.empty == False:
-            # 使用封装的新函数找到满足 ROI 条件的最大预测花费金额
-            max_roi_prediction = find_max_cost_meeting_roi(
-                predict_df=country_prediction,
-                lastDayStr=yesterdayStr,
-                platform=platform
-            )
-            if not max_roi_prediction.empty:
-                print("满足 ROI 条件的最大预测花费金额记录：")
-                print(max_roi_prediction)
-            else:
-                print("没有满足 ROI 条件的预测记录。")
+        media_prediction = pd.DataFrame()
+        country_media_prediction = pd.DataFrame()
 
         if platform == 'android':
             # 执行按媒体分组的预测
@@ -1424,22 +1455,9 @@ def main():
                 currentMondayStr=currentMondayStr,
                 dayStr=dayStr,
                 platform=platform,
-                yesterdayIsWeekend=yesterdayIsWeekend,
+                todayIsWeekend=todayIsWeekend,
                 predictArppuAndLastPu=predictArppuAndLastPu
             )
-
-            if media_prediction.empty == False:
-                # 使用封装的新函数找到满足 ROI 条件的最大预测花费金额
-                max_roi_prediction = find_max_cost_meeting_roi(
-                    predict_df=media_prediction,
-                    lastDayStr=yesterdayStr,
-                    platform=platform
-                )
-                if not max_roi_prediction.empty:
-                    print("满足 ROI 条件的最大预测花费金额记录：")
-                    print(max_roi_prediction)
-                else:
-                    print("没有满足 ROI 条件的预测记录。")
 
             # 执行按国家和媒体组合分组的预测
             country_media_prediction = predict_country_media(
@@ -1450,23 +1468,124 @@ def main():
                 currentMondayStr=currentMondayStr,
                 dayStr=dayStr,
                 platform=platform,
-                yesterdayIsWeekend=yesterdayIsWeekend,
+                todayIsWeekend=todayIsWeekend,
                 predictArppuAndLastPu=predictArppuAndLastPu
             )
 
-            if country_media_prediction.empty == False:
-                # 使用封装的新函数找到满足 ROI 条件的最大预测花费金额
-                max_roi_prediction = find_max_cost_meeting_roi(
-                    predict_df=country_media_prediction,
-                    lastDayStr=yesterdayStr,
-                    platform=platform
-                )
-                if not max_roi_prediction.empty:
-                    print("满足 ROI 条件的最大预测花费金额记录：")
-                    print(max_roi_prediction)
-                else:
-                    print("没有满足 ROI 条件的预测记录。")
+        # 合并所有预测结果
+        all_predictions = pd.concat([
+            macro_prediction,
+            country_prediction,
+            media_prediction,
+            country_media_prediction
+        ], ignore_index=True)
+
+        if not all_predictions.empty:
+            # 添加 'app' 列
+            all_predictions['app'] = all_predictions['platform'].apply(lambda x: 'com.fun.lastwar.gp' if x == 'android' else 'id6448786147')
+
+            # 设置 'install_day' 为 dayStr
+            all_predictions['install_day'] = dayStr
+
+            # 设置 'type' 为 cost_change_ratio 的字符串表示
+            all_predictions['type'] = all_predictions['cost_change_ratio'].astype(str)
+
+            # 选择与表结构匹配的列
+            predictions_to_write = all_predictions[['app', 'media', 'country', 'install_day', 'type',
+                                                    'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
+
+            # 删除现有分区（如果存在）
+            deletePartition(dayStr)
+
+            # 写入预测结果到表中
+            writeToTable(predictions_to_write, dayStr)
+            print(f"平台 {platform} 的预测结果已写入数据库。")
+        else:
+            print(f"平台 {platform} 没有预测结果可写入。")
+
+        # 寻找并写入最佳预测结果
+        # 处理大盘预测的最佳结果
+        if not macro_prediction.empty:
+            max_roi_prediction_macro = find_max_cost_meeting_roi(
+                predict_df=macro_prediction,
+                lastDayStr=yesterdayStr,
+                platform=platform
+            )
+            if not max_roi_prediction_macro.empty:
+                print("满足 ROI 条件的最大预测花费金额记录（大盘）：")
+                print(max_roi_prediction_macro)
+        else:
+            max_roi_prediction_macro = pd.DataFrame()
+        
+        # 处理按国家预测的最佳结果
+        if not country_prediction.empty:
+            max_roi_prediction_country = find_max_cost_meeting_roi(
+                predict_df=country_prediction,
+                lastDayStr=yesterdayStr,
+                platform=platform
+            )
+            if not max_roi_prediction_country.empty:
+                print("满足 ROI 条件的最大预测花费金额记录（按国家）：")
+                print(max_roi_prediction_country)
+        else:
+            max_roi_prediction_country = pd.DataFrame()
+        
+        # 处理按媒体预测的最佳结果
+        if platform == 'android' and not media_prediction.empty:
+            max_roi_prediction_media = find_max_cost_meeting_roi(
+                predict_df=media_prediction,
+                lastDayStr=yesterdayStr,
+                platform=platform
+            )
+            if not max_roi_prediction_media.empty:
+                print("满足 ROI 条件的最大预测花费金额记录（按媒体）：")
+                print(max_roi_prediction_media)
+        else:
+            max_roi_prediction_media = pd.DataFrame()
+        
+        # 处理按国家和媒体组合预测的最佳结果
+        if platform == 'android' and not country_media_prediction.empty:
+            max_roi_prediction_country_media = find_max_cost_meeting_roi(
+                predict_df=country_media_prediction,
+                lastDayStr=yesterdayStr,
+                platform=platform
+            )
+            if not max_roi_prediction_country_media.empty:
+                print("满足 ROI 条件的最大预测花费金额记录（按国家和媒体组合）：")
+                print(max_roi_prediction_country_media)
+        else:
+            max_roi_prediction_country_media = pd.DataFrame()
+
+        # 合并所有最佳结果
+        best_records = pd.concat([
+            max_roi_prediction_macro,
+            max_roi_prediction_country,
+            max_roi_prediction_media,
+            max_roi_prediction_country_media
+        ], ignore_index=True)
+
+        if not best_records.empty:
+            # 添加 'app' 列
+            best_records['app'] = best_records['platform'].apply(lambda x: 'com.fun.lastwar.gp' if x == 'android' else 'id6448786147')
+
+            # 设置 'install_day' 为 dayStr
+            best_records['install_day'] = dayStr
+
+            # 设置 'type' 为 'best'
+            best_records['type'] = 'best'
+
+            # 选择与表结构匹配的列
+            best_to_write = best_records[['app', 'media', 'country', 'install_day', 'type',
+                                         'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
+
+            # 写入最佳预测结果到表中
+            writeToTable(best_to_write, dayStr)
+            print(f"平台 {platform} 的最佳预测结果已写入数据库。")
+        else:
+            print(f"平台 {platform} 没有满足 ROI 条件的最佳预测记录。")
+
 
 if __name__ == '__main__':
     init()
+    createTable()
     main()
