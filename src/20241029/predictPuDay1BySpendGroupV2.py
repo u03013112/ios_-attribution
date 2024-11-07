@@ -20,9 +20,11 @@ def init():
         }
 
         def execSql_online(sql):
+            print(sql)
             with o.execute_sql(sql).open_reader(tunnel=True, limit=False) as reader:
                 pd_df = reader.to_pandas()
                 print('获得%d行数据' % len(pd_df))
+                print(pd_df.head(5))
                 return pd_df
 
         execSql = execSql_online
@@ -48,7 +50,6 @@ def createTable():
             Column(name='app', type='string', comment='app identifier'),
             Column(name='media', type='string', comment='media source'),
             Column(name='country', type='string', comment='country'),
-            Column(name='install_day', type='string', comment='被预测日期，比如20241104日预测20241105日数据，这里会是20241105'),
             Column(name='type', type='string', comment='-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3,best。其中best是满足倒推1日ROI的最大花费。'),
             Column(name='predicted_pu', type='double', comment='predicted pay users'),
             Column(name='predicted_arppu', type='double', comment='predicted ARPPU'),
@@ -56,17 +57,17 @@ def createTable():
             Column(name='predicted_roi', type='double', comment='predicted roi')
         ]
         partitions = [
-            Partition(name='day', type='string', comment='预测日期，比如20241104日预测20241105日数据，这里会是20241104')
+            Partition(name='day', type='string', comment='预测日期')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report_20241107'
         o.create_table(table_name, schema, if_not_exists=True)
     else:
         print('No table creation in local version')
 
 def deletePartition(dayStr):
     if 'o' in globals():
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report_20241107'
         t = o.get_table(table_name)
         # 删除分区（如果存在）
         t.delete_partition('day=%s' % (dayStr), if_exists=True)
@@ -78,7 +79,7 @@ def writeToTable(df, dayStr):
     print('try to write verification results to table:')
     print(df.head(5))
     if 'o' in globals():
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct_report_20241107'
         t = o.get_table(table_name)
         with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
             # 将 install_day 转换为字符串
@@ -107,7 +108,7 @@ select
     predicted_arppu,
     actual_revenue,
     predicted_revenue
-from lastwar_predict_day1_pu_pct_by_cost_pct_report
+from lastwar_predict_day1_pu_pct_by_cost_pct_verification
 where day > 0
 and install_day between {installDayStart} and {installDayEnd}
 and app = '{app_package}'
@@ -866,6 +867,7 @@ def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
         'predicted_pu': 'sum',
         'predicted_revenue': 'sum'
     }).reset_index()
+    allRet['predicted_arppu'] = allRet['predicted_revenue'] / allRet['predicted_pu']
     allRet['predicted_roi'] = allRet['predicted_revenue'] / allRet['cost']
     
     print("大盘预测结果：")
@@ -1003,6 +1005,7 @@ def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, c
         'predicted_pu': 'sum',
         'predicted_revenue': 'sum'
     }).reset_index()
+    allRet['predicted_arppu'] = allRet['predicted_revenue'] / allRet['predicted_pu']
     allRet['predicted_roi'] = allRet['predicted_revenue'] / allRet['cost']
     
     print("按国家分组的预测结果：")
@@ -1140,6 +1143,7 @@ def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
         'predicted_pu': 'sum',
         'predicted_revenue': 'sum'
     }).reset_index()
+    allRet['predicted_arppu'] = allRet['predicted_revenue'] / allRet['predicted_pu']
     allRet['predicted_roi'] = allRet['predicted_revenue'] / allRet['cost']
     
     print("按媒体分组的预测结果：")
@@ -1281,6 +1285,7 @@ def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_pack
         'predicted_pu': 'sum',
         'predicted_revenue': 'sum'
     }).reset_index()
+    allRet['predicted_arppu'] = allRet['predicted_revenue'] / allRet['predicted_pu']
     allRet['predicted_roi'] = allRet['predicted_revenue'] / allRet['cost']
     
     print("按国家和媒体组合分组的预测结果：")
@@ -1383,6 +1388,8 @@ def main():
 
     yesterday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=1)
     yesterdayStr = yesterday.strftime('%Y%m%d')
+
+    print(f"使用{yesterdayStr}的数据预测{dayStr}可能花费。")
 
     # 统计往前推N周的数据
     N = 8
