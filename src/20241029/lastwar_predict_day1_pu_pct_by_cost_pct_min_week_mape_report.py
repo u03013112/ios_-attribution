@@ -187,6 +187,8 @@ def main():
     # 合并结果
     minWeekMapeDf = pd.concat([minWeekMapeDf_android, minWeekMapeDf_ios], ignore_index=True)
     
+    minWeekMapeDf = minWeekMapeDf.rename(columns={'minMape': 'min_mape', 'dayMape': 'day_mape'})
+
     # 删除旧分区
     deletePartition(currentMondayStr)
     
