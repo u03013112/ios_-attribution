@@ -1,0 +1,298 @@
+CREATE table if not exists lastwar_predict_day1_pu_pct_by_cost_pct__raw_cost_data2 (
+  app string,
+  install_day string,
+  install_day_add1 string,
+  country string,
+  media string,
+  cost double,
+  revenue_d1 double,
+  installs double,
+  pud1 double
+);
+
+@androidData :=
+  SELECT
+  'com.fun.lastwar.gp' as app,
+  install_day,
+  SUM(usd) AS cost,
+  SUM(d1) AS revenue_d1,
+  SUM(ins) AS installs,
+  SUM(pud1) AS pud1,
+  CASE
+  WHEN mediasource = 'Facebook Ads' THEN 'FACEBOOK'
+  WHEN mediasource = 'applovin_int' THEN 'APPLOVIN'
+  WHEN mediasource = 'googleadwords_int' THEN 'GOOGLE'
+  ELSE 'OTHER'
+  END AS media,
+  country
+  FROM
+  tmp_lw_cost_and_roi_by_day
+  WHERE
+  install_day > 20240101
+  GROUP BY
+  install_day,
+  CASE
+  WHEN mediasource = 'Facebook Ads' THEN 'FACEBOOK'
+  WHEN mediasource = 'applovin_int' THEN 'APPLOVIN'
+  WHEN mediasource = 'googleadwords_int' THEN 'GOOGLE'
+  ELSE 'OTHER'
+  END,
+  country;
+
+
+
+@androidDataAll :=
+  SELECT
+  'com.fun.lastwar.gp' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  'ALL' AS media,
+  'ALL' AS country
+  FROM
+  @androidData
+  GROUP BY
+  install_day;
+
+
+
+@androidDataMedia :=
+  SELECT
+  'com.fun.lastwar.gp' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  media,
+  'ALL' AS country
+  FROM
+  @androidData
+  GROUP BY
+  install_day,
+  media;
+
+
+
+@androidDataCountry :=
+  SELECT
+  'com.fun.lastwar.gp' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  'ALL' AS media,
+  country
+  FROM
+  @androidData
+  GROUP BY
+  install_day,
+  country;
+
+
+
+@iosData :=
+  SELECT
+  'id6448786147' as app,
+  install_day,
+  SUM(usd) AS cost,
+  SUM(d1) AS revenue_d1,
+  SUM(ins) AS installs,
+  SUM(pud1) AS pud1,
+  CASE
+  WHEN mediasource = 'Facebook Ads' THEN 'FACEBOOK'
+  WHEN mediasource = 'applovin_int' THEN 'APPLOVIN'
+  WHEN mediasource = 'googleadwords_int' THEN 'GOOGLE'
+  ELSE 'OTHER'
+  END AS media,
+  country
+  FROM
+  tmp_lw_cost_and_roi_by_day_ios
+  WHERE
+  install_day > 20240101
+  GROUP BY
+  install_day,
+  CASE
+  WHEN mediasource = 'Facebook Ads' THEN 'FACEBOOK'
+  WHEN mediasource = 'applovin_int' THEN 'APPLOVIN'
+  WHEN mediasource = 'googleadwords_int' THEN 'GOOGLE'
+  ELSE 'OTHER'
+  END,
+  country;
+
+
+
+@iosDataAll :=
+  SELECT
+  'id6448786147' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  'ALL' AS media,
+  'ALL' AS country
+  FROM
+  @iosData
+  GROUP BY
+  install_day;
+
+
+
+@iosDataMedia :=
+  SELECT
+  'id6448786147' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  media,
+  'ALL' AS country
+  FROM
+  @iosData
+  GROUP BY
+  install_day,
+  media;
+
+
+
+@iosDataCountry :=
+  SELECT
+  'id6448786147' as app,
+  install_day,
+  SUM(cost) AS cost,
+  SUM(revenue_d1) AS revenue_d1,
+  SUM(installs) AS installs,
+  SUM(pud1) AS pud1,
+  'ALL' AS media,
+  country
+  FROM
+  @iosData
+  GROUP BY
+  install_day,
+  country;
+
+@data :=
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @androidData
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @androidDataAll
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @androidDataMedia
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @androidDataCountry
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @iosData
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @iosDataAll
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @iosDataMedia
+  union
+  all
+  select
+  app,
+  install_day,
+  country,
+  media,
+  cost,
+  revenue_d1,
+  installs,
+  pud1
+  from
+  @iosDataCountry;
+
+
+insert
+overwrite table lastwar_predict_day1_pu_pct_by_cost_pct__raw_cost_data2
+select
+app,
+install_day,
+to_char(date_add(to_date(install_day, 'YYYYMMDD'), 1), 'YYYYMMDD') AS install_day_add1,
+country,
+media,
+cost,
+revenue_d1,
+installs,
+pud1
+from
+@data
+;
