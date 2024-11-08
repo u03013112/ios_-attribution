@@ -51,6 +51,7 @@ def createTable():
             Column(name='media', type='string', comment='media source'),
             Column(name='country', type='string', comment='country'),
             Column(name='type', type='string', comment='-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3,best。其中best是满足倒推1日ROI的最大花费。'),
+            Column(name='cost', type='double', comment='cost'),
             Column(name='predicted_pu', type='double', comment='predicted pay users'),
             Column(name='predicted_arppu', type='double', comment='predicted ARPPU'),
             Column(name='predicted_revenue', type='double', comment='predicted revenue'),
@@ -83,7 +84,7 @@ def writeToTable(df, dayStr):
         t = o.get_table(table_name)
         with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
             # 将 install_day 转换为字符串
-            df['install_day'] = df['install_day'].dt.strftime('%Y%m%d')
+            # df['install_day'] = df['install_day'].dt.strftime('%Y%m%d')
             writer.write(df)
         print(f"Verification results written to table partition day={dayStr}.")
     else:
@@ -614,7 +615,13 @@ def getPredictArppuAndLastPu(dayStr,configurations):
             for payUserGroup in payUserGroupList:
                 payUserGroupName = payUserGroup['name']
                 arppu = allDf[allDf['pay_user_group_name'] == payUserGroupName]['actual_arppu'].mean()
-                lastPu = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]['pu_1d'].values[0]
+                # lastPu = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]['pu_1d'].values[0]
+                filtered_df = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]
+                if not filtered_df.empty:
+                    lastPu = filtered_df['pu_1d'].iloc[0]
+                else:
+                    lastPu = 0
+                    
                 allRetDf = pd.DataFrame({
                     'platform': [platform],
                     'country': ['ALL'],
@@ -1498,11 +1505,8 @@ def main():
             all_predictions['type'] = all_predictions['cost_change_ratio'].astype(str)
 
             # 选择与表结构匹配的列
-            predictions_to_write = all_predictions[['app', 'media', 'country', 'install_day', 'type',
+            predictions_to_write = all_predictions[['app', 'media', 'country', 'type','cost', 
                                                     'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
-
-            # 删除现有分区（如果存在）
-            deletePartition(dayStr)
 
             # 写入预测结果到表中
             writeToTable(predictions_to_write, dayStr)
@@ -1582,8 +1586,8 @@ def main():
             best_records['type'] = 'best'
 
             # 选择与表结构匹配的列
-            best_to_write = best_records[['app', 'media', 'country', 'install_day', 'type',
-                                         'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
+            best_to_write = best_records[['app', 'media', 'country', 'type', 'cost',
+                                        'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
 
             # 写入最佳预测结果到表中
             writeToTable(best_to_write, dayStr)
@@ -1595,4 +1599,6 @@ def main():
 if __name__ == '__main__':
     init()
     createTable()
+    deletePartition(dayStr)
+    
     main()
