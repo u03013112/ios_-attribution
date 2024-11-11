@@ -270,7 +270,8 @@ def preprocessData(data, payUserGroupList, media=None, country=None):
     
     # 最终选择列
     df = merged_long[['ds', 'cost', 'cost_change_ratio', 'y', 'pay_user_group_name', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']]
-    
+    # ['ds', 'cost', 'cost_change_ratio', 'y', 'pay_user_group_name', 'actual_ARPPU', 'predicted_ARPPU', 'pu_1d', 'revenue_1d']
+    # ['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'pu_change_ratio', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'revenue_1d']
     # 添加周末特征
     df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
 
