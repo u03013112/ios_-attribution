@@ -196,31 +196,53 @@ def getData(configurations_android):
 
     return data
 
+def getConfigurations(platform, dayStr):
+    """
+    从数据库中读取配置，并组装成Python对象。
+    """
+    app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
+    sql = f'''
+    SELECT
+        group_name,
+        pay_user_group,
+        min_value,
+        max_value
+    FROM
+        lastwar_predict_day1_pu_pct_by_cost_pct__configurations
+    WHERE
+        app = '{app_package}'
+        AND day = '{dayStr}'
+    '''
+    print("执行的SQL语句如下：\n")
+    print(sql)
+    data = execSql(sql)
+    
+    configurations = []
+    grouped = data.groupby('group_name')
+    for group_name, group_data in grouped:
+        payUserGroupList = []
+        for _, row in group_data.iterrows():
+            payUserGroupList.append({
+                'name': row['pay_user_group'],
+                'min': row['min_value'],
+                'max': row['max_value']
+            })
+        configurations.append({
+            'group_name': group_name,
+            'payUserGroupList': payUserGroupList
+        })
+    
+    return configurations
+
 # 大盘数据
 def main1():
-    configurations_android = [
-        {
-            'group_name':'g1__all',
-            'payUserGroupList':[
-                {'name': 'all', 'min': 0, 'max': 1e10}  # 将 np.inf 替换为 1e10
-            ],
-        },{
-            'group_name':'g2__2',
-            'payUserGroupList':[
-                {'name': '0_2', 'min': 0, 'max': 2},
-                {'name': '2_inf', 'min': 2, 'max': 1e10}  # 将 np.inf 替换为 1e10
-            ],
-        },
-    ]
+    configurations_android = getConfigurations('android', '20240902')
     
     # 获取数据，确保包含分析期间前15天的数据
     df = getData(configurations_android)
     
     # 确保 'install_day' 是 datetime 类型
     df['install_day'] = pd.to_datetime(df['install_day'])
-    
-    # # 计算 ARPPU，如果 pu_1d 为0，则设置为0以避免除以零错误
-    # df['arppu'] = df.apply(lambda row: row['revenue_1d'] / row['pu_1d'] if row['pu_1d'] > 0 else 0, axis=1)
     
     # 按照 ['install_day', 'platform', 'group_name', 'pay_user_group'] 聚合数据
     df_grouped = df.groupby(['install_day', 'platform', 'group_name', 'pay_user_group']).agg({
@@ -304,7 +326,7 @@ def main1():
         overall_correlation = 0
         for corr, weight, mape in correlation_weight_mape_list:
             if not np.isnan(corr):
-                overall_correlation += corr * weight * mape
+                overall_correlation += corr * weight * (100 - mape)
         
         print(f"  配置 '{name}' 的整体相关性分数: {overall_correlation:.4f}\n")
         
@@ -326,10 +348,6 @@ def main1():
             'group_name': name,
             'ARPPU_MAPE': mape_weighted
         }, ignore_index=True)
-    
-    # 计算所有分组的分数之和
-    total_score = correlation_scores['correlation_score'].sum()
-    print(f"所有配置的相关性分数总和: {total_score:.4f}")
     
     # 保存相关性分数和 ARPPU MAPE 到 CSV 文件
     debug_dir = "/src/data/"  # 修改为合适的路径
