@@ -36,7 +36,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241104'  # 本地测试时的日期，可自行修改
+        dayStr = '20240617'  # 本地测试时的日期，可自行修改
 
     print('dayStr:', dayStr)
 
@@ -48,18 +48,22 @@ def createTable():
             Column(name='install_day', type='string', comment='安装日期'),
             Column(name='country', type='string', comment='国家'),
             Column(name='mediasource', type='string', comment='媒体来源'),
+            # revenue_1d 是削弱后，revenue_1d_before_nerf 是削弱前
+            # 这么修改是为了后面训练和验算逻辑不改
             Column(name='revenue_1d', type='double', comment='1天收入'),
+            Column(name='revenue_1d_before_nerf', type='double', comment='1天收入,削弱前'),
             Column(name='pu_1d', type='bigint', comment='1天付费用户数'),
             Column(name='cost', type='double', comment='成本'),
             Column(name='platform', type='string', comment='平台'),
             Column(name='group_name', type='string', comment='组名'),
-            Column(name='pay_user_group', type='string', comment='付费用户组')
+            Column(name='pay_user_group', type='string', comment='付费用户组'),
+            Column(name='max_r', type='double', comment='最大收入')
         ]
         hist_partitions = [
             Partition(name='day', type='string', comment='预测日期')
         ]
         hist_schema = Schema(columns=hist_columns, partitions=hist_partitions)
-        hist_table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__historical_data'
+        hist_table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
         o.create_table(hist_table_name, hist_schema, if_not_exists=True)
     else:
         print('No table creation in local version')
@@ -83,9 +87,10 @@ def getConfigurations(platform, dayStr):
         group_name,
         pay_user_group,
         min_value,
-        max_value
+        max_value,
+        max_r
     FROM
-        lastwar_predict_day1_pu_pct_by_cost_pct__configurations
+        lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_configurations
     WHERE
         app = '{app_package}'
         AND day = '{dayStr}'
@@ -95,8 +100,8 @@ def getConfigurations(platform, dayStr):
     data = execSql(sql)
     
     configurations = []
-    grouped = data.groupby('group_name')
-    for group_name, group_data in grouped:
+    grouped = data.groupby(['group_name', 'max_r'])
+    for (group_name,max_r), group_data in grouped:
         payUserGroupList = []
         for _, row in group_data.iterrows():
             payUserGroupList.append({
@@ -106,6 +111,7 @@ def getConfigurations(platform, dayStr):
             })
         configurations.append({
             'group_name': group_name,
+            'max_r': max_r,
             'payUserGroupList': payUserGroupList
         })
     
@@ -137,18 +143,23 @@ def generate_case_statements(group_list, value_field, aggregate='SUM', is_count=
                 AND {value_field} <= {max_value} THEN {value_field}
                 ELSE 0
             END
-        ) AS revenue_1d_{group['name']},
+        ) AS {value_field}_{group['name']},
             """
         statements.append(statement)
     return "\n".join(statements)
 
-def getHistoricalData(dayStr, platform='android', payUserGroupList=None):
+def getHistoricalData(dayStr, platform, configuration):
     # 根据平台选择不同的表名和应用包名
     table_name = 'tmp_lw_cost_and_roi_by_day' if platform == 'android' else 'tmp_lw_cost_and_roi_by_day_ios'
     app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
 
+    group_name = configuration['group_name']
+    max_r = configuration['max_r']
+    payUserGroupList = configuration['payUserGroupList']
+
     # 生成动态的CASE语句
     if payUserGroupList:
+        revenue_before_nerf_case = generate_case_statements(payUserGroupList, 'revenue_1d_before_nerf', aggregate='SUM', is_count=False)
         revenue_case = generate_case_statements(payUserGroupList, 'revenue_1d', aggregate='SUM', is_count=False)
         count_case = generate_case_statements(payUserGroupList, 'revenue_1d', aggregate='SUM', is_count=True)
     else:
@@ -205,16 +216,31 @@ def getHistoricalData(dayStr, platform='android', payUserGroupList=None):
         mediasource
     ;
 
+    @d1_purchase_data_nerf :=
+    SELECT
+        install_day,
+        game_uid,
+        country,
+        mediasource,
+        revenue_1d as revenue_1d_before_nerf,
+        CASE
+            WHEN revenue_1d > {max_r} THEN {max_r}
+            ELSE revenue_1d
+        END AS revenue_1d
+    from @d1_purchase_data
+    ;
+
     @country_map :=
     SELECT
         d1.game_uid,
         d1.install_day,
         d1.country,
         d1.mediasource,
+        d1.revenue_1d_before_nerf,
         d1.revenue_1d,
         map.countrygroup AS countrygroup
     FROM
-        @d1_purchase_data AS d1
+        @d1_purchase_data_nerf AS d1
         LEFT JOIN cdm_laswwar_country_map AS map 
             ON d1.country = map.country
     ;
@@ -224,8 +250,10 @@ def getHistoricalData(dayStr, platform='android', payUserGroupList=None):
         install_day,
         countrygroup AS country,
         mediasource,
+        {revenue_before_nerf_case}
         {revenue_case}
         {count_case}
+        SUM(revenue_1d_before_nerf) AS revenue_1d_before_nerf,
         SUM(revenue_1d) AS revenue_1d,
         COUNT(DISTINCT game_uid) AS pu_1d
     FROM
@@ -240,8 +268,10 @@ def getHistoricalData(dayStr, platform='android', payUserGroupList=None):
         COALESCE(r.install_day, c.install_day) AS install_day,
         COALESCE(r.country, c.country) AS country,
         COALESCE(r.mediasource, c.mediasource) AS mediasource,
+        {', '.join([f"r.revenue_1d_before_nerf_{group['name']}" for group in payUserGroupList]) if payUserGroupList else ''},
         {', '.join([f"r.revenue_1d_{group['name']}" for group in payUserGroupList]) if payUserGroupList else ''},
         {', '.join([f"r.pu_1d_{group['name']}" for group in payUserGroupList]) if payUserGroupList else ''},
+        r.revenue_1d_before_nerf,
         r.revenue_1d,
         r.pu_1d,
         c.usd AS cost
@@ -259,14 +289,23 @@ def getHistoricalData(dayStr, platform='android', payUserGroupList=None):
     
     return data
 
-def processHistoricalData(data, platform, group_name, payUserGroupList):
+def processHistoricalData(data, platform, configuration):
+    group_name = configuration['group_name']
+    payUserGroupList = configuration['payUserGroupList']
+    max_r = configuration['max_r']
+
     processed_data = pd.DataFrame()
     for group in payUserGroupList:
-        temp_data = data[['install_day', 'country', 'mediasource', f'revenue_1d_{group["name"]}', f'pu_1d_{group["name"]}', 'cost']].copy()
-        temp_data.rename(columns={f'revenue_1d_{group["name"]}': 'revenue_1d', f'pu_1d_{group["name"]}': 'pu_1d'}, inplace=True)
+        temp_data = data[['install_day', 'country', 'mediasource', f'revenue_1d_before_nerf_{group["name"]}', f'revenue_1d_{group["name"]}', f'pu_1d_{group["name"]}', 'cost']].copy()
+        temp_data.rename(columns={
+            f'revenue_1d_before_nerf_{group["name"]}': 'revenue_1d_before_nerf',
+            f'revenue_1d_{group["name"]}': 'revenue_1d', 
+            f'pu_1d_{group["name"]}': 'pu_1d'
+        }, inplace=True)
         temp_data['platform'] = platform
         temp_data['group_name'] = group_name
         temp_data['pay_user_group'] = group['name']
+        temp_data['max_r'] = max_r
         processed_data = pd.concat([processed_data, temp_data], ignore_index=True)
     
     return processed_data
@@ -274,7 +313,7 @@ def processHistoricalData(data, platform, group_name, payUserGroupList):
 def writeHistoricalDataToTable(data, dayStr):
     print('try to write historical data to table:')
     if 'o' in globals():
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__historical_data'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
         t = o.get_table(table_name)
         with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
             writer.write(data)
@@ -295,7 +334,7 @@ def main():
     currentMondayStr = currentMonday.strftime('%Y%m%d')
     
     # 删除旧分区
-    deletePartition('lastwar_predict_day1_pu_pct_by_cost_pct__historical_data', dayStr)
+    deletePartition('lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data', dayStr)
     
     # 获取配置
     configurations_android = getConfigurations('android', currentMondayStr)
@@ -303,13 +342,13 @@ def main():
 
     # 获取历史数据并处理
     for config in configurations_android:
-        historical_data = getHistoricalData(dayStr, 'android', config['payUserGroupList'])
-        processed_data = processHistoricalData(historical_data, 'android', config['group_name'], config['payUserGroupList'])
+        historical_data = getHistoricalData(dayStr, 'android', config)
+        processed_data = processHistoricalData(historical_data, 'android', config)
         writeHistoricalDataToTable(processed_data, dayStr)
     
     for config in configurations_ios:
-        historical_data = getHistoricalData(dayStr, 'ios', config['payUserGroupList'])
-        processed_data = processHistoricalData(historical_data, 'ios', config['group_name'], config['payUserGroupList'])
+        historical_data = getHistoricalData(dayStr, 'ios', config)
+        processed_data = processHistoricalData(historical_data, 'ios', config)
         writeHistoricalDataToTable(processed_data, dayStr)
 
 if __name__ == "__main__":
