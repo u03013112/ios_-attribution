@@ -65,7 +65,7 @@ WHERE
     
     # 如果指定了group_name，则添加到查询条件中
     if group_name:
-        sql += f" AND group_name = '{group_name}'"
+        sql += f"    AND group_name = '{group_name}'"
     
     print("执行的SQL语句如下：\n")
     print(sql)
@@ -203,12 +203,12 @@ def writeTable(df, dayStr):
         print(dayStr)
         print(df)
 
-def main(configurations,group_by_media=False, group_by_country=False):
+def main(configuration,group_by_media=False, group_by_country=False):
     global dayStr
 
-    groupName = configurations['group_name']
-    maxR = configurations['max_r']
-    payUserGroupList = configurations['payUserGroupList']
+    groupName = configuration['group_name']
+    maxR = configuration['max_r']
+    payUserGroupList = configuration['payUserGroupList']
 
     # 找到本周的周一
     monday = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=pd.to_datetime(dayStr, format='%Y%m%d').dayofweek)
