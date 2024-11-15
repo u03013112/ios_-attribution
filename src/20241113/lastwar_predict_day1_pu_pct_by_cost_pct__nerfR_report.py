@@ -7,7 +7,9 @@ from prophet.serialize import model_from_json
 def init():
     global execSql
     global dayStr
+    global model_cache
 
+    model_cache = {}
 
     if 'o' in globals():
         print('this is online version')
@@ -38,7 +40,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241104'  # 本地测试时的日期，可自行修改
+        dayStr = '20240815'  # 本地测试时的日期，可自行修改
 
     print('dayStr:', dayStr)
 
@@ -94,82 +96,37 @@ def writeToTable(df, dayStr):
         print(dayStr)
         print(df)
 
-def getHistoricalData(installDayStart,installDayEnd,platform='android'):
+def getMinWeekMape(currentMondayStr, platform='android'):
+    print(f"获取最小MAPE：currentMondayStr={currentMondayStr} , platform={platform}")
+    # 获取历史数据
+    
     app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
 
     sql = f'''
 select
     app,
-    install_day,
     media,
     country,
     group_name,
-    pay_user_group_name,
-    actual_pu,
-    predicted_pu,
-    actual_arppu,
-    predicted_arppu,
-    actual_revenue,
-    predicted_revenue
-from lastwar_predict_day1_pu_pct_by_cost_pct_verification
-where day > 0
-and install_day between {installDayStart} and {installDayEnd}
+    max_r,
+    min_mape,
+    day_mape
+from lastwar_predict_day1_pu_pct_by_cost_pct__nerfR_min_week_mape_report
+where day = '{currentMondayStr}'
 and app = '{app_package}'
 ;
     '''
-    # print(sql)
+    print(sql)
     data = execSql(sql)
-    return data
-
-def getMinWeekMape(installDayStart, installDayEnd, platform='android'):
-    print(f"获取最小MAPE：installDayStart={installDayStart}, installDayEnd={installDayEnd}, platform={platform}")
-    # 获取历史数据
-    historical_data = getHistoricalData(installDayStart, installDayEnd, platform)
-    historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
-
-    # 计算 天MAPE
-    dayDf = historical_data.groupby(['install_day', 'media', 'country', 'group_name']).agg({
-        'actual_revenue': 'sum',
-        'predicted_revenue': 'sum'
-    }).reset_index()
-
-    dayDf['mape_revenue'] = np.abs((dayDf['actual_revenue'] - dayDf['predicted_revenue']) / dayDf['actual_revenue'])
-    dayDf2 = dayDf.groupby(['media', 'country', 'group_name']).agg({
-        'mape_revenue': 'mean'
-    }).reset_index()
-
-    # 计算 周MAPE
-    historical_data['week'] = historical_data['install_day'].dt.strftime('%Y-%W')
-    weekDf = historical_data.groupby(['week', 'media', 'country', 'group_name']).agg({
-        'actual_revenue': 'sum',
-        'predicted_revenue': 'sum'
-    }).reset_index()
-    weekDf['mape_revenue'] = np.abs((weekDf['actual_revenue'] - weekDf['predicted_revenue']) / weekDf['actual_revenue'])
-
-    weekDf2 = weekDf.groupby(['media', 'country', 'group_name']).agg({
-        'mape_revenue': 'mean'
-    }).reset_index()
-
-    # 找到按照 media 和 country 分组的最小 MAPE 对应的 group_name，以及最小的 MAPE 值
-    minMapeDf2 = weekDf2.groupby(['media', 'country']).agg(
-        minMape=('mape_revenue', 'min')
-    ).reset_index()
-
-    minMapeDf2 = minMapeDf2.merge(weekDf2, on=['media', 'country'], how='left')
-    minMapeDf2 = minMapeDf2[minMapeDf2['mape_revenue'] == minMapeDf2['minMape']]
-    minMapeDf2 = minMapeDf2.drop_duplicates(subset=['media', 'country'])
-
-    # 合并日MAPE
-    minMapeDf2 = minMapeDf2.merge(dayDf2, on=['media', 'country', 'group_name'], suffixes=('_week', '_day'))
-
+    
     # 选择需要的列
-    resultDf = minMapeDf2[['media', 'country', 'group_name', 'minMape', 'mape_revenue_day']]
-    resultDf.rename(columns={'mape_revenue_day': 'dayMape'}, inplace=True)
+    resultDf = data
+    resultDf.rename(columns={'day_mape': 'dayMape'}, inplace=True)
 
     return resultDf
 
-def getConfigurations(platform, lastSundayStr, forTest = False):
-    print(f"获取配置：platform={platform}, lastSundayStr={lastSundayStr}")
+def getConfigurations(platform, currentMondayStr, forTest = False):
+    print(f"获取配置：platform={platform}, currentMondayStr={currentMondayStr}")
 
     # 为了测试速度
     if forTest:
@@ -193,7 +150,7 @@ def getConfigurations(platform, lastSundayStr, forTest = False):
         lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_configurations
     WHERE
         app = '{app_package}'
-        AND day = '{dayStr}'
+        AND day = '{currentMondayStr}'
     '''
     print("执行的SQL语句如下：\n")
     print(sql)
@@ -219,11 +176,21 @@ def getConfigurations(platform, lastSundayStr, forTest = False):
 
 def loadModel(app, media, country,group_name,pay_user_group_name,dayStr):
     print(f"加载模型：app={app}, media={media}, country={country}, group_name={group_name}, pay_user_group_name={pay_user_group_name}, day={dayStr}")
+    global model_cache
+
+    # 构建缓存键
+    cache_key = (app, media, country, group_name, pay_user_group_name, dayStr)
+
+    # 检查缓存中是否已有模型
+    if cache_key in model_cache:
+        print(f"Loading model from cache for {cache_key}")
+        return model_cache[cache_key]
+
     sql = f'''
         select
             model
         from
-            lastwar_predict_day1_pu_pct_by_cost_pct
+            lastwar_predict_day1_pu_pct_by_cost_pct__nerfR_train
         where
             day = '{dayStr}'
             and app = '{app}'
@@ -240,265 +207,295 @@ def loadModel(app, media, country,group_name,pay_user_group_name,dayStr):
     # 取出第一个模型
     row = models_df.iloc[0]
     model = model_from_json(row['model'])
+
+    # 将模型存入缓存
+    model_cache[cache_key] = model
+
     return model
 
-
+# TODO： 这部分可以独立出去，将结果保存到DB，提高运行速度
 # 获得所有分平台、分国家、分媒体、group_name、pay_user_group_name的ARPPU
-def getPredictArppuAndLastPu(dayStr,configurations):
-    print(f"获取预测ARPPU和最后一天的PU：dayStr={dayStr}")
+# def getPredictArppuAndLastPu(dayStr,configurations):
+#     print(f"获取预测ARPPU和最后一天的PU：dayStr={dayStr}")
 
-    def getHistoricalData(install_day_start, install_day_end, platform='android', configuration=None):
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
+#     def getHistoricalData(install_day_start, install_day_end, platform='android', configuration=None):
+#         table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
         
-        groupName = configuration['group_name']
-        maxR = configuration['max_r']
+#         groupName = configuration['group_name']
+#         maxR = configuration['max_r']
 
-        # 构建SQL查询语句
-        sql = f'''
-SELECT
-    install_day,
-    country,
-    mediasource,
-    revenue_1d,
-    revenue_1d_before_nerf,
-    pu_1d,
-    cost,
-    platform,
-    group_name,
-    pay_user_group,
-    max_r
-FROM
-    {table_name}
-WHERE
-    day BETWEEN '{install_day_start}' AND '{install_day_end}'
-    AND platform = '{platform}'
-    AND group_name = '{groupName}'
-    AND max_r = {maxR}
-;
-        '''
+#         # 构建SQL查询语句
+#         sql = f'''
+# SELECT
+#     install_day,
+#     country,
+#     mediasource,
+#     revenue_1d,
+#     revenue_1d_before_nerf,
+#     pu_1d,
+#     cost,
+#     platform,
+#     group_name,
+#     pay_user_group,
+#     max_r
+# FROM
+#     {table_name}
+# WHERE
+#     day BETWEEN '{install_day_start}' AND '{install_day_end}'
+#     AND platform = '{platform}'
+#     AND group_name = '{groupName}'
+#     AND max_r = {maxR}
+# ;
+#         '''
         
-        print("执行的SQL语句如下：\n")
-        print(sql)
+#         print("执行的SQL语句如下：\n")
+#         print(sql)
         
-        # 执行SQL查询并返回结果
-        data = execSql(sql)
-        return data
+#         # 执行SQL查询并返回结果
+#         data = execSql(sql)
+#         return data
 
-    def preprocessData(data0, media=None, country=None):
-        """
-        预处理数据，包括日期转换、过滤、聚合、重塑和特征工程。
-        """
-        data = data0.copy()
-        # 1. 转换 'install_day' 列为日期格式
-        data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
+#     def preprocessData(data0, media=None, country=None):
+#         """
+#         预处理数据，包括日期转换、过滤、聚合、重塑和特征工程。
+#         """
+#         data = data0.copy()
+#         # 1. 转换 'install_day' 列为日期格式
+#         data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
         
-        # 2. 过滤数据
-        if media:
-            data = data[data['mediasource'] == media]
-        if country:
-            data = data[data['country'] == country]
+#         # 2. 过滤数据
+#         if media:
+#             data = data[data['mediasource'] == media]
+#         if country:
+#             data = data[data['country'] == country]
         
-        # 3. 按 'install_day' 和 'pay_user_group' 分组并汇总所需列
-        aggregation_dict = {
-            'cost': 'sum',
-            'revenue_1d': 'sum',
-            'revenue_1d_before_nerf': 'sum',
-            'pu_1d': 'sum'
-        }
+#         # 3. 按 'install_day' 和 'pay_user_group' 分组并汇总所需列
+#         aggregation_dict = {
+#             'cost': 'sum',
+#             'revenue_1d': 'sum',
+#             'revenue_1d_before_nerf': 'sum',
+#             'pu_1d': 'sum'
+#         }
         
-        aggregated_data = data.groupby(['install_day', 'pay_user_group']).agg(aggregation_dict).reset_index()
+#         aggregated_data = data.groupby(['install_day', 'pay_user_group']).agg(aggregation_dict).reset_index()
         
-        # 4. 计算 cost_change_ratio 和 pu_change_ratio
-        aggregated_data['cost_change_ratio'] = aggregated_data.groupby('pay_user_group')['cost'].pct_change()
-        aggregated_data['pu_change_ratio'] = aggregated_data.groupby('pay_user_group')['pu_1d'].pct_change()
+#         # 4. 计算 cost_change_ratio 和 pu_change_ratio
+#         aggregated_data['cost_change_ratio'] = aggregated_data.groupby('pay_user_group')['cost'].pct_change()
+#         aggregated_data['pu_change_ratio'] = aggregated_data.groupby('pay_user_group')['pu_1d'].pct_change()
         
-        # 计算实际成本和付费用户的前一天值
-        aggregated_data['actual_cost_shifted'] = aggregated_data.groupby('pay_user_group')['cost'].shift(1)
-        aggregated_data['actual_pu_shifted'] = aggregated_data.groupby('pay_user_group')['pu_1d'].shift(1)
+#         # 计算实际成本和付费用户的前一天值
+#         aggregated_data['actual_cost_shifted'] = aggregated_data.groupby('pay_user_group')['cost'].shift(1)
+#         aggregated_data['actual_pu_shifted'] = aggregated_data.groupby('pay_user_group')['pu_1d'].shift(1)
         
-        # 移除第一天（无法计算变动比例）
-        aggregated_data = aggregated_data.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
+#         # 移除第一天（无法计算变动比例）
+#         aggregated_data = aggregated_data.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
         
-        # 5. 计算 actual_ARPPU 和 predicted_ARPPU
-        # 计算实际 ARPPU
-        aggregated_data['actual_arppu'] = aggregated_data['revenue_1d'] / aggregated_data['pu_1d']
-        aggregated_data['actual_arppu'].replace([np.inf, -np.inf], np.nan, inplace=True)
+#         # 5. 计算 actual_ARPPU 和 predicted_ARPPU
+#         # 计算实际 ARPPU
+#         aggregated_data['actual_arppu'] = aggregated_data['revenue_1d'] / aggregated_data['pu_1d']
+#         aggregated_data['actual_arppu'].replace([np.inf, -np.inf], np.nan, inplace=True)
 
-        aggregated_data['actual_arppu_before_nerf'] = aggregated_data['revenue_1d_before_nerf'] / aggregated_data['pu_1d']
-        aggregated_data['actual_arppu_before_nerf'].replace([np.inf, -np.inf], np.nan, inplace=True)
+#         aggregated_data['actual_arppu_before_nerf'] = aggregated_data['revenue_1d_before_nerf'] / aggregated_data['pu_1d']
+#         aggregated_data['actual_arppu_before_nerf'].replace([np.inf, -np.inf], np.nan, inplace=True)
         
-        # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
-        aggregated_data['actual_arppu_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu'].shift(1)
-        aggregated_data['predicted_arppu'] = aggregated_data.groupby('pay_user_group')['actual_arppu_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
+#         # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
+#         aggregated_data['actual_arppu_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu'].shift(1)
+#         aggregated_data['predicted_arppu'] = aggregated_data.groupby('pay_user_group')['actual_arppu_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
         
-        aggregated_data['actual_arppu_before_nerf_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf'].shift(1)
-        aggregated_data['predicted_arppu_before_nerf'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
+#         aggregated_data['actual_arppu_before_nerf_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf'].shift(1)
+#         aggregated_data['predicted_arppu_before_nerf'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
         
-        # if media is None and country is None:
-        #     print(aggregated_data)
+#         # if media is None and country is None:
+#         #     print(aggregated_data)
 
-        # 6. 重命名和选择最终列
-        aggregated_data = aggregated_data.rename(columns={
-            'install_day': 'ds', 
-            'pay_user_group':'pay_user_group_name',
-            'pu_change_ratio': 'y'
-        })
+#         # 6. 重命名和选择最终列
+#         aggregated_data = aggregated_data.rename(columns={
+#             'install_day': 'ds', 
+#             'pay_user_group':'pay_user_group_name',
+#             'pu_change_ratio': 'y'
+#         })
         
-        # 最终选择列
-        df = aggregated_data[['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'y', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'predicted_arppu_before_nerf', 'revenue_1d']].copy()
+#         # 最终选择列
+#         df = aggregated_data[['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'y', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'predicted_arppu_before_nerf', 'revenue_1d']].copy()
         
-        # 添加周末特征
-        df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
+#         # 添加周末特征
+#         df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
 
-        return df
+#         return df
 
-    # 获取从dayStr往前推N天的数据，计算平均ARPPU作为预测的ARPPU 
-    N = 16
+#     # 获取从dayStr往前推N天的数据，计算平均ARPPU作为预测的ARPPU 
+#     N = 16
 
-    endDate = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=1)
-    endDateStr = endDate.strftime('%Y%m%d')
+#     endDate = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=1)
+#     endDateStr = endDate.strftime('%Y%m%d')
 
-    startDate = endDate - pd.Timedelta(days=N)
-    startDateStr = startDate.strftime('%Y%m%d')    
+#     startDate = endDate - pd.Timedelta(days=N)
+#     startDateStr = startDate.strftime('%Y%m%d')    
 
-    retDf = pd.DataFrame()
+#     retDf = pd.DataFrame()
 
-    for platform in ['android', 'ios']:
-        for configuration in configurations:
-            groupName = configuration['group_name']
-            payUserGroupList = configuration['payUserGroupList']
+#     for platform in ['android', 'ios']:
+#         for configuration in configurations:
+#             groupName = configuration['group_name']
+#             payUserGroupList = configuration['payUserGroupList']
 
-            historical_data = getHistoricalData(startDateStr, endDateStr, platform, configuration)
-            historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
+#             historical_data = getHistoricalData(startDateStr, endDateStr, platform, configuration)
+#             historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
 
-            countryList = historical_data['country'].unique()
-            mediaList = historical_data['mediasource'].unique()
+#             countryList = historical_data['country'].unique()
+#             mediaList = historical_data['mediasource'].unique()
 
-            # 大盘
-            allDf = preprocessData(historical_data)
-            for payUserGroup in payUserGroupList:
-                payUserGroupName = payUserGroup['name']
-                filtered_df = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]
-                if not filtered_df.empty:
-                    arppu = filtered_df['predicted_arppu'].iloc[0]
-                    arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-                    lastPu = filtered_df['pu_1d'].iloc[0]
-                else:
-                    arppu = 0
-                    arppuBeforeNerf = 0
-                    lastPu = 0
+#             # 大盘
+#             allDf = preprocessData(historical_data)
+#             for payUserGroup in payUserGroupList:
+#                 payUserGroupName = payUserGroup['name']
+#                 filtered_df = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]
+#                 if not filtered_df.empty:
+#                     arppu = filtered_df['predicted_arppu'].iloc[0]
+#                     arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
+#                     lastPu = filtered_df['pu_1d'].iloc[0]
+#                 else:
+#                     arppu = 0
+#                     arppuBeforeNerf = 0
+#                     lastPu = 0
                     
-                allRetDf = pd.DataFrame({
-                    'platform': [platform],
-                    'country': ['ALL'],
-                    'media': ['ALL'],
-                    'group_name': [groupName],
-                    'max_r': [configuration['max_r']],
-                    'pay_user_group_name': [payUserGroupName],
-                    'predicted_arppu': [arppu],
-                    'predicted_arppu_before_nerf': [arppuBeforeNerf],
-                    'last_pu': [lastPu]
-                })
-                retDf = pd.concat([retDf, allRetDf])
+#                 allRetDf = pd.DataFrame({
+#                     'platform': [platform],
+#                     'country': ['ALL'],
+#                     'media': ['ALL'],
+#                     'group_name': [groupName],
+#                     'max_r': [configuration['max_r']],
+#                     'pay_user_group_name': [payUserGroupName],
+#                     'predicted_arppu': [arppu],
+#                     'predicted_arppu_before_nerf': [arppuBeforeNerf],
+#                     'last_pu': [lastPu]
+#                 })
+#                 retDf = pd.concat([retDf, allRetDf])
             
-            # 分国家
-            for country in countryList:
-                countryDf = preprocessData(historical_data, country=country)
-                for payUserGroup in payUserGroupList:
-                    payUserGroupName = payUserGroup['name']
-                    filtered_df = countryDf[(countryDf['pay_user_group_name'] == payUserGroupName) & (countryDf['ds'] == endDate)]
-                    if not filtered_df.empty:
-                        arppu = filtered_df['predicted_arppu'].iloc[0]
-                        arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-                        lastPu = filtered_df['pu_1d'].iloc[0]
-                    else:
-                        arppu = 0
-                        arppuBeforeNerf = 0
-                        lastPu = 0
-                    countryRetDf = pd.DataFrame({
-                        'platform': [platform],
-                        'country': [country],
-                        'media': ['ALL'],
-                        'group_name': [groupName],
-                        'max_r': [configuration['max_r']],
-                        'pay_user_group_name': [payUserGroupName],
-                        'predicted_arppu': [arppu],
-                        'predicted_arppu_before_nerf': [arppuBeforeNerf],
-                        'last_pu': [lastPu]
-                    })
-                    retDf = pd.concat([retDf, countryRetDf])
+#             # 分国家
+#             for country in countryList:
+#                 countryDf = preprocessData(historical_data, country=country)
+#                 for payUserGroup in payUserGroupList:
+#                     payUserGroupName = payUserGroup['name']
+#                     filtered_df = countryDf[(countryDf['pay_user_group_name'] == payUserGroupName) & (countryDf['ds'] == endDate)]
+#                     if not filtered_df.empty:
+#                         arppu = filtered_df['predicted_arppu'].iloc[0]
+#                         arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
+#                         lastPu = filtered_df['pu_1d'].iloc[0]
+#                     else:
+#                         arppu = 0
+#                         arppuBeforeNerf = 0
+#                         lastPu = 0
+#                     countryRetDf = pd.DataFrame({
+#                         'platform': [platform],
+#                         'country': [country],
+#                         'media': ['ALL'],
+#                         'group_name': [groupName],
+#                         'max_r': [configuration['max_r']],
+#                         'pay_user_group_name': [payUserGroupName],
+#                         'predicted_arppu': [arppu],
+#                         'predicted_arppu_before_nerf': [arppuBeforeNerf],
+#                         'last_pu': [lastPu]
+#                     })
+#                     retDf = pd.concat([retDf, countryRetDf])
 
-            # 分媒体 和 分国家+分媒体 只有安卓有
-            if platform == 'android':
-                # 分媒体
-                for media in mediaList:
-                    mediaDf = preprocessData(historical_data, media=media)
-                    for payUserGroup in payUserGroupList:
-                        payUserGroupName = payUserGroup['name']
-                        filtered_df = mediaDf[(mediaDf['pay_user_group_name'] == payUserGroupName) & (mediaDf['ds'] == endDate)]
-                        if not filtered_df.empty:
-                            arppu = filtered_df['predicted_arppu'].iloc[0]
-                            arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-                            lastPu = filtered_df['pu_1d'].iloc[0]
-                        else:
-                            arppu = 0
-                            arppuBeforeNerf = 0
-                            lastPu = 0
+#             # 分媒体 和 分国家+分媒体 只有安卓有
+#             if platform == 'android':
+#                 # 分媒体
+#                 for media in mediaList:
+#                     mediaDf = preprocessData(historical_data, media=media)
+#                     for payUserGroup in payUserGroupList:
+#                         payUserGroupName = payUserGroup['name']
+#                         filtered_df = mediaDf[(mediaDf['pay_user_group_name'] == payUserGroupName) & (mediaDf['ds'] == endDate)]
+#                         if not filtered_df.empty:
+#                             arppu = filtered_df['predicted_arppu'].iloc[0]
+#                             arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
+#                             lastPu = filtered_df['pu_1d'].iloc[0]
+#                         else:
+#                             arppu = 0
+#                             arppuBeforeNerf = 0
+#                             lastPu = 0
 
-                        mediaRetDf = pd.DataFrame({
-                            'platform': [platform],
-                            'country': ['ALL'],
-                            'media': [media],
-                            'group_name': [groupName],
-                            'max_r': [configuration['max_r']],
-                            'pay_user_group_name': [payUserGroupName],
-                            'predicted_arppu': [arppu],
-                            'predicted_arppu_before_nerf': [arppuBeforeNerf],
-                            'last_pu': [lastPu]
-                        })
-                        retDf = pd.concat([retDf, mediaRetDf])
+#                         mediaRetDf = pd.DataFrame({
+#                             'platform': [platform],
+#                             'country': ['ALL'],
+#                             'media': [media],
+#                             'group_name': [groupName],
+#                             'max_r': [configuration['max_r']],
+#                             'pay_user_group_name': [payUserGroupName],
+#                             'predicted_arppu': [arppu],
+#                             'predicted_arppu_before_nerf': [arppuBeforeNerf],
+#                             'last_pu': [lastPu]
+#                         })
+#                         retDf = pd.concat([retDf, mediaRetDf])
 
-                # 分国家+分媒体
-                for country in countryList:
-                    for media in mediaList:
-                        countryMediaDf = preprocessData(historical_data, media=media, country=country)
-                        for payUserGroup in payUserGroupList:
-                            payUserGroupName = payUserGroup['name']
-                            filtered_df = countryMediaDf[(countryMediaDf['pay_user_group_name'] == payUserGroupName) & (countryMediaDf['ds'] == endDate)]
-                            if not filtered_df.empty:
-                                arppu = filtered_df['predicted_arppu'].iloc[0]
-                                arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-                                lastPu = filtered_df['pu_1d'].iloc[0]
-                            else:
-                                arppu = 0
-                                arppuBeforeNerf = 0
-                                lastPu = 0
-                            countryMediaRetDf = pd.DataFrame({
-                                'platform': [platform],
-                                'country': [country],
-                                'media': [media],
-                                'group_name': [groupName],
-                                'max_r': [configuration['max_r']],
-                                'pay_user_group_name': [payUserGroupName],
-                                'predicted_arppu': [arppu],
-                                'predicted_arppu_before_nerf': [arppuBeforeNerf],
-                                'last_pu': [lastPu]
-                            })
-                            retDf = pd.concat([retDf, countryMediaRetDf])
+#                 # 分国家+分媒体
+#                 for country in countryList:
+#                     for media in mediaList:
+#                         countryMediaDf = preprocessData(historical_data, media=media, country=country)
+#                         for payUserGroup in payUserGroupList:
+#                             payUserGroupName = payUserGroup['name']
+#                             filtered_df = countryMediaDf[(countryMediaDf['pay_user_group_name'] == payUserGroupName) & (countryMediaDf['ds'] == endDate)]
+#                             if not filtered_df.empty:
+#                                 arppu = filtered_df['predicted_arppu'].iloc[0]
+#                                 arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
+#                                 lastPu = filtered_df['pu_1d'].iloc[0]
+#                             else:
+#                                 arppu = 0
+#                                 arppuBeforeNerf = 0
+#                                 lastPu = 0
+#                             countryMediaRetDf = pd.DataFrame({
+#                                 'platform': [platform],
+#                                 'country': [country],
+#                                 'media': [media],
+#                                 'group_name': [groupName],
+#                                 'max_r': [configuration['max_r']],
+#                                 'pay_user_group_name': [payUserGroupName],
+#                                 'predicted_arppu': [arppu],
+#                                 'predicted_arppu_before_nerf': [arppuBeforeNerf],
+#                                 'last_pu': [lastPu]
+#                             })
+#                             retDf = pd.concat([retDf, countryMediaRetDf])
 
     
-    # 对 media 进行重命名
-    media_mapping = {
-        'Facebook Ads': 'FACEBOOK',
-        'applovin_int': 'APPLOVIN',
-        'googleadwords_int': 'GOOGLE',
-        'ALL': 'ALL'
-    }
-    retDf['media'] = retDf['media'].map(media_mapping)
-    # 将 media 为空的行的 media drop 掉
-    retDf = retDf[retDf['media'].notnull()]
+#     # 对 media 进行重命名
+#     media_mapping = {
+#         'Facebook Ads': 'FACEBOOK',
+#         'applovin_int': 'APPLOVIN',
+#         'googleadwords_int': 'GOOGLE',
+#         'ALL': 'ALL'
+#     }
+#     retDf['media'] = retDf['media'].map(media_mapping)
+#     # 将 media 为空的行的 media drop 掉
+#     retDf = retDf[retDf['media'].notnull()]
 
-    return retDf
+#     return retDf
+
+def getPredictArppuAndLastPu(dayStr,configurations):
+    # configurations 暂时用不上了
+
+    sql = f'''
+select
+    platform,
+    media,
+    country,
+    group_name,
+    max_r,
+    pay_user_group_name,
+    predicted_arppu,
+    predicted_arppu_before_nerf,
+    last_pu
+from
+    lastwar_predict_day1_pu_pct_by_cost_pct__nerfr_predict_arppu_and_last_pu
+where
+    day = '{dayStr}'
+;
+    '''
+    print(sql)
+    data = execSql(sql)
+    return data
+
+
 
 def getYesterdayCost(platform,dayStr):
     print(f"获取昨日花费：platform={platform}, dayStr={dayStr}")
@@ -553,101 +550,108 @@ def predict_macro(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
     返回：
         pd.DataFrame: 预测结果数据框。
     """
-    # 过滤大盘数据
-    allDf = minWeekMapeDf[(minWeekMapeDf['media'] == 'ALL') & (minWeekMapeDf['country'] == 'ALL')]
-    if allDf.empty:
-        print("未找到大盘的MAPE数据。")
-        return pd.DataFrame()
-    
-    allGroupName = allDf['group_name'].values[0]
-    allYesterdayCost = yesterdayCost['cost'].sum()
+    maxRList = minWeekMapeDf['max_r'].unique()
 
-    print(f'大盘的group_name: {allGroupName}')
-    
     allRet = pd.DataFrame()
-    
-    for configuration in configurations:
-        if configuration['group_name'] == allGroupName:
-            payUserGroupList = configuration['payUserGroupList']
-            
-            for payUserGroup in payUserGroupList:
-                payUserGroupName = payUserGroup['name']
 
-                # 加载模型
-                model = loadModel(app_package, 'ALL', 'ALL', allGroupName, payUserGroupName, currentMondayStr)
-                if not model:
-                    print(f"未加载到模型: {app_package}, ALL, ALL, {allGroupName}, {payUserGroupName}, {currentMondayStr}")
-                    continue
+    for maxR in maxRList:
+        minWeekMapeDfMaxR = minWeekMapeDf[minWeekMapeDf['max_r'] == maxR]
+
+        # 过滤大盘数据
+        allDf = minWeekMapeDfMaxR[(minWeekMapeDfMaxR['media'] == 'ALL') & (minWeekMapeDfMaxR['country'] == 'ALL')]
+        if allDf.empty:
+            print("未找到大盘的MAPE数据。")
+            return pd.DataFrame()
+        
+        allGroupName = allDf['group_name'].values[0]
+        allYesterdayCost = yesterdayCost['cost'].sum()
+
+        print(f'大盘的group_name: {allGroupName},max_r: {maxR},昨日花费: {allYesterdayCost}')
+        
+        for configuration in configurations:
+            if configuration['group_name'] == allGroupName and configuration['max_r'] == maxR:
+                payUserGroupList = configuration['payUserGroupList']
                 
-                for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
-                    # 计算预测花费金额
-                    cost = allYesterdayCost * (1 + cost_change_ratio)
-                    # print(f'预测花费金额: {cost}，相比昨日（{allYesterdayCost}）变化: {cost_change_ratio}')
+                for payUserGroup in payUserGroupList:
+                    payUserGroupName = payUserGroup['name']
 
-                    # 准备预测输入数据
-                    inputDf = pd.DataFrame({
-                        'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
-                        'cost_change_ratio': [cost_change_ratio],
-                        'is_weekend': [todayIsWeekend]
-                    })
+                    # 加载模型
+                    model = loadModel(app_package, 'ALL', 'ALL', allGroupName, payUserGroupName, currentMondayStr)
+                    if not model:
+                        print(f"未加载到模型: {app_package}, ALL, ALL, {allGroupName}, {payUserGroupName}, {currentMondayStr}")
+                        continue
                     
-                    # 进行预测
-                    forecast = model.predict(inputDf)
-                    yhat = forecast['yhat'].values[0]
-                    # print(f'预测增幅 yhat: {yhat}')
+                    for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
+                        # 计算预测花费金额
+                        cost = allYesterdayCost * (1 + cost_change_ratio)
+                        # print(f'预测花费金额: {cost}，相比昨日（{allYesterdayCost}）变化: {cost_change_ratio}')
 
-                    # 获取最后一天的PU
-                    pu_filter = (
-                        (predictArppuAndLastPu['platform'] == platform) &
-                        (predictArppuAndLastPu['country'] == 'ALL') &
-                        (predictArppuAndLastPu['media'] == 'ALL') &
-                        (predictArppuAndLastPu['group_name'] == allGroupName) &
-                        (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
-                    )
-                    lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
-                    if lastPu_series.empty:
-                        print(f"未找到对应的 last_pu 数据: {payUserGroupName}")
-                        continue
-                    lastPu = lastPu_series.values[0]
-                    predictedPu = lastPu * (1 + yhat)
-                    # print(f'预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
+                        # 准备预测输入数据
+                        inputDf = pd.DataFrame({
+                            'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
+                            'cost_change_ratio': [cost_change_ratio],
+                            'is_weekend': [todayIsWeekend]
+                        })
+                        
+                        # 进行预测
+                        forecast = model.predict(inputDf)
+                        yhat = forecast['yhat'].values[0]
+                        # print(f'预测增幅 yhat: {yhat}')
 
-                    # 获取预测的ARPPU
-                    arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
-                    if arppu_series.empty:
-                        print(f"未找到对应的 predicted_arppu 数据: {payUserGroupName}")
-                        continue
-                    predictedArppu = arppu_series.values[0]
-                    # print(f'预测ARPPU: {predictedArppu}')
+                        # 获取最后一天的PU
+                        pu_filter = (
+                            (predictArppuAndLastPu['platform'] == platform) &
+                            (predictArppuAndLastPu['country'] == 'ALL') &
+                            (predictArppuAndLastPu['media'] == 'ALL') &
+                            (predictArppuAndLastPu['group_name'] == allGroupName) &
+                            (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName) &
+                            (predictArppuAndLastPu['max_r'] == maxR)
+                        )
+                        lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
+                        if lastPu_series.empty:
+                            print(f"未找到对应的 last_pu 数据: {payUserGroupName}")
+                            continue
+                        lastPu = lastPu_series.values[0]
+                        predictedPu = lastPu * (1 + yhat)
+                        # print(f'预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
 
-                    # 计算预测收入
-                    predictedRevenue = predictedPu * predictedArppu
-                    # print(f'预测收入: {predictedRevenue}')
+                        # 获取预测的ARPPU
+                        arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
+                        if arppu_series.empty:
+                            print(f"未找到对应的 predicted_arppu 数据: {payUserGroupName}")
+                            continue
+                        predictedArppu = arppu_series.values[0]
+                        # print(f'预测ARPPU: {predictedArppu}')
 
-                    # 构建单次预测结果
-                    ret = pd.DataFrame({
-                        'platform': [platform],
-                        'country': ['ALL'],
-                        'media': ['ALL'],
-                        'yesterday_cost': [allYesterdayCost],
-                        'cost': [cost],
-                        'group_name': [allGroupName],
-                        'pay_user_group_name': [payUserGroupName],
-                        'cost_change_ratio': [cost_change_ratio],
-                        'yesterday_pu': [lastPu],
-                        'predicted_pu': [predictedPu],
-                        'predicted_arppu': [predictedArppu],
-                        'predicted_revenue': [predictedRevenue]
-                    })
+                        # 计算预测收入
+                        predictedRevenue = predictedPu * predictedArppu
+                        # print(f'预测收入: {predictedRevenue}')
 
-                    allRet = pd.concat([allRet, ret], ignore_index=True)
-    
+                        # 构建单次预测结果
+                        ret = pd.DataFrame({
+                            'platform': [platform],
+                            'country': ['ALL'],
+                            'media': ['ALL'],
+                            'yesterday_cost': [allYesterdayCost],
+                            'cost': [cost],
+                            'group_name': [allGroupName],
+                            'max_r': [maxR],
+                            'pay_user_group_name': [payUserGroupName],
+                            'cost_change_ratio': [cost_change_ratio],
+                            'yesterday_pu': [lastPu],
+                            'predicted_pu': [predictedPu],
+                            'predicted_arppu': [predictedArppu],
+                            'predicted_revenue': [predictedRevenue]
+                        })
+
+                        allRet = pd.concat([allRet, ret], ignore_index=True)
+        
     if allRet.empty:
         print("大盘预测结果为空。")
         return allRet
     
     # 聚合预测结果
-    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio']).agg({
+    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio','max_r']).agg({
         'yesterday_cost': 'mean',
         'cost': 'mean',
         'yesterday_pu': 'sum',
@@ -681,111 +685,116 @@ def predict_country(minWeekMapeDf, yesterdayCost, configurations, app_package, c
         pd.DataFrame: 按国家分组的预测结果数据框。
     """
     # 筛选出需要按国家预测的数据
-    countryDf = minWeekMapeDf[(minWeekMapeDf['media'] == 'ALL') & (minWeekMapeDf['country'] != 'ALL')].copy()
-    if countryDf.empty:
-        print("未找到按国家分组的MAPE数据（media='ALL'）。")
-        return pd.DataFrame()
-    
+    maxRList = minWeekMapeDf['max_r'].unique()
     allRet = pd.DataFrame()
     
-    # 获取所有需要预测的国家列表
-    countries = countryDf['country'].unique()
-    print(f"需要进行预测的国家列表: {countries}")
-    
-    for country in countries:
-        # 获取当前国家的MAPE数据
-        country_specific_df = countryDf[countryDf['country'] == country]
-        if country_specific_df.empty:
-            print(f"未找到国家 {country} 的MAPE数据。")
-            continue
-        
-        groupName = country_specific_df['group_name'].values[0]
-        countryYesterdayCost = yesterdayCost[yesterdayCost['country'] == country]['cost'].sum()
-        
-        print(f'国家: {country}，group_name: {groupName}')
-        
-        for configuration in configurations:
-            if configuration['group_name'] == groupName:
-                payUserGroupList = configuration['payUserGroupList']
-                
-                for payUserGroup in payUserGroupList:
-                    payUserGroupName = payUserGroup['name']
+    for maxR in maxRList:
+        minWeekMapeDfMaxR = minWeekMapeDf[minWeekMapeDf['max_r'] == maxR]
 
-                    # 加载模型
-                    model = loadModel(app_package, 'ALL', country, groupName, payUserGroupName, currentMondayStr)
-                    if not model:
-                        print(f"未加载到模型: {app_package}, ALL, {country}, {groupName}, {payUserGroupName}, {currentMondayStr}")
-                        continue
+        countryDf = minWeekMapeDfMaxR[(minWeekMapeDfMaxR['media'] == 'ALL') & (minWeekMapeDfMaxR['country'] != 'ALL')].copy()
+        if countryDf.empty:
+            print("未找到按国家分组的MAPE数据（media='ALL'）。")
+            return pd.DataFrame()
+        
+        # 获取所有需要预测的国家列表
+        countries = countryDf['country'].unique()
+        print(f"需要进行预测的国家列表: {countries}")
+        
+        for country in countries:
+            # 获取当前国家的MAPE数据
+            country_specific_df = countryDf[countryDf['country'] == country]
+            if country_specific_df.empty:
+                print(f"未找到国家 {country} 的MAPE数据。")
+                continue
+            
+            groupName = country_specific_df['group_name'].values[0]
+            countryYesterdayCost = yesterdayCost[yesterdayCost['country'] == country]['cost'].sum()
+            
+            print(f'国家: {country}，group_name: {groupName},max_r: {maxR}，昨日花费: {countryYesterdayCost}')
+            
+            for configuration in configurations:
+                if configuration['group_name'] == groupName and configuration['max_r'] == maxR:
+                    payUserGroupList = configuration['payUserGroupList']
                     
-                    for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
-                        # 计算预测花费金额
-                        cost = countryYesterdayCost * (1 + cost_change_ratio)
-                        # print(f'国家: {country}，预测花费金额: {cost}，相比昨日（{countryYesterdayCost}）变化: {cost_change_ratio}')
+                    for payUserGroup in payUserGroupList:
+                        payUserGroupName = payUserGroup['name']
 
-                        # 准备预测输入数据
-                        inputDf = pd.DataFrame({
-                            'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [todayIsWeekend]
-                        })
+                        # 加载模型
+                        model = loadModel(app_package, 'ALL', country, groupName, payUserGroupName, currentMondayStr)
+                        if not model:
+                            print(f"未加载到模型: {app_package}, ALL, {country}, {groupName}, {payUserGroupName}, {currentMondayStr}")
+                            continue
                         
-                        # 进行预测
-                        forecast = model.predict(inputDf)
-                        yhat = forecast['yhat'].values[0]
-                        # print(f'国家: {country}，预测增幅 yhat: {yhat}')
+                        for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
+                            # 计算预测花费金额
+                            cost = countryYesterdayCost * (1 + cost_change_ratio)
+                            # print(f'国家: {country}，预测花费金额: {cost}，相比昨日（{countryYesterdayCost}）变化: {cost_change_ratio}')
 
-                        # 获取最后一天的PU
-                        pu_filter = (
-                            (predictArppuAndLastPu['platform'] == platform) &
-                            (predictArppuAndLastPu['country'] == country) &
-                            (predictArppuAndLastPu['media'] == 'ALL') &
-                            (predictArppuAndLastPu['group_name'] == groupName) &
-                            (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
-                        )
-                        lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
-                        if lastPu_series.empty:
-                            print(f"未找到国家 {country} 对应的 last_pu 数据: {payUserGroupName}")
-                            continue
-                        lastPu = lastPu_series.values[0]
-                        predictedPu = lastPu * (1 + yhat)
-                        # print(f'国家: {country}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
+                            # 准备预测输入数据
+                            inputDf = pd.DataFrame({
+                                'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'is_weekend': [todayIsWeekend]
+                            })
+                            
+                            # 进行预测
+                            forecast = model.predict(inputDf)
+                            yhat = forecast['yhat'].values[0]
+                            # print(f'国家: {country}，预测增幅 yhat: {yhat}')
 
-                        # 获取预测的ARPPU
-                        arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
-                        if arppu_series.empty:
-                            print(f"未找到国家 {country} 对应的 predicted_arppu 数据: {payUserGroupName}")
-                            continue
-                        predictedArppu = arppu_series.values[0]
-                        # print(f'国家: {country}，预测ARPPU: {predictedArppu}')
+                            # 获取最后一天的PU
+                            pu_filter = (
+                                (predictArppuAndLastPu['platform'] == platform) &
+                                (predictArppuAndLastPu['country'] == country) &
+                                (predictArppuAndLastPu['media'] == 'ALL') &
+                                (predictArppuAndLastPu['group_name'] == groupName) &
+                                (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
+                            )
+                            lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
+                            if lastPu_series.empty:
+                                print(f"未找到国家 {country} 对应的 last_pu 数据: {payUserGroupName}")
+                                continue
+                            lastPu = lastPu_series.values[0]
+                            predictedPu = lastPu * (1 + yhat)
+                            # print(f'国家: {country}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
 
-                        # 计算预测收入
-                        predictedRevenue = predictedPu * predictedArppu
-                        # print(f'国家: {country}，预测收入: {predictedRevenue}')
+                            # 获取预测的ARPPU
+                            arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
+                            if arppu_series.empty:
+                                print(f"未找到国家 {country} 对应的 predicted_arppu 数据: {payUserGroupName}")
+                                continue
+                            predictedArppu = arppu_series.values[0]
+                            # print(f'国家: {country}，预测ARPPU: {predictedArppu}')
 
-                        # 构建单次预测结果
-                        ret = pd.DataFrame({
-                            'platform': [platform],
-                            'country': [country],
-                            'media': ['ALL'],
-                            'yesterday_cost': [countryYesterdayCost],
-                            'cost': [cost],
-                            'group_name': [groupName],
-                            'pay_user_group_name': [payUserGroupName],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'yesterday_pu': [lastPu],
-                            'predicted_pu': [predictedPu],
-                            'predicted_arppu': [predictedArppu],
-                            'predicted_revenue': [predictedRevenue]
-                        })
+                            # 计算预测收入
+                            predictedRevenue = predictedPu * predictedArppu
+                            # print(f'国家: {country}，预测收入: {predictedRevenue}')
 
-                        allRet = pd.concat([allRet, ret], ignore_index=True)
+                            # 构建单次预测结果
+                            ret = pd.DataFrame({
+                                'platform': [platform],
+                                'country': [country],
+                                'media': ['ALL'],
+                                'yesterday_cost': [countryYesterdayCost],
+                                'cost': [cost],
+                                'group_name': [groupName],
+                                'max_r': [maxR],
+                                'pay_user_group_name': [payUserGroupName],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'yesterday_pu': [lastPu],
+                                'predicted_pu': [predictedPu],
+                                'predicted_arppu': [predictedArppu],
+                                'predicted_revenue': [predictedRevenue]
+                            })
+
+                            allRet = pd.concat([allRet, ret], ignore_index=True)
     
     if allRet.empty:
         print("按国家分组的预测结果为空。")
         return allRet
     
     # 聚合预测结果
-    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio']).agg({
+    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio', 'max_r']).agg({
         'yesterday_cost': 'mean',
         'cost': 'mean',
         'yesterday_pu': 'sum',
@@ -818,112 +827,119 @@ def predict_media(minWeekMapeDf, yesterdayCost, configurations, app_package, cur
     返回：
         pd.DataFrame: 按媒体分组的预测结果数据框。
     """
-    # 筛选出需要按媒体预测的数据，排除 media='ALL'
-    mediaDf = minWeekMapeDf[(minWeekMapeDf['media'] != 'ALL') & (minWeekMapeDf['country'] == 'ALL')].copy()
-    if mediaDf.empty:
-        print("未找到按媒体分组的MAPE数据（country='ALL' 且 media != 'ALL'）。")
-        return pd.DataFrame()
-    
+    # 筛选出需要按国家预测的数据
+    maxRList = minWeekMapeDf['max_r'].unique()
     allRet = pd.DataFrame()
     
-    # 获取所有需要预测的媒体列表
-    medias = mediaDf['media'].unique()
-    print(f"需要进行预测的媒体列表: {medias}")
-    
-    for media in medias:
-        # 获取当前媒体的MAPE数据
-        media_specific_df = mediaDf[mediaDf['media'] == media]
-        if media_specific_df.empty:
-            print(f"未找到媒体 {media} 的MAPE数据。")
-            continue
-        
-        groupName = media_specific_df['group_name'].values[0]
-        mediaYesterdayCost = yesterdayCost[yesterdayCost['media'] == media]['cost'].sum()
-        
-        print(f'媒体: {media}，group_name: {groupName}')
-        
-        for configuration in configurations:
-            if configuration['group_name'] == groupName:
-                payUserGroupList = configuration['payUserGroupList']
-                
-                for payUserGroup in payUserGroupList:
-                    payUserGroupName = payUserGroup['name']
+    for maxR in maxRList:
+        minWeekMapeDfMaxR = minWeekMapeDf[minWeekMapeDf['max_r'] == maxR]
 
-                    # 加载模型
-                    model = loadModel(app_package, media, 'ALL', groupName, payUserGroupName, currentMondayStr)
-                    if not model:
-                        print(f"未加载到模型: {app_package}, {media}, ALL, {groupName}, {payUserGroupName}, {currentMondayStr}")
-                        continue
+
+        # 筛选出需要按媒体预测的数据，排除 media='ALL'
+        mediaDf = minWeekMapeDfMaxR[(minWeekMapeDfMaxR['media'] != 'ALL') & (minWeekMapeDfMaxR['country'] == 'ALL')].copy()
+        if mediaDf.empty:
+            print("未找到按媒体分组的MAPE数据（country='ALL' 且 media != 'ALL'）。")
+            return pd.DataFrame()
+        
+        # 获取所有需要预测的媒体列表
+        medias = mediaDf['media'].unique()
+        print(f"需要进行预测的媒体列表: {medias}")
+        
+        for media in medias:
+            # 获取当前媒体的MAPE数据
+            media_specific_df = mediaDf[mediaDf['media'] == media]
+            if media_specific_df.empty:
+                print(f"未找到媒体 {media} 的MAPE数据。")
+                continue
+            
+            groupName = media_specific_df['group_name'].values[0]
+            mediaYesterdayCost = yesterdayCost[yesterdayCost['media'] == media]['cost'].sum()
+            
+            print(f'媒体: {media}，group_name: {groupName},max_r: {maxR}，昨日花费: {mediaYesterdayCost}')
+            
+            for configuration in configurations:
+                if configuration['group_name'] == groupName and configuration['max_r'] == maxR:
+                    payUserGroupList = configuration['payUserGroupList']
                     
-                    for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
-                        # 计算预测花费金额
-                        cost = mediaYesterdayCost * (1 + cost_change_ratio)
-                        # print(f'媒体: {media}，预测花费金额: {cost}，相比昨日（{mediaYesterdayCost}）变化: {cost_change_ratio}')
+                    for payUserGroup in payUserGroupList:
+                        payUserGroupName = payUserGroup['name']
 
-                        # 准备预测输入数据
-                        inputDf = pd.DataFrame({
-                            'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [todayIsWeekend]
-                        })
+                        # 加载模型
+                        model = loadModel(app_package, media, 'ALL', groupName, payUserGroupName, currentMondayStr)
+                        if not model:
+                            print(f"未加载到模型: {app_package}, {media}, ALL, {groupName}, {payUserGroupName}, {currentMondayStr}")
+                            continue
                         
-                        # 进行预测
-                        forecast = model.predict(inputDf)
-                        yhat = forecast['yhat'].values[0]
-                        # print(f'媒体: {media}，预测增幅 yhat: {yhat}')
+                        for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
+                            # 计算预测花费金额
+                            cost = mediaYesterdayCost * (1 + cost_change_ratio)
+                            # print(f'媒体: {media}，预测花费金额: {cost}，相比昨日（{mediaYesterdayCost}）变化: {cost_change_ratio}')
 
-                        # 获取最后一天的PU
-                        pu_filter = (
-                            (predictArppuAndLastPu['platform'] == platform) &
-                            (predictArppuAndLastPu['country'] == 'ALL') &
-                            (predictArppuAndLastPu['media'] == media) &
-                            (predictArppuAndLastPu['group_name'] == groupName) &
-                            (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
-                        )
-                        lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
-                        if lastPu_series.empty:
-                            print(f"未找到媒体 {media} 对应的 last_pu 数据: {payUserGroupName}")
-                            continue
-                        lastPu = lastPu_series.values[0]
-                        predictedPu = lastPu * (1 + yhat)
-                        # print(f'媒体: {media}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
+                            # 准备预测输入数据
+                            inputDf = pd.DataFrame({
+                                'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'is_weekend': [todayIsWeekend]
+                            })
+                            
+                            # 进行预测
+                            forecast = model.predict(inputDf)
+                            yhat = forecast['yhat'].values[0]
+                            # print(f'媒体: {media}，预测增幅 yhat: {yhat}')
 
-                        # 获取预测的ARPPU
-                        arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
-                        if arppu_series.empty:
-                            print(f"未找到媒体 {media} 对应的 predicted_arppu 数据: {payUserGroupName}")
-                            continue
-                        predictedArppu = arppu_series.values[0]
-                        # print(f'媒体: {media}，预测ARPPU: {predictedArppu}')
+                            # 获取最后一天的PU
+                            pu_filter = (
+                                (predictArppuAndLastPu['platform'] == platform) &
+                                (predictArppuAndLastPu['country'] == 'ALL') &
+                                (predictArppuAndLastPu['media'] == media) &
+                                (predictArppuAndLastPu['group_name'] == groupName) &
+                                (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
+                            )
+                            lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
+                            if lastPu_series.empty:
+                                print(f"未找到媒体 {media} 对应的 last_pu 数据: {payUserGroupName}")
+                                continue
+                            lastPu = lastPu_series.values[0]
+                            predictedPu = lastPu * (1 + yhat)
+                            # print(f'媒体: {media}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
 
-                        # 计算预测收入
-                        predictedRevenue = predictedPu * predictedArppu
-                        # print(f'媒体: {media}，预测收入: {predictedRevenue}')
+                            # 获取预测的ARPPU
+                            arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
+                            if arppu_series.empty:
+                                print(f"未找到媒体 {media} 对应的 predicted_arppu 数据: {payUserGroupName}")
+                                continue
+                            predictedArppu = arppu_series.values[0]
+                            # print(f'媒体: {media}，预测ARPPU: {predictedArppu}')
 
-                        # 构建单次预测结果
-                        ret = pd.DataFrame({
-                            'platform': [platform],
-                            'country': ['ALL'],
-                            'media': [media],
-                            'yesterday_cost': [mediaYesterdayCost],
-                            'cost': [cost],
-                            'group_name': [groupName],
-                            'pay_user_group_name': [payUserGroupName],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'yesterday_pu': [lastPu],
-                            'predicted_pu': [predictedPu],
-                            'predicted_arppu': [predictedArppu],
-                            'predicted_revenue': [predictedRevenue]
-                        })
+                            # 计算预测收入
+                            predictedRevenue = predictedPu * predictedArppu
+                            # print(f'媒体: {media}，预测收入: {predictedRevenue}')
 
-                        allRet = pd.concat([allRet, ret], ignore_index=True)
+                            # 构建单次预测结果
+                            ret = pd.DataFrame({
+                                'platform': [platform],
+                                'country': ['ALL'],
+                                'media': [media],
+                                'yesterday_cost': [mediaYesterdayCost],
+                                'cost': [cost],
+                                'group_name': [groupName],
+                                'max_r': [maxR],
+                                'pay_user_group_name': [payUserGroupName],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'yesterday_pu': [lastPu],
+                                'predicted_pu': [predictedPu],
+                                'predicted_arppu': [predictedArppu],
+                                'predicted_revenue': [predictedRevenue]
+                            })
+
+                            allRet = pd.concat([allRet, ret], ignore_index=True)
     
     if allRet.empty:
         print("按媒体分组的预测结果为空。")
         return allRet
     
     # 聚合预测结果
-    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio']).agg({
+    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio', 'max_r']).agg({
         'yesterday_cost': 'mean',
         'cost': 'mean',
         'yesterday_pu': 'sum',
@@ -956,116 +972,121 @@ def predict_country_media(minWeekMapeDf, yesterdayCost, configurations, app_pack
     返回：
         pd.DataFrame: 按国家和媒体分组的预测结果数据框。
     """
-    # 筛选出需要按国家和媒体预测的数据，排除 country='ALL' 和 media='ALL'
-    country_mediaDf = minWeekMapeDf[(minWeekMapeDf['country'] != 'ALL') & (minWeekMapeDf['media'] != 'ALL')].copy()
-    if country_mediaDf.empty:
-        print("未找到按国家和媒体组合分组的MAPE数据（country != 'ALL' 且 media != 'ALL'）。")
-        return pd.DataFrame()
-    
+    maxRList = minWeekMapeDf['max_r'].unique()
     allRet = pd.DataFrame()
     
-    # 获取所有需要预测的国家和媒体组合列表
-    country_media_groups = country_mediaDf[['country', 'media']].drop_duplicates()
-    print(f"需要进行预测的国家和媒体组合列表: {country_media_groups.to_dict('records')}")
-    
-    for _, row in country_media_groups.iterrows():
-        country = row['country']
-        media = row['media']
-        
-        # 获取当前组合的MAPE数据
-        group_specific_df = country_mediaDf[(country_mediaDf['country'] == country) & (country_mediaDf['media'] == media)]
-        if group_specific_df.empty:
-            print(f"未找到国家 {country} 和媒体 {media} 的MAPE数据。")
-            continue
-        
-        groupName = group_specific_df['group_name'].values[0]
-        cost_filter = (yesterdayCost['country'] == country) & (yesterdayCost['media'] == media)
-        groupYesterdayCost = yesterdayCost[cost_filter]['cost'].sum()
-        
-        print(f'国家: {country}, 媒体: {media}，group_name: {groupName}')
-        
-        for configuration in configurations:
-            if configuration['group_name'] == groupName:
-                payUserGroupList = configuration['payUserGroupList']
-                
-                for payUserGroup in payUserGroupList:
-                    payUserGroupName = payUserGroup['name']
+    for maxR in maxRList:
+        minWeekMapeDfMaxR = minWeekMapeDf[minWeekMapeDf['max_r'] == maxR]
 
-                    # 加载模型
-                    model = loadModel(app_package, media, country, groupName, payUserGroupName, currentMondayStr)
-                    if not model:
-                        print(f"未加载到模型: {app_package}, {media}, {country}, {groupName}, {payUserGroupName}, {currentMondayStr}")
-                        continue
+        # 筛选出需要按国家和媒体预测的数据，排除 country='ALL' 和 media='ALL'
+        country_mediaDf = minWeekMapeDfMaxR[(minWeekMapeDfMaxR['country'] != 'ALL') & (minWeekMapeDfMaxR['media'] != 'ALL')].copy()
+        if country_mediaDf.empty:
+            print("未找到按国家和媒体组合分组的MAPE数据（country != 'ALL' 且 media != 'ALL'）。")
+            return pd.DataFrame()
+        
+        # 获取所有需要预测的国家和媒体组合列表
+        country_media_groups = country_mediaDf[['country', 'media']].drop_duplicates()
+        print(f"需要进行预测的国家和媒体组合列表: {country_media_groups.to_dict('records')}")
+        
+        for _, row in country_media_groups.iterrows():
+            country = row['country']
+            media = row['media']
+            
+            # 获取当前组合的MAPE数据
+            group_specific_df = country_mediaDf[(country_mediaDf['country'] == country) & (country_mediaDf['media'] == media)]
+            if group_specific_df.empty:
+                print(f"未找到国家 {country} 和媒体 {media} 的MAPE数据。")
+                continue
+            
+            groupName = group_specific_df['group_name'].values[0]
+            cost_filter = (yesterdayCost['country'] == country) & (yesterdayCost['media'] == media)
+            groupYesterdayCost = yesterdayCost[cost_filter]['cost'].sum()
+            
+            print(f'国家: {country}, 媒体: {media}，group_name: {groupName},max_r: {maxR}，昨日花费: {groupYesterdayCost}')
+            
+            for configuration in configurations:
+                if configuration['group_name'] == groupName and configuration['max_r'] == maxR:
+                    payUserGroupList = configuration['payUserGroupList']
                     
-                    for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
-                        # 计算预测花费金额
-                        cost = groupYesterdayCost * (1 + cost_change_ratio)
-                        # print(f'国家: {country}, 媒体: {media}，预测花费金额: {cost}，相比昨日（{groupYesterdayCost}）变化: {cost_change_ratio}')
+                    for payUserGroup in payUserGroupList:
+                        payUserGroupName = payUserGroup['name']
 
-                        # 准备预测输入数据
-                        inputDf = pd.DataFrame({
-                            'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'is_weekend': [todayIsWeekend]
-                        })
+                        # 加载模型
+                        model = loadModel(app_package, media, country, groupName, payUserGroupName, currentMondayStr)
+                        if not model:
+                            print(f"未加载到模型: {app_package}, {media}, {country}, {groupName}, {payUserGroupName}, {currentMondayStr}")
+                            continue
                         
-                        # 进行预测
-                        forecast = model.predict(inputDf)
-                        yhat = forecast['yhat'].values[0]
-                        # print(f'国家: {country}, 媒体: {media}，预测增幅 yhat: {yhat}')
+                        for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
+                            # 计算预测花费金额
+                            cost = groupYesterdayCost * (1 + cost_change_ratio)
+                            # print(f'国家: {country}, 媒体: {media}，预测花费金额: {cost}，相比昨日（{groupYesterdayCost}）变化: {cost_change_ratio}')
 
-                        # 获取最后一天的PU
-                        pu_filter = (
-                            (predictArppuAndLastPu['platform'] == platform) &
-                            (predictArppuAndLastPu['country'] == country) &
-                            (predictArppuAndLastPu['media'] == media) &
-                            (predictArppuAndLastPu['group_name'] == groupName) &
-                            (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
-                        )
-                        lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
-                        if lastPu_series.empty:
-                            print(f"未找到国家 {country}, 媒体 {media} 对应的 last_pu 数据: {payUserGroupName}")
-                            continue
-                        lastPu = lastPu_series.values[0]
-                        predictedPu = lastPu * (1 + yhat)
-                        # print(f'国家: {country}, 媒体: {media}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
+                            # 准备预测输入数据
+                            inputDf = pd.DataFrame({
+                                'ds': [pd.to_datetime(dayStr, format='%Y%m%d')],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'is_weekend': [todayIsWeekend]
+                            })
+                            
+                            # 进行预测
+                            forecast = model.predict(inputDf)
+                            yhat = forecast['yhat'].values[0]
+                            # print(f'国家: {country}, 媒体: {media}，预测增幅 yhat: {yhat}')
 
-                        # 获取预测的ARPPU
-                        arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
-                        if arppu_series.empty:
-                            print(f"未找到国家 {country}, 媒体 {media} 对应的 predicted_arppu 数据: {payUserGroupName}")
-                            continue
-                        predictedArppu = arppu_series.values[0]
-                        # print(f'国家: {country}, 媒体: {media}，预测ARPPU: {predictedArppu}')
+                            # 获取最后一天的PU
+                            pu_filter = (
+                                (predictArppuAndLastPu['platform'] == platform) &
+                                (predictArppuAndLastPu['country'] == country) &
+                                (predictArppuAndLastPu['media'] == media) &
+                                (predictArppuAndLastPu['group_name'] == groupName) &
+                                (predictArppuAndLastPu['pay_user_group_name'] == payUserGroupName)
+                            )
+                            lastPu_series = predictArppuAndLastPu[pu_filter]['last_pu']
+                            if lastPu_series.empty:
+                                print(f"未找到国家 {country}, 媒体 {media} 对应的 last_pu 数据: {payUserGroupName}")
+                                continue
+                            lastPu = lastPu_series.values[0]
+                            predictedPu = lastPu * (1 + yhat)
+                            # print(f'国家: {country}, 媒体: {media}，预测付费用户数: {predictedPu}，相比昨日（{lastPu}）变化: {yhat}')
 
-                        # 计算预测收入
-                        predictedRevenue = predictedPu * predictedArppu
-                        # print(f'国家: {country}, 媒体: {media}，预测收入: {predictedRevenue}')
+                            # 获取预测的ARPPU
+                            arppu_series = predictArppuAndLastPu[pu_filter]['predicted_arppu']
+                            if arppu_series.empty:
+                                print(f"未找到国家 {country}, 媒体 {media} 对应的 predicted_arppu 数据: {payUserGroupName}")
+                                continue
+                            predictedArppu = arppu_series.values[0]
+                            # print(f'国家: {country}, 媒体: {media}，预测ARPPU: {predictedArppu}')
 
-                        # 构建单次预测结果
-                        ret = pd.DataFrame({
-                            'platform': [platform],
-                            'country': [country],
-                            'media': [media],
-                            'yesterday_cost': [groupYesterdayCost],
-                            'cost': [cost],
-                            'group_name': [groupName],
-                            'pay_user_group_name': [payUserGroupName],
-                            'cost_change_ratio': [cost_change_ratio],
-                            'yesterday_pu': [lastPu],
-                            'predicted_pu': [predictedPu],
-                            'predicted_arppu': [predictedArppu],
-                            'predicted_revenue': [predictedRevenue]
-                        })
+                            # 计算预测收入
+                            predictedRevenue = predictedPu * predictedArppu
+                            # print(f'国家: {country}, 媒体: {media}，预测收入: {predictedRevenue}')
 
-                        allRet = pd.concat([allRet, ret], ignore_index=True)
+                            # 构建单次预测结果
+                            ret = pd.DataFrame({
+                                'platform': [platform],
+                                'country': [country],
+                                'media': [media],
+                                'yesterday_cost': [groupYesterdayCost],
+                                'cost': [cost],
+                                'group_name': [groupName],
+                                'max_r': [maxR],
+                                'pay_user_group_name': [payUserGroupName],
+                                'cost_change_ratio': [cost_change_ratio],
+                                'yesterday_pu': [lastPu],
+                                'predicted_pu': [predictedPu],
+                                'predicted_arppu': [predictedArppu],
+                                'predicted_revenue': [predictedRevenue]
+                            })
+
+                            allRet = pd.concat([allRet, ret], ignore_index=True)
     
     if allRet.empty:
         print("按国家和媒体组合分组的预测结果为空。")
         return allRet
     
     # 聚合预测结果
-    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio']).agg({
+    allRet = allRet.groupby(['platform', 'country', 'media', 'cost_change_ratio', 'max_r']).agg({
         'yesterday_cost': 'mean',
         'cost': 'mean',
         'yesterday_pu': 'sum',
@@ -1194,24 +1215,17 @@ def main():
     platformList = ['android', 'ios']
     
     # TODO: 目前我的配置都是用安卓算的，之后可能需要分平台
-    configurations = getConfigurations('android', lastSundayStr, forTest=True)
+    configurations = getConfigurations('android', currentMondayStr, forTest=False)
+    print(f"配置列表: {configurations}")
 
     predictArppuAndLastPu = getPredictArppuAndLastPu(dayStr, configurations)
     
-    print(predictArppuAndLastPu)
-    return
-
-
     for platform in platformList:
         app_package = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
         print(f'平台: {platform}')    
         # 获取最小周MAPE
-        minWeekMapeDf = getMinWeekMape(nWeeksAgoStr, lastSundayStr, platform)
-        print('按周的最小MAPE')
-        print(minWeekMapeDf)
-        
+        minWeekMapeDf = getMinWeekMape(currentMondayStr, platform)        
         yesterdayCost = getYesterdayCost(platform,dayStr)
-
 
         # 调用封装后的大盘预测函数
         macro_prediction = predict_macro(
