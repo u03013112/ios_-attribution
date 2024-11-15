@@ -36,7 +36,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20240617'
+        dayStr = '20240817'
 
     print('dayStr:', dayStr)
 
@@ -169,8 +169,7 @@ def createTable():
             Column(name='country', type='string', comment=''),
             Column(name='model', type='string', comment=''),
             Column(name='group_name', type='string', comment='g3__2_10'),
-            Column(name='pay_user_group_name', type='string', comment='like:0~2,2~10 or 10~inf'),
-            Column(name='max_r', type='double', comment='maximum revenue')
+            Column(name='pay_user_group_name', type='string', comment='like:0~2,2~10 or 10~inf')
         ]
         
         partitions = [
@@ -297,8 +296,7 @@ def main(configuration,group_by_media=False, group_by_country=False):
                             'country': country_mapped, 
                             'model': model_json,
                             'group_name': groupName,
-                            'pay_user_group_name': payUserGroupName,
-                            'max_r': maxR
+                            'pay_user_group_name': payUserGroupName
                         }, ignore_index=True)
                     else:
                         print(f"Skipping model for platform: {platform}, media: {media}, country: {country} due to insufficient data.")
@@ -371,14 +369,26 @@ if __name__ == "__main__":
     deletePartition(currentMondayStr)
 
     configurations = getConfigurations('android', currentMondayStr)
-    
-    # 依次调用 main 函数
+    # 做出精简，相同的group_name只要最后一组
+    configurationsS = []
+    groupNameSet = set()
     for configuration in configurations:
-        print(configuration)
+        groupName = configuration['group_name']
+        if groupName in groupNameSet:
+            continue
+        groupNameSet.add(groupName)
 
+    groupNameList = list(groupNameSet)
+    for groupName in groupNameList:
+        for configuration in configurations:
+            if configuration['group_name'] == groupName:
+                configurationsS.append(configuration)
+                break
+    
+    print(configurationsS)
+    # 依次调用 main 函数
+    for configuration in configurationsS:
         main(configuration, False, False)
-        
-        exit()
         main(configuration, True, False)
         main(configuration, False, True)
         main(configuration, True, True)

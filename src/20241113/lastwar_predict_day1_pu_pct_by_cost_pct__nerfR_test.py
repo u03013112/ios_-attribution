@@ -8,7 +8,13 @@ from prophet.serialize import model_from_json
 def init():
     global execSql
     global dayStr
+    global model_cache
+    global historicalData_cache
+    global predict_cache
 
+    model_cache = {}
+    historicalData_cache = {}
+    predict_cache = {}
 
     if 'o' in globals():
         print('this is online version')
@@ -37,7 +43,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241021'  # 本地测试时的日期，可自行修改
+        dayStr = '20241113'  # 本地测试时的日期，可自行修改
 
 def createTable():
     if 'o' in globals():
@@ -79,6 +85,16 @@ def deletePartition(dayStr):
 
 
 def getHistoricalData(install_day_start, install_day_end, platform='android', group_name=None):
+
+    global historicalData_cache
+
+    # 构建缓存键
+    cache_key = (install_day_start, install_day_end, platform, group_name)
+    # 检查缓存中是否已有数据
+    if cache_key in historicalData_cache:
+        print(f"Loading historical data from cache for {cache_key}")
+        return historicalData_cache[cache_key]
+
     table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
     
     # 构建SQL查询语句
@@ -111,6 +127,9 @@ WHERE
     # 执行SQL查询并返回结果
     data = execSql(sql)
     
+    # 将数据存入缓存
+    historicalData_cache[cache_key] = data
+
     return data
 
 def preprocessData(data0, media=None, country=None):
@@ -171,7 +190,19 @@ def preprocessData(data0, media=None, country=None):
 
     return df
 
-def loadModels(app, media, country,group_name,pay_user_group_name,dayStr,maxR):
+
+def loadModels(app, media, country, group_name, pay_user_group_name, dayStr):
+    global model_cache
+
+    # 构建缓存键
+    cache_key = (app, media, country, group_name, pay_user_group_name, dayStr)
+
+    # 检查缓存中是否已有模型
+    if cache_key in model_cache:
+        print(f"Loading model from cache for {cache_key}")
+        return model_cache[cache_key]
+
+    # 如果缓存中没有，则从数据库加载
     sql = f'''
         select
             model
@@ -184,7 +215,6 @@ def loadModels(app, media, country,group_name,pay_user_group_name,dayStr,maxR):
             and country = '{country}'
             and group_name = '{group_name}'
             and pay_user_group_name = '{pay_user_group_name}'
-            and max_r = {maxR}
         '''
     print(sql)
     models_df = execSql(sql)
@@ -194,15 +224,33 @@ def loadModels(app, media, country,group_name,pay_user_group_name,dayStr,maxR):
     # 取出第一个模型
     row = models_df.iloc[0]
     model = model_from_json(row['model'])
+
+    # 将模型存入缓存
+    model_cache[cache_key] = model
+
     return model
 
 def makePredictions(preprocessed_data, model, app, media, country, group_name, pay_user_group_name):
     # 准备用于预测的特征
     model_df = preprocessed_data.copy()
 
-    # 使用模型预测付费用户变化率
-    forecast = model.predict(model_df)
-    
+    global predict_cache
+
+    # 构建缓存键
+    cache_key = (app, media, country, group_name, pay_user_group_name)
+
+    forecast = None
+
+    # 检查缓存中是否已有预测结果
+    if cache_key in predict_cache:
+        print(f"Loading predictions from cache for {cache_key}")
+        forecast = predict_cache[cache_key]
+    else:
+        # 使用模型预测付费用户变化率
+        forecast = model.predict(model_df)
+        # 将预测结果存入缓存
+        predict_cache[cache_key] = forecast[['ds', 'yhat']]
+        
     # 保证ds的数据类型是datetime64[ns]
     model_df['ds'] = pd.to_datetime(model_df['ds'])
     forecast['ds'] = pd.to_datetime(forecast['ds'])
@@ -343,7 +391,7 @@ def main(configuration,group_by_media=False, group_by_country=False):
                     
 
                     # 加载模型
-                    model = loadModels(app, mediaMaped if mediaMaped else 'ALL', country if country else 'ALL', groupName, payUserGroupName, currentMonDayStr, maxR)
+                    model = loadModels(app, mediaMaped if mediaMaped else 'ALL', country if country else 'ALL', groupName, payUserGroupName, currentMonDayStr)
                     if model is None:
                         print(f"No models found for app: {app}, media: {mediaMaped}, country: {country}")
                         continue
@@ -354,6 +402,7 @@ def main(configuration,group_by_media=False, group_by_country=False):
                     if predictions_df is not None:
                         # 写入DB
                         predictions_df.rename(columns={'ds': 'install_day'}, inplace=True)
+                        predictions_df['max_r'] = maxR
                         writeVerificationResultsToTable(predictions_df, dayStr)
                     else:
                         print(f"No predictions for pay_user_group_name: {payUserGroupName}")
@@ -369,9 +418,10 @@ def getConfigurations(platform, dayStr):
         group_name,
         pay_user_group,
         min_value,
-        max_value
+        max_value,
+        max_r
     FROM
-        lastwar_predict_day1_pu_pct_by_cost_pct__configurations
+        lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_configurations
     WHERE
         app = '{app_package}'
         AND day = '{dayStr}'
@@ -381,8 +431,8 @@ def getConfigurations(platform, dayStr):
     data = execSql(sql)
     
     configurations = []
-    grouped = data.groupby('group_name')
-    for group_name, group_data in grouped:
+    grouped = data.groupby(['group_name', 'max_r'])
+    for (group_name,max_r), group_data in grouped:
         payUserGroupList = []
         for _, row in group_data.iterrows():
             payUserGroupList.append({
@@ -392,6 +442,7 @@ def getConfigurations(platform, dayStr):
             })
         configurations.append({
             'group_name': group_name,
+            'max_r': max_r,
             'payUserGroupList': payUserGroupList
         })
     
