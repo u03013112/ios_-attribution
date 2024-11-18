@@ -115,8 +115,8 @@ group by
         data = execSql(sql)
         data = data[['install_day', 'revenue_1d', 'revenue_1d_before_nerf', 'nerf_ratio', 'max_r']]
         data['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
-        data['country'] = 'All'
-        data['mediasource'] = 'All'
+        data['country'] = 'ALL'
+        data['mediasource'] = 'ALL'
         print(data.head(5))
 
         writeToTable(data, dayStr)
@@ -160,7 +160,7 @@ group by
 
         data = data[['install_day', 'mediasource', 'revenue_1d', 'revenue_1d_before_nerf', 'nerf_ratio', 'max_r']]
         data['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
-        data['country'] = 'All'
+        data['country'] = 'ALL'
         print(data.head(5))
 
         writeToTable(data, dayStr)
@@ -199,7 +199,7 @@ group by
 
         data = data[['install_day', 'country', 'revenue_1d', 'revenue_1d_before_nerf', 'nerf_ratio', 'max_r']]
         data['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
-        data['mediasource'] = 'All'
+        data['mediasource'] = 'ALL'
         print(data.head(5))
 
         writeToTable(data, dayStr)

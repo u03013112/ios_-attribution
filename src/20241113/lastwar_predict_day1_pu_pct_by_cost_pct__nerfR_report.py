@@ -65,14 +65,14 @@ def createTable():
             Partition(name='day', type='string', comment='预测日期')
         ]
         schema = Schema(columns=columns, partitions=partitions)
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerfR_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_report'
         o.create_table(table_name, schema, if_not_exists=True)
     else:
         print('No table creation in local version')
 
 def deletePartition(dayStr):
     if 'o' in globals():
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerfR_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_report'
         t = o.get_table(table_name)
         # 删除分区（如果存在）
         t.delete_partition('day=%s' % (dayStr), if_exists=True)
@@ -84,7 +84,7 @@ def writeToTable(df, dayStr):
     print('try to write verification results to table:')
     print(df.head(5))
     if 'o' in globals():
-        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerfR_report'
+        table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_report'
         t = o.get_table(table_name)
         with t.open_writer(partition='day=%s' % (dayStr), create_partition=True, arrow=True) as writer:
             # 将 install_day 转换为字符串
@@ -212,264 +212,6 @@ def loadModel(app, media, country,group_name,pay_user_group_name,dayStr):
     model_cache[cache_key] = model
 
     return model
-
-# TODO： 这部分可以独立出去，将结果保存到DB，提高运行速度
-# 获得所有分平台、分国家、分媒体、group_name、pay_user_group_name的ARPPU
-# def getPredictArppuAndLastPu(dayStr,configurations):
-#     print(f"获取预测ARPPU和最后一天的PU：dayStr={dayStr}")
-
-#     def getHistoricalData(install_day_start, install_day_end, platform='android', configuration=None):
-#         table_name = 'lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_historical_data'
-        
-#         groupName = configuration['group_name']
-#         maxR = configuration['max_r']
-
-#         # 构建SQL查询语句
-#         sql = f'''
-# SELECT
-#     install_day,
-#     country,
-#     mediasource,
-#     revenue_1d,
-#     revenue_1d_before_nerf,
-#     pu_1d,
-#     cost,
-#     platform,
-#     group_name,
-#     pay_user_group,
-#     max_r
-# FROM
-#     {table_name}
-# WHERE
-#     day BETWEEN '{install_day_start}' AND '{install_day_end}'
-#     AND platform = '{platform}'
-#     AND group_name = '{groupName}'
-#     AND max_r = {maxR}
-# ;
-#         '''
-        
-#         print("执行的SQL语句如下：\n")
-#         print(sql)
-        
-#         # 执行SQL查询并返回结果
-#         data = execSql(sql)
-#         return data
-
-#     def preprocessData(data0, media=None, country=None):
-#         """
-#         预处理数据，包括日期转换、过滤、聚合、重塑和特征工程。
-#         """
-#         data = data0.copy()
-#         # 1. 转换 'install_day' 列为日期格式
-#         data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
-        
-#         # 2. 过滤数据
-#         if media:
-#             data = data[data['mediasource'] == media]
-#         if country:
-#             data = data[data['country'] == country]
-        
-#         # 3. 按 'install_day' 和 'pay_user_group' 分组并汇总所需列
-#         aggregation_dict = {
-#             'cost': 'sum',
-#             'revenue_1d': 'sum',
-#             'revenue_1d_before_nerf': 'sum',
-#             'pu_1d': 'sum'
-#         }
-        
-#         aggregated_data = data.groupby(['install_day', 'pay_user_group']).agg(aggregation_dict).reset_index()
-        
-#         # 4. 计算 cost_change_ratio 和 pu_change_ratio
-#         aggregated_data['cost_change_ratio'] = aggregated_data.groupby('pay_user_group')['cost'].pct_change()
-#         aggregated_data['pu_change_ratio'] = aggregated_data.groupby('pay_user_group')['pu_1d'].pct_change()
-        
-#         # 计算实际成本和付费用户的前一天值
-#         aggregated_data['actual_cost_shifted'] = aggregated_data.groupby('pay_user_group')['cost'].shift(1)
-#         aggregated_data['actual_pu_shifted'] = aggregated_data.groupby('pay_user_group')['pu_1d'].shift(1)
-        
-#         # 移除第一天（无法计算变动比例）
-#         aggregated_data = aggregated_data.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
-        
-#         # 5. 计算 actual_ARPPU 和 predicted_ARPPU
-#         # 计算实际 ARPPU
-#         aggregated_data['actual_arppu'] = aggregated_data['revenue_1d'] / aggregated_data['pu_1d']
-#         aggregated_data['actual_arppu'].replace([np.inf, -np.inf], np.nan, inplace=True)
-
-#         aggregated_data['actual_arppu_before_nerf'] = aggregated_data['revenue_1d_before_nerf'] / aggregated_data['pu_1d']
-#         aggregated_data['actual_arppu_before_nerf'].replace([np.inf, -np.inf], np.nan, inplace=True)
-        
-#         # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
-#         aggregated_data['actual_arppu_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu'].shift(1)
-#         aggregated_data['predicted_arppu'] = aggregated_data.groupby('pay_user_group')['actual_arppu_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
-        
-#         aggregated_data['actual_arppu_before_nerf_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf'].shift(1)
-#         aggregated_data['predicted_arppu_before_nerf'] = aggregated_data.groupby('pay_user_group')['actual_arppu_before_nerf_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
-        
-#         # if media is None and country is None:
-#         #     print(aggregated_data)
-
-#         # 6. 重命名和选择最终列
-#         aggregated_data = aggregated_data.rename(columns={
-#             'install_day': 'ds', 
-#             'pay_user_group':'pay_user_group_name',
-#             'pu_change_ratio': 'y'
-#         })
-        
-#         # 最终选择列
-#         df = aggregated_data[['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'y', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'predicted_arppu_before_nerf', 'revenue_1d']].copy()
-        
-#         # 添加周末特征
-#         df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
-
-#         return df
-
-#     # 获取从dayStr往前推N天的数据，计算平均ARPPU作为预测的ARPPU 
-#     N = 16
-
-#     endDate = pd.to_datetime(dayStr, format='%Y%m%d') - pd.Timedelta(days=1)
-#     endDateStr = endDate.strftime('%Y%m%d')
-
-#     startDate = endDate - pd.Timedelta(days=N)
-#     startDateStr = startDate.strftime('%Y%m%d')    
-
-#     retDf = pd.DataFrame()
-
-#     for platform in ['android', 'ios']:
-#         for configuration in configurations:
-#             groupName = configuration['group_name']
-#             payUserGroupList = configuration['payUserGroupList']
-
-#             historical_data = getHistoricalData(startDateStr, endDateStr, platform, configuration)
-#             historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
-
-#             countryList = historical_data['country'].unique()
-#             mediaList = historical_data['mediasource'].unique()
-
-#             # 大盘
-#             allDf = preprocessData(historical_data)
-#             for payUserGroup in payUserGroupList:
-#                 payUserGroupName = payUserGroup['name']
-#                 filtered_df = allDf[(allDf['pay_user_group_name'] == payUserGroupName) & (allDf['ds'] == endDate)]
-#                 if not filtered_df.empty:
-#                     arppu = filtered_df['predicted_arppu'].iloc[0]
-#                     arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-#                     lastPu = filtered_df['pu_1d'].iloc[0]
-#                 else:
-#                     arppu = 0
-#                     arppuBeforeNerf = 0
-#                     lastPu = 0
-                    
-#                 allRetDf = pd.DataFrame({
-#                     'platform': [platform],
-#                     'country': ['ALL'],
-#                     'media': ['ALL'],
-#                     'group_name': [groupName],
-#                     'max_r': [configuration['max_r']],
-#                     'pay_user_group_name': [payUserGroupName],
-#                     'predicted_arppu': [arppu],
-#                     'predicted_arppu_before_nerf': [arppuBeforeNerf],
-#                     'last_pu': [lastPu]
-#                 })
-#                 retDf = pd.concat([retDf, allRetDf])
-            
-#             # 分国家
-#             for country in countryList:
-#                 countryDf = preprocessData(historical_data, country=country)
-#                 for payUserGroup in payUserGroupList:
-#                     payUserGroupName = payUserGroup['name']
-#                     filtered_df = countryDf[(countryDf['pay_user_group_name'] == payUserGroupName) & (countryDf['ds'] == endDate)]
-#                     if not filtered_df.empty:
-#                         arppu = filtered_df['predicted_arppu'].iloc[0]
-#                         arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-#                         lastPu = filtered_df['pu_1d'].iloc[0]
-#                     else:
-#                         arppu = 0
-#                         arppuBeforeNerf = 0
-#                         lastPu = 0
-#                     countryRetDf = pd.DataFrame({
-#                         'platform': [platform],
-#                         'country': [country],
-#                         'media': ['ALL'],
-#                         'group_name': [groupName],
-#                         'max_r': [configuration['max_r']],
-#                         'pay_user_group_name': [payUserGroupName],
-#                         'predicted_arppu': [arppu],
-#                         'predicted_arppu_before_nerf': [arppuBeforeNerf],
-#                         'last_pu': [lastPu]
-#                     })
-#                     retDf = pd.concat([retDf, countryRetDf])
-
-#             # 分媒体 和 分国家+分媒体 只有安卓有
-#             if platform == 'android':
-#                 # 分媒体
-#                 for media in mediaList:
-#                     mediaDf = preprocessData(historical_data, media=media)
-#                     for payUserGroup in payUserGroupList:
-#                         payUserGroupName = payUserGroup['name']
-#                         filtered_df = mediaDf[(mediaDf['pay_user_group_name'] == payUserGroupName) & (mediaDf['ds'] == endDate)]
-#                         if not filtered_df.empty:
-#                             arppu = filtered_df['predicted_arppu'].iloc[0]
-#                             arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-#                             lastPu = filtered_df['pu_1d'].iloc[0]
-#                         else:
-#                             arppu = 0
-#                             arppuBeforeNerf = 0
-#                             lastPu = 0
-
-#                         mediaRetDf = pd.DataFrame({
-#                             'platform': [platform],
-#                             'country': ['ALL'],
-#                             'media': [media],
-#                             'group_name': [groupName],
-#                             'max_r': [configuration['max_r']],
-#                             'pay_user_group_name': [payUserGroupName],
-#                             'predicted_arppu': [arppu],
-#                             'predicted_arppu_before_nerf': [arppuBeforeNerf],
-#                             'last_pu': [lastPu]
-#                         })
-#                         retDf = pd.concat([retDf, mediaRetDf])
-
-#                 # 分国家+分媒体
-#                 for country in countryList:
-#                     for media in mediaList:
-#                         countryMediaDf = preprocessData(historical_data, media=media, country=country)
-#                         for payUserGroup in payUserGroupList:
-#                             payUserGroupName = payUserGroup['name']
-#                             filtered_df = countryMediaDf[(countryMediaDf['pay_user_group_name'] == payUserGroupName) & (countryMediaDf['ds'] == endDate)]
-#                             if not filtered_df.empty:
-#                                 arppu = filtered_df['predicted_arppu'].iloc[0]
-#                                 arppuBeforeNerf = filtered_df['predicted_arppu_before_nerf'].iloc[0]
-#                                 lastPu = filtered_df['pu_1d'].iloc[0]
-#                             else:
-#                                 arppu = 0
-#                                 arppuBeforeNerf = 0
-#                                 lastPu = 0
-#                             countryMediaRetDf = pd.DataFrame({
-#                                 'platform': [platform],
-#                                 'country': [country],
-#                                 'media': [media],
-#                                 'group_name': [groupName],
-#                                 'max_r': [configuration['max_r']],
-#                                 'pay_user_group_name': [payUserGroupName],
-#                                 'predicted_arppu': [arppu],
-#                                 'predicted_arppu_before_nerf': [arppuBeforeNerf],
-#                                 'last_pu': [lastPu]
-#                             })
-#                             retDf = pd.concat([retDf, countryMediaRetDf])
-
-    
-#     # 对 media 进行重命名
-#     media_mapping = {
-#         'Facebook Ads': 'FACEBOOK',
-#         'applovin_int': 'APPLOVIN',
-#         'googleadwords_int': 'GOOGLE',
-#         'ALL': 'ALL'
-#     }
-#     retDf['media'] = retDf['media'].map(media_mapping)
-#     # 将 media 为空的行的 media drop 掉
-#     retDf = retDf[retDf['media'].notnull()]
-
-#     return retDf
 
 def getPredictArppuAndLastPu(dayStr,configurations):
     # configurations 暂时用不上了
@@ -1149,6 +891,8 @@ def find_max_cost_meeting_roi(predict_df, lastDayStr, platform):
 
     selected_rows = []
 
+    maxRList = predict_df['max_r'].unique()
+
     for _, group in unique_groups.iterrows():
         country = group['country']
         media = group['media']
@@ -1157,27 +901,30 @@ def find_max_cost_meeting_roi(predict_df, lastDayStr, platform):
         target_roi = getRoiThreshold(lastDayStr, platform, media, country)
         print(f"处理组合 - 国家: {country}, 媒体: {media}, 目标 ROI 阈值: {target_roi}")
 
-        # 筛选出当前组合的预测记录
-        group_df = predict_df[
-            (predict_df['country'] == country) & 
-            (predict_df['media'] == media) & 
-            (predict_df['platform'] == platform)
-        ]
+        for maxR in maxRList:
+            print(f"处理组合 - 国家: {country}, 媒体: {media}, max_r: {maxR}")
+            # 筛选出当前组合的预测记录
+            group_df = predict_df[
+                (predict_df['country'] == country) & 
+                (predict_df['media'] == media) & 
+                (predict_df['platform'] == platform) &
+                (predict_df['max_r'] == maxR)
+            ]
 
-        # 筛选出预测 ROI 大于等于目标 ROI 的记录
-        filtered_df = group_df[group_df['predicted_roi'] >= target_roi]
-        print(f"组合 - {country}, {media} 满足 ROI >= {target_roi} 的记录数: {len(filtered_df)}")
+            # 筛选出预测 ROI 大于等于目标 ROI 的记录
+            filtered_df = group_df[group_df['predicted_roi'] >= target_roi]
+            print(f"组合 - {country}, {media} 满足 ROI >= {target_roi} 的记录数: {len(filtered_df)}")
 
-        if filtered_df.empty:
-            print(f"组合 - {country}, {media} 没有满足 ROI 阈值的预测结果。")
-            continue
+            if filtered_df.empty:
+                print(f"组合 - {country}, {media} 没有满足 ROI 阈值的预测结果。")
+                continue
 
-        # 找到 'cost' 最大的记录
-        max_cost_row = filtered_df.loc[filtered_df['cost'].idxmax()]
-        print(f"组合 - {country}, {media} 选择的最大预测花费金额记录: cost = {max_cost_row['cost']}")
+            # 找到 'cost' 最大的记录
+            max_cost_row = filtered_df.loc[filtered_df['cost'].idxmax()]
+            print(f"组合 - {country}, {media} 选择的最大预测花费金额记录: cost = {max_cost_row['cost']}")
 
-        # 将选择的记录添加到列表中
-        selected_rows.append(max_cost_row)
+            # 将选择的记录添加到列表中
+            selected_rows.append(max_cost_row)
 
     if not selected_rows:
         print("没有任何组合满足 ROI 条件。")
@@ -1302,8 +1049,12 @@ def main():
             all_predictions['type'] = all_predictions['cost_change_ratio'].astype(str)
 
             # 选择与表结构匹配的列
-            predictions_to_write = all_predictions[['app', 'media', 'country', 'type','cost', 
+            predictions_to_write = all_predictions[['app', 'media', 'country', 'type','cost', 'max_r',
                                                     'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
+
+
+            # TODO: 暂时没算
+            predictions_to_write['nerf_ratio'] = 0.0
 
             # 写入预测结果到表中
             writeToTable(predictions_to_write, dayStr)
@@ -1383,8 +1134,11 @@ def main():
             best_records['type'] = 'best'
 
             # 选择与表结构匹配的列
-            best_to_write = best_records[['app', 'media', 'country', 'type', 'cost',
+            best_to_write = best_records[['app', 'media', 'country', 'type', 'cost', 'max_r',
                                         'predicted_pu', 'predicted_arppu', 'predicted_revenue', 'predicted_roi']]
+
+            # TODO: 暂时没算
+            best_to_write['nerf_ratio'] = 0.0
 
             # 写入最佳预测结果到表中
             writeToTable(best_to_write, dayStr)
