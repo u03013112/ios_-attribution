@@ -296,12 +296,14 @@ def main():
             }, inplace=True)
             
             retDf0 = group_dataCopy[['install_day','platform', 'media', 'country', 'group_name', 'pay_user_group_name', 'actual_pu', 'predicted_pu', 'actual_arppu', 'predicted_arppu', 'actual_revenue', 'predicted_revenue', 'max_r']]
+            retDf0['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
             print('Verification results:')
             print(retDf0)
+            
             retDf = retDf.append(retDf0)
             
         
-    retDf['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
+    
     writeVerificationResultsToTable(retDf, dayStr)
 
 if __name__ == "__main__":
