@@ -121,65 +121,6 @@ WHERE
 
     return data
 
-def preprocessData(data0, media=None, country=None):
-    """
-    预处理数据，包括日期转换、过滤、聚合、重塑和特征工程。
-    """
-    data = data0.copy()
-    # 1. 转换 'install_day' 列为日期格式
-    data['install_day'] = pd.to_datetime(data['install_day'], format='%Y%m%d')
-    
-    # 2. 过滤数据
-    if media:
-        data = data[data['mediasource'] == media]
-    if country:
-        data = data[data['country'] == country]
-    
-    # 3. 按 'install_day' 和 'pay_user_group' 分组并汇总所需列
-    aggregation_dict = {
-        'cost': 'sum',
-        'revenue_1d': 'sum',
-        'pu_1d': 'sum'
-    }
-    
-    aggregated_data = data.groupby(['install_day', 'pay_user_group']).agg(aggregation_dict).reset_index()
-    
-    # 4. 计算 cost_change_ratio 和 pu_change_ratio
-    aggregated_data['cost_change_ratio'] = aggregated_data.groupby('pay_user_group')['cost'].pct_change()
-    aggregated_data['pu_change_ratio'] = aggregated_data.groupby('pay_user_group')['pu_1d'].pct_change()
-    
-    # 计算实际成本和付费用户的前一天值
-    aggregated_data['actual_cost_shifted'] = aggregated_data.groupby('pay_user_group')['cost'].shift(1)
-    aggregated_data['actual_pu_shifted'] = aggregated_data.groupby('pay_user_group')['pu_1d'].shift(1)
-    
-    # 移除第一天（无法计算变动比例）
-    aggregated_data = aggregated_data.dropna(subset=['cost_change_ratio', 'pu_change_ratio'])
-    
-    # 5. 计算 actual_ARPPU 和 predicted_ARPPU
-    # 计算实际 ARPPU
-    aggregated_data['actual_arppu'] = aggregated_data['revenue_1d'] / aggregated_data['pu_1d']
-    aggregated_data['actual_arppu'].replace([np.inf, -np.inf], np.nan, inplace=True)
-    
-    # 计算预测 ARPPU：先shift一天，再计算过去15天的均值
-    aggregated_data['actual_arppu_shifted'] = aggregated_data.groupby('pay_user_group')['actual_arppu'].shift(1)
-    aggregated_data['predicted_arppu'] = aggregated_data.groupby('pay_user_group')['actual_arppu_shifted'].rolling(window=15, min_periods=1).mean().reset_index(level=0, drop=True)
-    
-    # 6. 重命名和选择最终列
-    aggregated_data = aggregated_data.rename(columns={
-        'install_day': 'ds', 
-        'pay_user_group':'pay_user_group_name',
-        'pu_change_ratio': 'y'
-    })
-    
-    # 最终选择列
-    df = aggregated_data[['ds', 'actual_cost_shifted', 'cost', 'cost_change_ratio', 'actual_pu_shifted', 'pu_1d', 'y', 'pay_user_group_name', 'actual_arppu', 'predicted_arppu', 'revenue_1d']]
-    
-    # 添加周末特征
-    df['is_weekend'] = df['ds'].dt.dayofweek.isin([5, 6]).astype(int)
-
-    return df
-
-
 def loadModels(platform, media, country, group_name, pay_user_group_name, dayStr):
     global model_cache
 
@@ -276,6 +217,18 @@ def main():
                 'pu_change_ratio':'y'
             }, inplace=True)
             group_dataCopy = group_dataCopy[group_dataCopy['ds'] == dayStr].reset_index(drop=True)
+
+            print('进入预测的数据：')
+            print(group_dataCopy)
+
+            # 过滤掉无效数据
+            checkDf = group_dataCopy[['ds','cost_change_ratio','is_weekend']]
+            # 去掉输入列中NaN和inf
+            checkDf = checkDf.replace([np.inf, -np.inf], np.nan)
+            checkDf = checkDf.dropna()
+            if checkDf.empty:
+                print(f"No valid data for prediction for pay_user_group_name: {pay_user_group_name}")
+                break
 
             if predicted_pu is None:
                 model = loadModels(platform, media, country, group_name, pay_user_group_name, currentMonDayStr)
