@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS rg_bi.lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_monday(monday STRING,day STRING) STORED AS ALIORC;
+
+
+INSERT OVERWRITE TABLE rg_bi.lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_monday
+SELECT
+to_char(CASE
+WHEN dayofweek(to_date(day, 'YYYYMMDD')) = 1 THEN date_sub(to_date(day, 'YYYYMMDD'), 6)
+ELSE date_sub(to_date(day, 'YYYYMMDD'), dayofweek(to_date(day, 'YYYYMMDD')) - 2)
+END,'YYYYMMDD') as monday,
+day
+FROM
+lastwar_predict_day1_pu_pct_by_cost_pct__nerf_r_report2
+WHERE
+day > 0
+GROUP BY
+day
+;
