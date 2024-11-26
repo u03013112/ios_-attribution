@@ -43,7 +43,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241113'  # 本地测试时的日期，可自行修改
+        dayStr = '20241124'  # 本地测试时的日期，可自行修改
 
     print('测试日期:', dayStr)
 
@@ -178,7 +178,6 @@ def writeVerificationResultsToTable(df, dayStr):
         print(df)
 
 def main():
-    # dayStr 是验算日，yesterday是被验算日。每天验算的是前一天的数据。
     global dayStr
 
     currentDay = pd.to_datetime(dayStr, format='%Y%m%d')
