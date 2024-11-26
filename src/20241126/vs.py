@@ -5,6 +5,12 @@ import sys
 sys.path.append('/src')
 from src.maxCompute import execSql
 
+from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_percentage_error
 
@@ -52,8 +58,8 @@ def prophetTest():
     ret = {}
     groupDf = train_df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
-        # if (media, country) not in [('ALL', 'ALL'),('GOOGLE', 'ALL')]:
-        #     continue
+        if (media, country) not in [('ALL', 'ALL'),('GOOGLE', 'ALL')]:
+            continue
         
         # 准备训练数据
         train_data = group[['install_day', 'cost', 'revenue']].rename(columns={'install_day': 'ds', 'revenue': 'y'})
@@ -84,6 +90,77 @@ def prophetTest():
 
     print(ret)
 
+def dnnTest():
+    df = getData()
+    df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
+    df = df.sort_values(by='install_day').reset_index(drop=True)
+    # 用2024年7月1日到8月31日的数据训练
+    train_df = df[(df['install_day'] >= '2024-07-01') & (df['install_day'] <= '2024-08-31')]
+    test_df = df[(df['install_day'] >= '2024-09-01') & (df['install_day'] <= '2024-09-30')]
+    # 输入cost，输出revenue
+
+    ret = {}
+    groupDf = train_df.groupby(['media', 'country'])
+    for (media, country), group in groupDf:
+        if (media, country) not in [('ALL', 'ALL'),('GOOGLE', 'ALL')]:
+            continue
+
+        # 过滤掉包含 NaN 或无穷大值的行
+        group = group.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(group) < 10:  # 如果过滤后数据行数不足10行，则跳过
+            print(f'Skipping Media: {media}, Country: {country} due to insufficient data after filtering.')
+            continue
+        
+        # 准备训练数据
+        X_train = group[['cost']].values
+        y_train = group['revenue'].values
+        
+        # 标准化
+        scaler_X = StandardScaler()
+        scaler_y = StandardScaler()
+        X_train_scaled = scaler_X.fit_transform(X_train)
+        y_train_scaled = scaler_y.fit_transform(y_train.reshape(-1, 1)).flatten()
+        
+        # 构建DNN模型
+        model = Sequential()
+        model.add(Dense(32, input_dim=X_train_scaled.shape[1], activation='relu'))
+        model.add(Dense(32, activation='relu'))
+        model.add(Dense(1, activation='linear'))
+        
+        # 编译模型
+        # model.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
+        model.compile(optimizer='RMSprop', loss='mean_squared_error',metrics=['mape'])
+        
+        # 训练模型
+        model.fit(X_train_scaled, y_train_scaled, epochs=100, batch_size=4, verbose=1)
+        
+        # 准备测试数据
+        test_group = test_df[(test_df['media'] == media) & (test_df['country'] == country)]
+        test_group = test_group.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(test_group) < 1:  # 如果测试数据行数不足1行，则跳过
+            print(f'Skipping Media: {media}, Country: {country} due to insufficient test data after filtering.')
+            continue
+        
+        X_test = test_group[['cost']].values
+        y_test = test_group['revenue'].values
+        
+        # 标准化测试数据
+        X_test_scaled = scaler_X.transform(X_test)
+        y_test_scaled = scaler_y.transform(y_test.reshape(-1, 1)).flatten()
+        
+        # 进行预测
+        y_pred_scaled = model.predict(X_test_scaled).flatten()
+        y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+        
+        # 计算MAPE
+        mape = mean_absolute_percentage_error(y_test, y_pred)
+        
+        # 输出结果
+        print(f'Media: {media}, Country: {country}, MAPE: {mape:.4f}')
+        ret[(media, country)] = mape
+
+    print(ret)
 
 if __name__ == '__main__':
-    prophetTest()
+    # prophetTest()
+    dnnTest()
