@@ -140,7 +140,7 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     best_mape = float('inf')
     best_y_pred = None
     
-    for _ in range(5):  # 简单循环3次，选择最优结果
+    for _ in range(5):  # 简单循环5次，选择最优结果
         # 构建DNN模型
         dnn_model = Sequential()
         dnn_model.add(Dense(64, input_dim=X_test.shape[1], activation='relu'))
@@ -175,7 +175,7 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     
     return result
 
-def prophetDnnTest3():
+def prophetDnnTest4():
     df = getData()
     df = dataStep1(df)
     df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
@@ -183,11 +183,16 @@ def prophetDnnTest3():
     
     # 尝试的训练周期和预测周期列表
     try_periods = [
-        {'N': 60, 'M': 30},
-        {'N': 90, 'M': 30},
-        {'N': 120, 'M': 30},
-        {'N': 180, 'M': 30},
-        {'N': 210, 'M': 30},
+        {'N': 60, 'M': 7},
+        {'N': 90, 'M': 7},
+        {'N': 120, 'M': 7},
+        {'N': 180, 'M': 7},
+        {'N': 210, 'M': 7},
+        {'N': 60, 'M': 14},
+        {'N': 90, 'M': 14},
+        {'N': 120, 'M': 14},
+        {'N': 180, 'M': 14},
+        {'N': 210, 'M': 14},
     ]
     
     schemes = [
@@ -199,6 +204,12 @@ def prophetDnnTest3():
     ]
     
     results = []
+    results_file = '/src/data/20241126_prophet_dnn_test5.csv'
+    
+    # 如果文件存在，删除它以确保我们从头开始
+    if os.path.exists(results_file):
+        os.remove(results_file)
+    
     groupDf = df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
         # if (media, country) not in [('ALL', 'ALL')]:
@@ -231,7 +242,6 @@ def prophetDnnTest3():
                     train_end_date = start_date - pd.Timedelta(days=1)
                     train_start_date = train_end_date - pd.Timedelta(days=N-1)
                 
-                
                     period_result = calculate_mape(group, train_start_date, train_end_date, start_date, end_date, scheme['input_columns'], scheme['scheme_name'])
                     print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Start Date: {start_date}, End Date: {end_date}, Scheme: {scheme["scheme_name"]}')
                     print(period_result)
@@ -242,22 +252,27 @@ def prophetDnnTest3():
                     combined_results = pd.concat(period_results)
                     overall_mape = combined_results['mape'].mean()
                     
-                    results.append({
+                    result = {
                         'media': media,
                         'country': country,
                         'N': N,
                         'M': M,
                         'mape': overall_mape,
                         'scheme': scheme['scheme_name']
-                    })
+                    }
+                    results.append(result)
+                    
+                    # 将结果写入文件
+                    result_df = pd.DataFrame([result])
+                    result_df.to_csv(results_file, mode='a', header=not os.path.exists(results_file), index=False)
+                    
                     print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Scheme: {scheme["scheme_name"]}, MAPE: {overall_mape:.4f}')
 
     results_df = pd.DataFrame(results)
     print(results_df)
 
-    results_df.to_csv('/src/data/20241126_prophet_dnn_test4.csv', index=False)
     return results_df
 
 if __name__ == '__main__':
     # 运行测试
-    prophetDnnTest3()
+    prophetDnnTest4()
