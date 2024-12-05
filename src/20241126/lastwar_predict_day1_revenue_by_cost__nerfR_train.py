@@ -48,6 +48,55 @@ def init():
 
     print('dayStr:', dayStr)
 
+def createTable():
+    if 'o' in globals():
+        # 下面部分就只有线上环境可以用了
+        from odps.models import Schema, Column, Partition
+        columns = [
+            Column(name='app', type='string', comment='app identifier'),
+            Column(name='platform', type='string', comment=''),
+            Column(name='media', type='string', comment=''),
+            Column(name='country', type='string', comment=''),
+            Column(name='max_r', type='double', comment=''),
+            Column(name='prophet_model', type='string', comment=''),
+            Column(name='dnn_model', type='string', comment=''),
+            Column(name='model_weights_base64', type='string', comment=''),
+            Column(name='scaler_params', type='string', comment='')
+        ]
+        
+        partitions = [
+            Partition(name='day', type='string', comment='postback time,like 20221018')
+        ]
+        schema = Schema(columns=columns, partitions=partitions)
+        table = o.create_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train', schema, if_not_exists=True)
+        return table
+    else:
+        print('createTable failed, o is not defined')
+
+def deletePartition(dayStr):
+    if 'o' in globals():
+        t = o.get_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train')
+        t.delete_partition('day=%s'%(dayStr), if_exists=True)
+        print(f"Partition day={dayStr} deleted.")
+    else:
+        print('deletePartition failed, o is not defined')
+
+def writeTable(df, dayStr):
+    print('try to write table:')
+    print(df.head(5))
+    if len(df) == 0:
+        print('No data to write.')
+        return
+    if 'o' in globals():
+        t = o.get_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train')
+        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
+            writer.write(df)
+        print(f"Data written to table partition day={dayStr}.")
+    else:
+        print('writeTable failed, o is not defined')
+        print(dayStr)
+        print(df)
+
 def getHistoricalData(install_day_start, install_day_end):
     # 构建SQL查询语句
     sql = f'''
@@ -88,7 +137,7 @@ def train_model(train_df):
 
     if len(train_df2) < 30:
         print("训练数据不足（少于30条），跳过训练。")
-        return None, None
+        return None, None, None
 
     prophet_model.fit(train_df2)
     
@@ -135,55 +184,14 @@ def train_model(train_df):
 
     print("DNN Model Training Completed with best validation MAPE:", best_mape)
 
-    return prophet_model, best_dnn_model
+    # 提取标准化参数
+    scaler_params = {
+        'mean': scaler_X.mean_.tolist(),
+        'scale': scaler_X.scale_.tolist()
+    }
 
-def createTable():
-    if 'o' in globals():
-        # 下面部分就只有线上环境可以用了
-        from odps.models import Schema, Column, Partition
-        columns = [
-            Column(name='app', type='string', comment='app identifier'),
-            Column(name='platform', type='string', comment=''),
-            Column(name='media', type='string', comment=''),
-            Column(name='country', type='string', comment=''),
-            Column(name='max_r', type='double', comment=''),
-            Column(name='prophet_model', type='string', comment=''),
-            Column(name='dnn_model', type='string', comment=''),
-            Column(name='model_weights_base64', type='string', comment=''),
-        ]
-        
-        partitions = [
-            Partition(name='day', type='string', comment='postback time,like 20221018')
-        ]
-        schema = Schema(columns=columns, partitions=partitions)
-        table = o.create_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train', schema, if_not_exists=True)
-        return table
-    else:
-        print('createTable failed, o is not defined')
+    return prophet_model, best_dnn_model, scaler_params
 
-def deletePartition(dayStr):
-    if 'o' in globals():
-        t = o.get_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train')
-        t.delete_partition('day=%s'%(dayStr), if_exists=True)
-        print(f"Partition day={dayStr} deleted.")
-    else:
-        print('deletePartition failed, o is not defined')
-
-def writeTable(df, dayStr):
-    print('try to write table:')
-    print(df.head(5))
-    if len(df) == 0:
-        print('No data to write.')
-        return
-    if 'o' in globals():
-        t = o.get_table('lastwar_predict_day1_revenue_by_cost__nerf_r_train')
-        with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
-            writer.write(df)
-        print(f"Data written to table partition day={dayStr}.")
-    else:
-        print('writeTable failed, o is not defined')
-        print(dayStr)
-        print(df)
 
 def main():
     global dayStr
@@ -220,7 +228,7 @@ def main():
             print('ios的media不是ALL，跳过')
             continue
 
-        prophet_model, dnn_model = train_model(group_data0)
+        prophet_model, dnn_model, scaler_params = train_model(group_data0)
         if prophet_model is None or dnn_model is None:
             continue
 
@@ -234,6 +242,8 @@ def main():
         # 将 Base64 编码的数组转换为单个字符串
         model_weights_base64_str = json.dumps(model_weights_base64)
 
+        # 将标准化参数转换为 JSON 字符串
+        scaler_params_json = json.dumps(scaler_params)
 
         modelDf = modelDf.append({
             'app': 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147',
@@ -243,7 +253,8 @@ def main():
             'max_r': max_r,
             'prophet_model': model_to_json(prophet_model),
             'dnn_model': dnn_model.to_json(),
-            'model_weights_base64': model_weights_base64_str
+            'model_weights_base64': model_weights_base64_str,
+            'scaler_params': scaler_params_json  # 新增列
         }, ignore_index=True)
 
     # 写入表格
