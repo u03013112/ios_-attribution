@@ -5,20 +5,22 @@ from prophet import Prophet
 # 生成数据
 dates = pd.date_range(start='2024-01-01', end='2024-05-30', freq='D')
 cost = dates.dayofweek.map({0: 100, 1: 200, 2: 300, 3: 400, 4: 500, 5: 600, 6: 700})
+other = dates.dayofweek.map({0: 10, 1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 70})
 revenue = dates.dayofweek.map({0: 10, 1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 140})
 
-data = pd.DataFrame({'ds': dates, 'cost': cost, 'y': revenue})
+data = pd.DataFrame({'ds': dates, 'cost': cost, 'other':other, 'y': revenue})
 
 # 初始化并训练Prophet模型
-model = Prophet(seasonality_mode='multiplicative')
+model = Prophet()
 model.add_regressor('cost',standardize=False)
-# model.add_regressor('cost')
+model.add_regressor('other',standardize=False)
 model.fit(data)
 
 # 生成预测数据
 future_dates = pd.date_range(start='2024-05-02', end='2024-05-30', freq='D')
 future_cost = future_dates.dayofweek.map({0: 100, 1: 200, 2: 300, 3: 400, 4: 500, 5: 600, 6: 700})
-future = pd.DataFrame({'ds': future_dates, 'cost': future_cost})
+future_other = future_dates.dayofweek.map({0: 10, 1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 70})
+future = pd.DataFrame({'ds': future_dates, 'cost': future_cost, 'other': future_other})
 
 # 进行预测
 forecast = model.predict(future)
@@ -31,17 +33,20 @@ forecast = forecast.merge(data[['ds','costRaw']], on='ds', how='left')
 print(forecast.columns)
 
 print(forecast[[
-    'ds', 'yhat', 'weekly','trend','additive_terms','costRaw',
-    # 'extra_regressors_additive',
-    'extra_regressors_multiplicative',
-    'multiplicative_terms','dayOfWeek']])
+    'ds', 'yhat', 'weekly','trend','additive_terms',
+    # 'costRaw',
+    'cost','other',
+    'extra_regressors_additive',
+    # 'extra_regressors_multiplicative',
+    # 'multiplicative_terms',
+    'dayOfWeek']])
 
 
-ret = forecast[[
-    'ds', 'yhat', 'weekly','trend','additive_terms','cost','costRaw',
-    # 'extra_regressors_additive',
-    'extra_regressors_multiplicative',
-    'multiplicative_terms','dayOfWeek']]
+# ret = forecast[[
+#     'ds', 'yhat', 'weekly','trend','additive_terms','cost','costRaw',
+#     'extra_regressors_additive',
+#     # 'extra_regressors_multiplicative',
+#     'multiplicative_terms','dayOfWeek']]
 
 # ret['weekly+cost'] = ret['weekly'] + ret['cost']
 # print(ret)

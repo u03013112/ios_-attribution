@@ -258,6 +258,26 @@ def prophetDnnTest3():
     results_df.to_csv('/src/data/20241126_prophet_dnn_test4.csv', index=False)
     return results_df
 
+def getCorr():
+    df = getData()
+    df = dataStep1(df)
+    df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
+    df = df.sort_values(by='install_day').reset_index(drop=True)
+    
+    groupDf = df.groupby(['media', 'country'])
+    for (media, country), group in groupDf:
+        if (media, country) not in [('ALL', 'ALL')]:
+            continue
+        print('\n>>',media, country)
+        groupDf = group.copy()
+
+        groupDf['cost*lastweek_roi'] = groupDf['cost'] * groupDf['lastweek_roi']
+        groupDf['cost*lastweek_arppu'] = groupDf['cost'] * groupDf['lastweek_arppu']
+
+        print(groupDf.corr())
+
 if __name__ == '__main__':
     # 运行测试
-    prophetDnnTest3()
+    # prophetDnnTest3()
+
+    getCorr()

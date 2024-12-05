@@ -90,24 +90,27 @@ def dataStep1(data):
     
     return data
 
-def calculate_mape(group, train_start_date, train_end_date, test_start_date, test_end_date, input_columns, scheme_name, media, country, N, M):
+def calculate_mape(group, train_start_date, train_end_date, test_start_date, test_end_date, media, country, N, M):
     train_data = group[(group['install_day'] >= train_start_date) & (group['install_day'] <= train_end_date)]
     test_data = group[(group['install_day'] >= test_start_date) & (group['install_day'] <= test_end_date)]
     
     if len(train_data) == 0 or len(test_data) == 0:
         return pd.DataFrame(columns=['install_day', 'mape', 'scheme'])
     
+    # 添加 Prophet 输入列
+    train_data['cost_lastweek_roi'] = train_data['cost'] * train_data['lastweek_roi']
+    test_data['cost_lastweek_roi'] = test_data['cost'] * test_data['lastweek_roi']
+    
     # 准备训练数据
-    train_data = train_data[['install_day', 'cost', 'revenue'] + input_columns].rename(columns={'install_day': 'ds', 'revenue': 'y'})
+    train_data = train_data[['install_day', 'cost', 'lastweek_roi', 'cost_lastweek_roi', 'revenue']].rename(columns={'install_day': 'ds', 'revenue': 'y'})
     
     # 准备测试数据
-    test_data = test_data[['install_day', 'cost', 'revenue'] + input_columns].rename(columns={'install_day': 'ds'})
+    test_data = test_data[['install_day', 'cost', 'lastweek_roi', 'cost_lastweek_roi', 'revenue']].rename(columns={'install_day': 'ds'})
     
     # 初始化并训练Prophet模型
     model = Prophet(weekly_seasonality=True)
     model.add_regressor('cost')
-    for col in input_columns:
-        model.add_regressor(col)
+    model.add_regressor('cost_lastweek_roi')
     model.fit(train_data)
     
     # 提取训练数据的季节性成分
@@ -126,15 +129,15 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     
     # 标准化
     scaler_X = StandardScaler()
-    train_data[['cost', 'weekly'] + input_columns] = scaler_X.fit_transform(train_data[['cost', 'weekly'] + input_columns])
-    test_data[['cost', 'weekly'] + input_columns] = scaler_X.transform(test_data[['cost', 'weekly'] + input_columns])
+    train_data[['cost', 'lastweek_roi','cost_lastweek_roi', 'weekly']] = scaler_X.fit_transform(train_data[['cost','lastweek_roi', 'cost_lastweek_roi', 'weekly']])
+    test_data[['cost', 'lastweek_roi','cost_lastweek_roi', 'weekly']] = scaler_X.transform(test_data[['cost','lastweek_roi', 'cost_lastweek_roi', 'weekly']])
     
     # 准备DNN的训练数据
-    X_train = train_data[['cost', 'weekly'] + input_columns]
+    X_train = train_data[['cost_lastweek_roi', 'weekly']]
     y_train = train_data['y']
     
     # 准备DNN的测试数据
-    X_test = test_data[['cost', 'weekly'] + input_columns]
+    X_test = test_data[['cost_lastweek_roi', 'weekly']]
     y_test = test_data['revenue']
     
     best_mape = float('inf')
@@ -171,14 +174,16 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     result['y_pred'] = best_y_pred
     result['mape'] = np.abs((result['y'] - result['y_pred']) / result['y'])
     result.rename(columns={'ds': 'install_day'}, inplace=True)
-    result['scheme'] = scheme_name
+    result['scheme'] = '固定方案'
     
-    intermediate_file = f'/src/data/20241126_prophet_dnn_test5_{media}_{country}_{N}_{M}_{scheme_name}_{test_start_date}_{test_end_date}.csv'
+    test_start_dateStr = test_start_date.strftime('%Y%m%d')
+    test_end_dateStr = test_end_date.strftime('%Y%m%d')
+    intermediate_file = f'/src/data/20241126_prophet_dnn_test6_2_{media}_{country}_{N}_{M}_{test_start_dateStr}_{test_end_dateStr}.csv'
     result.to_csv(intermediate_file, index=False)
     
     return result
 
-def prophetDnnTest4():
+def prophetDnnTest5():
     df = getData()
     df = dataStep1(df)
     df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
@@ -191,23 +196,15 @@ def prophetDnnTest4():
         {'N': 120, 'M': 7},
         {'N': 180, 'M': 7},
         {'N': 210, 'M': 7},
-        {'N': 60, 'M': 14},
-        {'N': 90, 'M': 14},
-        {'N': 120, 'M': 14},
-        {'N': 180, 'M': 14},
-        {'N': 210, 'M': 14},
-    ]
-    
-    schemes = [
-        {'input_columns': [], 'scheme_name': '方案1'},
-        {'input_columns': ['lastweek_roi'], 'scheme_name': '方案2'},
-        {'input_columns': ['lastweek_cpup'], 'scheme_name': '方案3'},
-        {'input_columns': ['lastweek_arppu'], 'scheme_name': '方案4'},
-        {'input_columns': ['lastweek_roi', 'lastweek_cpup', 'lastweek_arppu'], 'scheme_name': '方案5'},
+        # {'N': 60, 'M': 14},
+        # {'N': 90, 'M': 14},
+        # {'N': 120, 'M': 14},
+        # {'N': 180, 'M': 14},
+        # {'N': 210, 'M': 14},
     ]
     
     results = []
-    results_file = '/src/data/20241126_prophet_dnn_test5.csv'
+    results_file = '/src/data/20241126_prophet_dnn_test6_2.csv'
     
     # 如果文件存在，删除它以确保我们从头开始
     if os.path.exists(results_file):
@@ -233,43 +230,43 @@ def prophetDnnTest4():
                 continue
             
             period_results = []
-            for scheme in schemes:
-                # 分段测试
-                test_periods = pd.date_range(start='2024-09-01', end='2024-10-31', freq=f'{M}D')
-                
-                for start_date in test_periods:
-                    end_date = start_date + pd.Timedelta(days=M-1)
-                    if end_date > pd.Timestamp('2024-10-31'):
-                        break
-                    
-                    train_end_date = start_date - pd.Timedelta(days=1)
-                    train_start_date = train_end_date - pd.Timedelta(days=N-1)
-                
-                    period_result = calculate_mape(group, train_start_date, train_end_date, start_date, end_date, scheme['input_columns'], scheme['scheme_name'], media, country, N, M)
-                    print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Start Date: {start_date}, End Date: {end_date}, Scheme: {scheme["scheme_name"]}')
-                    print(period_result)
-
-                    period_results.append(period_result)
             
-                if period_results:
-                    combined_results = pd.concat(period_results)
-                    overall_mape = combined_results['mape'].mean()
-                    
-                    result = {
-                        'media': media,
-                        'country': country,
-                        'N': N,
-                        'M': M,
-                        'mape': overall_mape,
-                        'scheme': scheme['scheme_name']
-                    }
-                    results.append(result)
-                    
-                    # 将结果写入文件
-                    result_df = pd.DataFrame([result])
-                    result_df.to_csv(results_file, mode='a', header=not os.path.exists(results_file), index=False)
-                    
-                    print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Scheme: {scheme["scheme_name"]}, MAPE: {overall_mape:.4f}')
+            # 分段测试
+            test_periods = pd.date_range(start='2024-09-01', end='2024-10-31', freq=f'{M}D')
+            
+            for start_date in test_periods:
+                end_date = start_date + pd.Timedelta(days=M-1)
+                if end_date > pd.Timestamp('2024-10-31'):
+                    break
+                
+                train_end_date = start_date - pd.Timedelta(days=1)
+                train_start_date = train_end_date - pd.Timedelta(days=N-1)
+            
+                period_result = calculate_mape(group, train_start_date, train_end_date, start_date, end_date, media, country, N, M)
+                print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Start Date: {start_date}, End Date: {end_date}')
+                print(period_result)
+
+                period_results.append(period_result)
+        
+            if period_results:
+                combined_results = pd.concat(period_results)
+                overall_mape = combined_results['mape'].mean()
+                
+                result = {
+                    'media': media,
+                    'country': country,
+                    'N': N,
+                    'M': M,
+                    'mape': overall_mape,
+                    'scheme': '固定方案'
+                }
+                results.append(result)
+                
+                # 将结果写入文件
+                result_df = pd.DataFrame([result])
+                result_df.to_csv(results_file, mode='a', header=not os.path.exists(results_file), index=False)
+                
+                print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, MAPE: {overall_mape:.4f}')
 
     results_df = pd.DataFrame(results)
     print(results_df)
@@ -278,4 +275,4 @@ def prophetDnnTest4():
 
 if __name__ == '__main__':
     # 运行测试
-    prophetDnnTest4()
+    prophetDnnTest5()
