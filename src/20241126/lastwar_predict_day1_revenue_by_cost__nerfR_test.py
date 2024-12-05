@@ -141,7 +141,7 @@ def loadModels(platform, media, country, max_r, dayStr):
     dummy_weights = dnnModel.get_weights()
     model_weights_shapes = [w.shape for w in dummy_weights]
 
-    model_weights_base64 = row['model_weights_base64']
+    model_weights_base64 = json.loads(row['model_weights_base64'])
     model_weights_binary = [base64.b64decode(w) for w in model_weights_base64]
     model_weights = [np.frombuffer(w, dtype=np.float32).reshape(shape) for w, shape in zip(model_weights_binary, model_weights_shapes)]
 
@@ -239,7 +239,7 @@ def main():
         print(retDf0)
 
         retDf = retDf.append(retDf0)
-        
+
     writeVerificationResultsToTable(retDf, dayStr)
 
 if __name__ == "__main__":

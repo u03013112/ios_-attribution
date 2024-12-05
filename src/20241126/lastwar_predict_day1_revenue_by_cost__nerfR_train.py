@@ -231,6 +231,9 @@ def main():
         model_weights_binary = [w.tobytes() for w in model_weights]
         # 将二进制数据进行 Base64 编码
         model_weights_base64 = [base64.b64encode(w).decode('utf-8') for w in model_weights_binary]
+        # 将 Base64 编码的数组转换为单个字符串
+        model_weights_base64_str = json.dumps(model_weights_base64)
+
 
         modelDf = modelDf.append({
             'app': 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147',
@@ -240,7 +243,7 @@ def main():
             'max_r': max_r,
             'prophet_model': model_to_json(prophet_model),
             'dnn_model': dnn_model.to_json(),
-            'model_weights_base64': model_weights_base64
+            'model_weights_base64': model_weights_base64_str
         }, ignore_index=True)
 
     # 写入表格
