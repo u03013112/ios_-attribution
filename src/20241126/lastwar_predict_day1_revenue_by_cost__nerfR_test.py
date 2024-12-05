@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from prophet import Prophet
 from prophet.serialize import model_from_json
+from tensorflow.keras.models import Sequential, model_from_json as tf_model_from_json
 
 import json
 import base64
@@ -46,7 +47,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241124'  # 本地测试时的日期，可自行修改
+        dayStr = '20241202'  # 本地测试时的日期，可自行修改
 
     print('测试日期:', dayStr)
 
@@ -137,7 +138,7 @@ def loadModels(platform, media, country, max_r, dayStr):
     row = models_df.iloc[0]
     prophetModel = model_from_json(row['prophet_model'])
 
-    dnnModel = json.loads(row['dnn_model'])
+    dnnModel = tf_model_from_json(row['dnn_model'])
     dummy_weights = dnnModel.get_weights()
     model_weights_shapes = [w.shape for w in dummy_weights]
 
@@ -180,6 +181,7 @@ def main():
     nDaysAgoStr = nDaysAgo.strftime('%Y%m%d')
     
     historical_data = getHistoricalData(nDaysAgoStr, dayStr)
+    historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
 
     groupData = historical_data.groupby(['platform','media','country','max_r'])
 
@@ -222,6 +224,9 @@ def main():
         # 准备DNN模型的输入数据
         dnn_input = group_dataCopy[['cost', 'weekly']].values
 
+        print('DNN模型的输入数据：')
+        print(dnn_input)
+
         # 使用DNN模型进行预测
         predicted_revenue = dnnModel.predict(dnn_input)
 
@@ -229,7 +234,7 @@ def main():
         group_dataCopy['predicted_revenue'] = predicted_revenue
         group_dataCopy.rename(columns={
             'ds': 'install_day',
-            'revenue_1d': 'actual_revenue'
+            'y': 'actual_revenue'
         }, inplace=True)
 
         # 准备结果数据框
