@@ -63,10 +63,14 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     # 提取训练数据的季节性成分
     train_forecast = model.predict(train_data)
     train_data = train_data.merge(train_forecast[['ds', 'weekly']], on='ds')
-    
+    # print('for test!!!!')
+    # print(train_forecast[['ds', 'weekly']])
+
     # 进行预测
     test_forecast = model.predict(test_data)
-    
+    # print('for test!!!!')
+    # print(test_forecast[['ds', 'weekly']])
+
     # 提取测试数据的季节性成分
     test_data = test_data.merge(test_forecast[['ds', 'weekly']], on='ds')
     
@@ -90,7 +94,7 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     best_mape = float('inf')
     best_y_pred = None
     
-    for _ in range(3):  # 简单循环3次，选择最优结果
+    for _ in range(1):  # 简单循环3次，选择最优结果
         # 构建DNN模型
         dnn_model = Sequential()
         dnn_model.add(Dense(64, input_dim=X_test.shape[1], activation='relu'))
@@ -104,13 +108,15 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
         early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
         
         # 训练模型
-        dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_test, y_test), callbacks=[early_stopping])
+        # dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_test, y_test), callbacks=[early_stopping])
+        history = dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_split=0.2, callbacks=[early_stopping])
         
         # 进行预测
         y_pred = dnn_model.predict(X_test).flatten()
         
         # 计算MAPE
-        mape = mean_absolute_percentage_error(y_test, y_pred)
+        # mape = mean_absolute_percentage_error(y_test, y_pred)
+        mape = history.history['val_mape'][-1]
         
         if mape < best_mape:
             best_mape = mape
@@ -131,19 +137,19 @@ def prophetDnnTest3():
     
     # 尝试的训练周期和预测周期列表
     try_periods = [
-        {'N': 30, 'M': 7}, 
+        # {'N': 30, 'M': 7}, 
         {'N': 60, 'M': 7},
-        {'N': 90, 'M': 7},
-        {'N': 30, 'M': 14}, 
-        {'N': 60, 'M': 14},
-        {'N': 90, 'M': 14},
+        # {'N': 90, 'M': 7},
+        # {'N': 30, 'M': 14}, 
+        # {'N': 60, 'M': 14},
+        # {'N': 90, 'M': 14},
     ]
     
     results = []
     groupDf = df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
-        # if (media, country) not in [('ALL', 'ALL')]:
-        #     continue
+        if (media, country) not in [('ALL', 'ALL')]:
+            continue
         
         # 过滤掉包含 NaN 或无穷大值的行
         group = group.replace([np.inf, -np.inf], np.nan).dropna()
@@ -157,7 +163,9 @@ def prophetDnnTest3():
                 continue
             
             # 分段测试
-            test_periods = pd.date_range(start='2024-09-01', end='2024-10-31', freq=f'{M}D')
+            # test_periods = pd.date_range(start='2024-09-01', end='2024-10-31', freq=f'{M}D')
+            test_periods = pd.date_range(start='2024-09-01', end='2024-09-30', freq=f'{M}D')
+
             period_results = []
             for start_date in test_periods:
                 end_date = start_date + pd.Timedelta(days=M-1)
@@ -168,7 +176,7 @@ def prophetDnnTest3():
                 train_start_date = train_end_date - pd.Timedelta(days=N-1)
                 
                 period_result = calculate_mape(group, train_start_date, train_end_date, start_date, end_date)
-                print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Start Date: {start_date}, End Date: {end_date}')
+                print(f'Media: {media}, Country: {country}, N: {N}, M: {M}, Start Date: {start_date}, End Date: {end_date}, Train Start Date: {train_start_date}, Train End Date: {train_end_date}')
                 print(period_result)
 
                 period_results.append(period_result)

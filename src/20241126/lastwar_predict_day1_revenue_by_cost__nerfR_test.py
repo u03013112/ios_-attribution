@@ -5,6 +5,7 @@ import numpy as np
 from prophet import Prophet
 from prophet.serialize import model_from_json
 from tensorflow.keras.models import Sequential, model_from_json as tf_model_from_json
+from sklearn.preprocessing import StandardScaler
 
 import json
 import base64
@@ -47,7 +48,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241202'  # 本地测试时的日期，可自行修改
+        dayStr = '20240902'  # 本地测试时的日期，可自行修改
 
     print('测试日期:', dayStr)
 
@@ -119,7 +120,8 @@ def loadModels(platform, media, country, max_r, dayStr):
         select
             prophet_model,
             dnn_model,
-            model_weights_base64
+            model_weights_base64,
+            scaler_params
         from
             lastwar_predict_day1_revenue_by_cost__nerf_r_train
         where
@@ -133,7 +135,7 @@ def loadModels(platform, media, country, max_r, dayStr):
     models_df = execSql(sql)
     if models_df.empty:
         print("No models found for the given conditions.")
-        return None
+        return None,None,None
     # 取出第一个模型
     row = models_df.iloc[0]
     prophetModel = model_from_json(row['prophet_model'])
@@ -149,7 +151,14 @@ def loadModels(platform, media, country, max_r, dayStr):
     dnnModel.set_weights(model_weights)
     dnnModel.compile(optimizer='RMSprop', loss='mean_squared_error')
 
-    return prophetModel, dnnModel
+    # 解析 scaler_params 并创建 StandardScaler 对象
+    scaler_params = json.loads(row['scaler_params'])
+    scaler_X = StandardScaler()
+    scaler_X.mean_ = np.array(scaler_params['mean'])
+    scaler_X.scale_ = np.array(scaler_params['scale'])
+    scaler_X.var_ = scaler_X.scale_ ** 2  # 计算方差
+
+    return prophetModel, dnnModel, scaler_X
 
 def writeVerificationResultsToTable(df, dayStr):
     print('try to write verification results to table:')
@@ -188,6 +197,12 @@ def main():
     retDf = pd.DataFrame()
 
     for (platform, media, country, max_r), group_data0 in groupData:
+        # for test
+        if platform != 'android' or media != 'ALL' or country != 'ALL' or max_r != 1e10:
+            print('For test !!!')
+            print(f"Skip platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
+            continue
+
         print(f"platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
         if platform == 'ios' and media != 'ALL':
             print(f"Skip media: {media} for ios")
@@ -211,24 +226,30 @@ def main():
         checkDf = checkDf.dropna()
         if checkDf.empty:
             print('No valid data for prediction.')
-            break
+            continue
 
         
-        prophetModel, dnnModel = loadModels(platform, media, country, max_r, currentMonDayStr)
+        prophetModel, dnnModel, scaler_X = loadModels(platform, media, country, max_r, currentMonDayStr)
         if prophetModel is None or dnnModel is None:
             print('No models found for the given conditions.')
-            break
+            continue
         forecast = prophetModel.predict(group_dataCopy)
+        print('Prophet预测结果：')
+        print(forecast[['ds', 'weekly']])
         group_dataCopy = group_dataCopy.merge(forecast[['ds', 'weekly']], on='ds', how='left')
 
         # 准备DNN模型的输入数据
         dnn_input = group_dataCopy[['cost', 'weekly']].values
+        dnn_input_scaled = scaler_X.transform(dnn_input)
+
 
         print('DNN模型的输入数据：')
         print(dnn_input)
+        print('DNN模型的标准化输入数据：')
+        print(dnn_input_scaled)
 
         # 使用DNN模型进行预测
-        predicted_revenue = dnnModel.predict(dnn_input)
+        predicted_revenue = dnnModel.predict(dnn_input_scaled)
 
         # 将预测结果添加到数据框中
         group_dataCopy['predicted_revenue'] = predicted_revenue
@@ -238,8 +259,9 @@ def main():
         }, inplace=True)
 
         # 准备结果数据框
-        retDf0 = group_dataCopy[['install_day', 'platform', 'media', 'country', 'max_r', 'actual_revenue', 'predicted_revenue']]
-        retDf0['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
+        group_dataCopy['app'] = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
+        retDf0 = group_dataCopy[['install_day', 'app', 'platform', 'media', 'country', 'max_r', 'actual_revenue', 'predicted_revenue']]
+        
         print('Verification results:')
         print(retDf0)
 

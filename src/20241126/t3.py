@@ -1,8 +1,35 @@
 
-from tensorflow.keras.models import model_from_json
+import pandas as pd
+import numpy as np
+import os
+import sys
+sys.path.append('/src')
+from src.maxCompute import execSql
 
-s = '''{"class_name": "Sequential", "config": {"name": "sequential_2", "layers": [{"class_name": "InputLayer", "config": {"batch_input_shape": [null, 2], "dtype": "float32", "sparse": false, "ragged": false, "name": "dense_6_input"}}, {"class_name": "Dense", "config": {"name": "dense_6", "trainable": true, "batch_input_shape": [null, 2], "dtype": "float32", "units": 64, "activation": "relu", "use_bias": true, "kernel_initializer": {"class_name": "GlorotUniform", "config": {"seed": null}}, "bias_initializer": {"class_name": "Zeros", "config": {}}, "kernel_regularizer": null, "bias_regularizer": null, "activity_regularizer": null, "kernel_constraint": null, "bias_constraint": null}}, {"class_name": "Dense", "config": {"name": "dense_7", "trainable": true, "dtype": "float32", "units": 32, "activation": "relu", "use_bias": true, "kernel_initializer": {"class_name": "GlorotUniform", "config": {"seed": null}}, "bias_initializer": {"class_name": "Zeros", "config": {}}, "kernel_regularizer": null, "bias_regularizer": null, "activity_regularizer": null, "kernel_constraint": null, "bias_constraint": null}}, {"class_name": "Dense", "config": {"name": "dense_8", "trainable": true, "dtype": "float32", "units": 1, "activation": "linear", "use_bias": true, "kernel_initializer": {"class_name": "GlorotUniform", "config": {"seed": null}}, "bias_initializer": {"class_name": "Zeros", "config": {}}, "kernel_regularizer": null, "bias_regularizer": null, "activity_regularizer": null, "kernel_constraint": null, "bias_constraint": null}}]}, "keras_version": "2.10.0", "backend": "tensorflow"}'''
 
-module = model_from_json(s)
 
-print(module.summary())
+
+sql = '''
+select
+install_day,
+media,
+country,
+max_r,
+actual_revenue,
+predicted_revenue
+from lastwar_predict_day1_revenue_by_cost__nerf_r_test
+where
+day between '20240901' and '20241030'
+;
+'''
+
+df = execSql(sql)
+
+df['mape'] = np.abs((df['actual_revenue'] - df['predicted_revenue']) / df['actual_revenue'])
+df = df.groupby(['media', 'country', 'max_r']).agg({
+    'mape': 'mean'
+}).reset_index()
+
+print(df)
+
+df.to_csv('/src/data/20241126_revenue_mape.csv', index=False)

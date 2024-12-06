@@ -44,7 +44,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20240817'
+        dayStr = '20240902'
 
     print('dayStr:', dayStr)
 
@@ -96,6 +96,7 @@ def writeTable(df, dayStr):
         print('writeTable failed, o is not defined')
         print(dayStr)
         print(df)
+        df.to_csv('/src/data/lastwar_predict_day1_revenue_by_cost__nerf_r_train.csv', index=False)
 
 def getHistoricalData(install_day_start, install_day_end):
     # 构建SQL查询语句
@@ -148,6 +149,8 @@ def train_model(train_df):
     train_forecast = prophet_model.predict(train_df2)
     train_df2 = train_df2.merge(train_forecast[['ds', 'weekly']], on='ds')
 
+    # print('train_df2:')
+    # print(train_df2[['ds', 'y', 'cost', 'weekly']])
     # 标准化
     scaler_X = StandardScaler()
     train_df2[['cost', 'weekly']] = scaler_X.fit_transform(train_df2[['cost', 'weekly']])
@@ -155,34 +158,26 @@ def train_model(train_df):
     # 准备DNN的训练数据
     X_train = train_df2[['cost', 'weekly']]
     y_train = train_df2['y']
+    # print('X_train:')
+    # print(X_train)
 
-    best_mape = float('inf')
-    best_dnn_model = None
+    # print('y_train:')
+    # print(y_train)
 
-    for _ in range(3):  # 简单循环3次，选择最优结果
-        # 构建DNN模型
-        dnn_model = Sequential()
-        dnn_model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
-        dnn_model.add(Dense(32, activation='relu'))
-        dnn_model.add(Dense(1, activation='linear'))
+    # 构建DNN模型
+    dnn_model = Sequential()
+    dnn_model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
+    dnn_model.add(Dense(32, activation='relu'))
+    dnn_model.add(Dense(1, activation='linear'))
 
-        # 编译模型
-        dnn_model.compile(optimizer='RMSprop', loss='mse', metrics=['mape'])
+    # 编译模型
+    dnn_model.compile(optimizer='RMSprop', loss='mse', metrics=['mape'])
 
-        # 添加 Early Stopping 回调
-        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    # 添加 Early Stopping 回调
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-        # 训练模型
-        history = dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_split=0.2, callbacks=[early_stopping])
-
-        # 获取训练结束时的验证集 MAPE
-        val_mape = history.history['val_mape'][-1]
-
-        if val_mape < best_mape:
-            best_mape = val_mape
-            best_dnn_model = dnn_model
-
-    print("DNN Model Training Completed with best validation MAPE:", best_mape)
+    # 训练模型
+    dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_split=0.2, callbacks=[early_stopping])
 
     # 提取标准化参数
     scaler_params = {
@@ -190,8 +185,7 @@ def train_model(train_df):
         'scale': scaler_X.scale_.tolist()
     }
 
-    return prophet_model, best_dnn_model, scaler_params
-
+    return prophet_model, dnn_model, scaler_params
 
 def main():
     global dayStr
@@ -214,6 +208,7 @@ def main():
     # 获取当前平台的历史数据
     historical_data = getHistoricalData(startDateStr, lastSundayStr)
     historical_data['install_day'] = pd.to_datetime(historical_data['install_day'], format='%Y%m%d')
+    historical_data = historical_data.sort_values(by=['install_day'])
     
     historical_data.rename(columns={'install_day':'ds','revenue_1d':'y'}, inplace=True)
     
@@ -222,6 +217,12 @@ def main():
     modelDf = pd.DataFrame()
 
     for (platform, media, country, max_r), group_data0 in groupData:
+
+        # # for test
+        # if platform != 'android' or media != 'ALL' or country != 'ALL' or max_r != 1e10:
+        #     print('For test !!!')
+        #     print(f"Skip platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
+        #     continue
 
         print(f"platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
         if platform == 'ios' and media != 'ALL':
