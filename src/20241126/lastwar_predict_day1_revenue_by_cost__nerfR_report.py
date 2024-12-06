@@ -132,7 +132,8 @@ def loadModels(platform, media, country, max_r, dayStr):
         select
             prophet_model,
             dnn_model,
-            model_weights_base64
+            model_weights_base64,
+            scaler_params
         from
             lastwar_predict_day1_revenue_by_cost__nerf_r_train
         where
@@ -146,12 +147,12 @@ def loadModels(platform, media, country, max_r, dayStr):
     models_df = execSql(sql)
     if models_df.empty:
         print("No models found for the given conditions.")
-        return None
+        return None,None,None
     # 取出第一个模型
     row = models_df.iloc[0]
     prophetModel = model_from_json(row['prophet_model'])
 
-    dnnModel = json.loads(row['dnn_model'])
+    dnnModel = tf_model_from_json(row['dnn_model'])
     dummy_weights = dnnModel.get_weights()
     model_weights_shapes = [w.shape for w in dummy_weights]
 
@@ -162,7 +163,14 @@ def loadModels(platform, media, country, max_r, dayStr):
     dnnModel.set_weights(model_weights)
     dnnModel.compile(optimizer='RMSprop', loss='mean_squared_error')
 
-    return prophetModel, dnnModel
+    # 解析 scaler_params 并创建 StandardScaler 对象
+    scaler_params = json.loads(row['scaler_params'])
+    scaler_X = StandardScaler()
+    scaler_X.mean_ = np.array(scaler_params['mean'])
+    scaler_X.scale_ = np.array(scaler_params['scale'])
+    scaler_X.var_ = scaler_X.scale_ ** 2  # 计算方差
+
+    return prophetModel, dnnModel, scaler_X
 
 def getRoiThreshold(lastDayStr, platform, media, country):
     app = 'com.fun.lastwar.gp' if platform == 'android' else 'id6448786147'
@@ -302,7 +310,7 @@ def main():
                 'cost': [cost],
             })
 
-            prophetModel, dnnModel = loadModels(platform, media, country, max_r, currentMondayStr)
+            prophetModel, dnnModel, scaler_X = loadModels(platform, media, country, max_r, currentMondayStr)
             
             if prophetModel is None or dnnModel is None:
                 print(f"未加载到模型: {platform}, {media}, {country}, {max_r}, {currentMondayStr}")
@@ -313,9 +321,10 @@ def main():
 
             # 准备DNN模型的输入数据
             dnn_input = inputDf[['cost', 'weekly']].values
+            dnn_input_scaled = scaler_X.transform(dnn_input)
 
             # 使用DNN模型进行预测
-            predictedRevenue = dnnModel.predict(dnn_input)
+            predictedRevenue = dnnModel.predict(dnn_input_scaled)
 
             ret = pd.DataFrame({
                 'platform': [platform],
