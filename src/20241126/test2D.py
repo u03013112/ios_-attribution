@@ -47,7 +47,17 @@ WHERE
         
     return data
 
+import tensorflow as tf
+import random
+
+# 设置随机种子
+def set_random_seed(seed_value=42):
+    np.random.seed(seed_value)
+    tf.random.set_seed(seed_value)
+    random.seed(seed_value)
+
 def calculate_mape(group, train_start_date, train_end_date, test_start_date, test_end_date):
+    set_random_seed()
     train_data = group[(group['install_day'] >= train_start_date) & (group['install_day'] <= train_end_date)]
     test_data = group[(group['install_day'] >= test_start_date) & (group['install_day'] <= test_end_date)]
     

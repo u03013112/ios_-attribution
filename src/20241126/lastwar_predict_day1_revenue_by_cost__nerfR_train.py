@@ -124,6 +124,16 @@ WHERE
     
     return data
 
+
+import tensorflow as tf
+import random
+
+# 设置随机种子
+def set_random_seed(seed_value=42):
+    np.random.seed(seed_value)
+    tf.random.set_seed(seed_value)
+    random.seed(seed_value)
+
 def train_model(train_df):
     """
     训练 Prophet 模型和 DNN 模型。
@@ -163,6 +173,8 @@ def train_model(train_df):
 
     # print('y_train:')
     # print(y_train)
+
+    set_random_seed()
 
     # 构建DNN模型
     dnn_model = Sequential()
@@ -218,11 +230,11 @@ def main():
 
     for (platform, media, country, max_r), group_data0 in groupData:
 
-        # # for test
-        # if platform != 'android' or media != 'ALL' or country != 'ALL' or max_r != 1e10:
-        #     print('For test !!!')
-        #     print(f"Skip platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
-        #     continue
+        # for test
+        if platform != 'android' or media != 'ALL' or country != 'ALL' or max_r != 1e10:
+            print('For test !!!')
+            print(f"Skip platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
+            continue
 
         print(f"platform: {platform}, media: {media}, country: {country}, max_r: {max_r}")
         if platform == 'ios' and media != 'ALL':

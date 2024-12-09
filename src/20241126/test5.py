@@ -90,6 +90,15 @@ def dataStep1(data):
     
     return data
 
+import tensorflow as tf
+import random
+
+# 设置随机种子
+def set_random_seed(seed_value=42):
+    np.random.seed(seed_value)
+    tf.random.set_seed(seed_value)
+    random.seed(seed_value)
+
 def calculate_mape(group, train_start_date, train_end_date, test_start_date, test_end_date, media, country, N, M):
     train_data = group[(group['install_day'] >= train_start_date) & (group['install_day'] <= train_end_date)]
     test_data = group[(group['install_day'] >= test_start_date) & (group['install_day'] <= test_end_date)]
@@ -132,9 +141,26 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     train_data[['cost', 'lastweek_roi','cost_lastweek_roi', 'weekly']] = scaler_X.fit_transform(train_data[['cost','lastweek_roi', 'cost_lastweek_roi', 'weekly']])
     test_data[['cost', 'lastweek_roi','cost_lastweek_roi', 'weekly']] = scaler_X.transform(test_data[['cost','lastweek_roi', 'cost_lastweek_roi', 'weekly']])
     
+    # 将训练数据按日期排序
+    train_data = train_data.sort_values(by='ds')
+
+    # 取最后一周的数据作为验证集
+    val_data = train_data[-7:]
+    train_data = train_data[:-7]
+    
+    print('train_data:')
+    print(train_data)
+
+    print('val_data:')
+    print(val_data)
+
     # 准备DNN的训练数据
     X_train = train_data[['cost_lastweek_roi', 'weekly']]
     y_train = train_data['y']
+
+    X_val = val_data[['cost_lastweek_roi', 'weekly']]
+    y_val = val_data['y']
+    
     
     # 准备DNN的测试数据
     X_test = test_data[['cost_lastweek_roi', 'weekly']]
@@ -145,8 +171,9 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     
     for _ in range(3):  # 简单循环5次，选择最优结果
         # 构建DNN模型
+        
         dnn_model = Sequential()
-        dnn_model.add(Dense(64, input_dim=X_test.shape[1], activation='relu'))
+        dnn_model.add(Dense(16, input_dim=X_test.shape[1], activation='relu'))
         dnn_model.add(Dense(32, activation='relu'))
         dnn_model.add(Dense(1, activation='linear'))
         
@@ -158,7 +185,9 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
         
         # 训练模型
         # dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_test, y_test), callbacks=[early_stopping])
-        dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_split=0.3, callbacks=[early_stopping])
+        # dnn_model.fit(X_train, y_train, epochs=5000, batch_size=8, verbose=0, validation_split=0.2, callbacks=[early_stopping])
+        # dnn_model.fit(X_train, y_train, epochs=1000, batch_size=4, verbose=0)
+        dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_val, y_val), callbacks=[early_stopping])
         
         # 进行预测
         y_pred = dnn_model.predict(X_test).flatten()
@@ -196,7 +225,7 @@ def prophetDnnTest5():
         # {'N': 90, 'M': 7},
         # {'N': 120, 'M': 7},
         # {'N': 180, 'M': 7},
-        # {'N': 210, 'M': 7},
+        {'N': 210, 'M': 7},
         # {'N': 60, 'M': 14},
         # {'N': 90, 'M': 14},
         # {'N': 120, 'M': 14},
@@ -213,7 +242,7 @@ def prophetDnnTest5():
     
     groupDf = df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
-        if (media, country) not in [('ALL', 'ALL')]:
+        if (media, country) not in [('GOOGLE', 'ALL')]:
             continue
 
         # if media != 'ALL' and country != 'ALL':
@@ -233,7 +262,7 @@ def prophetDnnTest5():
             period_results = []
             
             # 分段测试
-            test_periods = pd.date_range(start='2024-09-01', end='2024-10-31', freq=f'{M}D')
+            test_periods = pd.date_range(start='2024-09-02', end='2024-10-31', freq=f'{M}D')
             
             for start_date in test_periods:
                 end_date = start_date + pd.Timedelta(days=M-1)

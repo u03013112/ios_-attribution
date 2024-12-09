@@ -90,6 +90,15 @@ def dataStep1(data):
     
     return data
 
+import tensorflow as tf
+import random
+
+# 设置随机种子
+def set_random_seed(seed_value=42):
+    np.random.seed(seed_value)
+    tf.random.set_seed(seed_value)
+    random.seed(seed_value)
+
 def calculate_mape(group, train_start_date, train_end_date, test_start_date, test_end_date, input_columns, scheme_name, media, country, N, M):
     train_data = group[(group['install_day'] >= train_start_date) & (group['install_day'] <= train_end_date)]
     test_data = group[(group['install_day'] >= test_start_date) & (group['install_day'] <= test_end_date)]
@@ -140,7 +149,8 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     best_mape = float('inf')
     best_y_pred = None
     
-    for _ in range(5):  # 简单循环5次，选择最优结果
+    set_random_seed()
+    for _ in range(1):  # 简单循环5次，选择最优结果
         # 构建DNN模型
         dnn_model = Sequential()
         dnn_model.add(Dense(64, input_dim=X_test.shape[1], activation='relu'))
@@ -154,7 +164,8 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
         early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
         
         # 训练模型
-        dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_test, y_test), callbacks=[early_stopping])
+        # dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_data=(X_test, y_test), callbacks=[early_stopping])
+        dnn_model.fit(X_train, y_train, epochs=5000, batch_size=4, verbose=0, validation_split=0.2, callbacks=[early_stopping])
         
         # 进行预测
         y_pred = dnn_model.predict(X_test).flatten()
@@ -186,16 +197,16 @@ def prophetDnnTest4():
     
     # 尝试的训练周期和预测周期列表
     try_periods = [
-        {'N': 60, 'M': 7},
-        {'N': 90, 'M': 7},
-        {'N': 120, 'M': 7},
-        {'N': 180, 'M': 7},
+        # {'N': 60, 'M': 7},
+        # {'N': 90, 'M': 7},
+        # {'N': 120, 'M': 7},
+        # {'N': 180, 'M': 7},
         {'N': 210, 'M': 7},
-        {'N': 60, 'M': 14},
-        {'N': 90, 'M': 14},
-        {'N': 120, 'M': 14},
-        {'N': 180, 'M': 14},
-        {'N': 210, 'M': 14},
+        # {'N': 60, 'M': 14},
+        # {'N': 90, 'M': 14},
+        # {'N': 120, 'M': 14},
+        # {'N': 180, 'M': 14},
+        # {'N': 210, 'M': 14},
     ]
     
     schemes = [
@@ -215,11 +226,11 @@ def prophetDnnTest4():
     
     groupDf = df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
-        # if (media, country) not in [('ALL', 'ALL')]:
-        #     continue
-
-        if media != 'ALL' and country != 'ALL':
+        if (media, country) not in [('GOOGLE', 'ALL')]:
             continue
+
+        # if media != 'ALL' and country != 'ALL':
+        #     continue
         
         # 过滤掉包含 NaN 或无穷大值的行
         group = group.replace([np.inf, -np.inf], np.nan).dropna()
