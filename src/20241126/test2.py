@@ -115,7 +115,7 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
     best_mape = float('inf')
     best_y_pred = None
     
-    for _ in range(5):  # 简单循环3次，选择最优结果
+    for _ in range(1):  # 简单循环3次，选择最优结果
         # 构建DNN模型
         dnn_model = Sequential()
         dnn_model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
@@ -213,12 +213,12 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
 #         dnn_model.compile(optimizer='RMSprop', loss='mse', metrics=['mape'])
         
 #         # 记录每100个epochs的loss和mape
-#         epochs = 5000
+#         epochs = 1000
 #         batch_size = 4
 #         history = {'epoch': [], 'train_loss': [], 'val_loss': [], 'test_loss': [], 'train_mape': [], 'val_mape': [], 'test_mape': []}
         
-#         for epoch in range(0, epochs, 100):
-#             hist = dnn_model.fit(X_train, y_train, epochs=100, batch_size=batch_size, verbose=0, validation_split=0.2)
+#         for epoch in range(0, epochs, 20):
+#             hist = dnn_model.fit(X_train, y_train, epochs=20, batch_size=batch_size, verbose=0, validation_split=0.2)
             
 #             # 计算训练集和验证集的loss和mape
 #             train_loss = hist.history['loss'][-1]
@@ -229,19 +229,19 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
 #             # 计算测试集的loss和mape
 #             test_loss, test_mape = dnn_model.evaluate(X_test, y_test, verbose=0)
             
-#             if train_loss > 100 :
-#                 train_loss = 100
-#             if val_loss > 100 :
-#                 val_loss = 100
-#             if test_loss > 100 :
-#                 test_loss = 100
+#             if train_loss > 1e7 :
+#                 train_loss = 1e7
+#             if val_loss > 1e7 :
+#                 val_loss = 1e7
+#             if test_loss > 1e7 :
+#                 test_loss = 1e7
 
-#             if train_mape > 30 :
-#                 train_mape = 30
-#             if val_mape > 30 :
-#                 val_mape = 30
-#             if test_mape > 30 :
-#                 test_mape = 30
+#             # if train_mape > 30 :
+#             #     train_mape = 30
+#             # if val_mape > 30 :
+#             #     val_mape = 30
+#             # if test_mape > 30 :
+#             #     test_mape = 30
 
 #             # 记录loss和mape
 #             history['epoch'].append(epoch + 100)
@@ -265,7 +265,7 @@ def calculate_mape(group, train_start_date, train_end_date, test_start_date, tes
 #         historyDf = pd.DataFrame(history)
 #         historyDf.to_csv(f'/src/data/20241126_prophet_dnn_history{i+1}_{test_start_date}_{test_end_date}.csv', index=False)
 
-#         # 画图并保存
+#         # # 画图并保存
 #         plt.figure()
 #         plt.plot(history['epoch'], history['train_loss'], label='Train Loss')
 #         plt.plot(history['epoch'], history['val_loss'], label='Validation Loss')
@@ -317,9 +317,9 @@ def prophetDnnTest3():
     results = []
     groupDf = df.groupby(['media', 'country'])
     for (media, country), group in groupDf:
-        # if (media, country) not in [('GOOGLE', 'ALL')]:
-        # # if media != 'ALL' and country != 'ALL':
-        #     continue
+        # if (media, country) not in [('ALL', 'ALL')]:
+        if media != 'ALL' and country != 'ALL':
+            continue
         
         # 过滤掉包含 NaN 或无穷大值的行
         group = group.replace([np.inf, -np.inf], np.nan).dropna()
@@ -367,7 +367,7 @@ def prophetDnnTest3():
     results_df = pd.DataFrame(results)
     print(results_df)
 
-    results_df.to_csv('/src/data/20241126_prophet_dnn_test3.csv', index=False)
+    results_df.to_csv('/src/data/20241126_prophet_dnn_test2.csv', index=False)
     return results_df
 
 if __name__ == '__main__':
