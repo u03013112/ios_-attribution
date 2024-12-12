@@ -297,7 +297,7 @@ def main():
         predictArppu = last15DaysDf['revenue_1d'].sum()/last15DaysDf['pu_1d'].sum()
         print('predictArppu:',predictArppu)
 
-        for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
+        for cost_change_ratio in [-0.2, -0.15, -0.1, 0, 0.1, 0.15, 0.2]:
             date_range = pd.date_range(start=currentMonday, end=currentMonday + pd.Timedelta(days=6), freq='D')
             inputDf = pd.DataFrame(date_range, columns=['ds'])
             inputDf['cost'] = groupCopy['last_week_cost*cost_pct'] * (1 + cost_change_ratio)
@@ -377,8 +377,8 @@ def main():
     for (platform, media, country), group in groupDf:
         target_roi = getRoiThreshold(currentMondayStr, platform, media, country)
 
-        # # for test
-        # target_roi = target_roi * 0.5
+        # 适度保守
+        target_roi = target_roi * 1.05
 
         maxRList = group['max_r'].unique()
         for maxR in maxRList:
