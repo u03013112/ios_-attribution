@@ -40,7 +40,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20241209'  # 本地测试时的日期，可自行修改
+        dayStr = '20240624'  # 本地测试时的日期，可自行修改
 
     print('dayStr:', dayStr)
 
@@ -52,7 +52,7 @@ def createTable():
             Column(name='app', type='string', comment='app identifier'),
             Column(name='media', type='string', comment='media source'),
             Column(name='country', type='string', comment='country'),
-            Column(name='type', type='string', comment='-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3,best。其中best是满足倒推1日ROI的最大花费。'),
+            Column(name='type', type='string', comment='-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3'),
             Column(name='cost', type='double', comment='cost'),
             Column(name='predicted_pu', type='double', comment='predicted pay users'),
             Column(name='predicted_arppu', type='double', comment='predicted ARPPU'),
@@ -61,7 +61,7 @@ def createTable():
             Column(name='max_r', type='double', comment='max_r'),
             Column(name='is_best', type='double', comment='is_best'),
             Column(name='nerf_ratio', type='double', comment='nerf ratio'),
-            Column(name='monday', type='string', comment='%Y%m%d')
+            # Column(name='monday', type='string', comment='%Y%m%d')
         ]
         partitions = [
             Partition(name='day', type='string', comment='预测日期')
@@ -222,71 +222,6 @@ def getRoiThreshold(lastDayStr, platform, media, country):
         return 0.02
     return roi_threshold_df.iloc[0]['roi_001_best']
 
-def find_max_cost_meeting_roi(predict_df, lastDayStr, platform):
-    """
-    在预测结果中为每个国家和媒体组合找到满足 ROI 阈值的最大预测花费金额。
-    
-    参数：
-        predict_df (pd.DataFrame): 之前预测的结果数据框，需包含 'predicted_roi' 和 'cost' 等列。
-        lastDayStr (str): 上一天的日期字符串，用于获取目标 ROI。
-        platform (str): 平台名称，如 'android' 或 'ios'。
-    
-    返回：
-        pd.DataFrame: 所有满足条件的单条预测结果，格式类似于 `predict_macro` 的输出。
-        如果没有满足条件的结果，则返回空的 DataFrame。
-    """
-    # 确定需要分组的列，这里假设按 'country' 和 'media' 组合
-    group_columns = ['country', 'media']
-    unique_groups = predict_df[group_columns].drop_duplicates()
-
-    print(f"需要处理的国家和媒体组合数: {len(unique_groups)}")
-
-    selected_rows = []
-
-    maxRList = predict_df['max_r'].unique()
-
-    for _, group in unique_groups.iterrows():
-        country = group['country']
-        media = group['media']
-        
-        # 获取目标 ROI 阈值
-        target_roi = getRoiThreshold(lastDayStr, platform, media, country)
-        print(f"处理组合 - 国家: {country}, 媒体: {media}, 目标 ROI 阈值: {target_roi}")
-
-        for maxR in maxRList:
-            print(f"处理组合 - 国家: {country}, 媒体: {media}, max_r: {maxR}")
-            # 筛选出当前组合的预测记录
-            group_df = predict_df[
-                (predict_df['country'] == country) & 
-                (predict_df['media'] == media) & 
-                (predict_df['platform'] == platform) &
-                (predict_df['max_r'] == maxR)
-            ]
-
-            # 筛选出预测 ROI 大于等于目标 ROI 的记录
-            filtered_df = group_df[group_df['predicted_roi'] >= target_roi]
-            print(f"组合 - {country}, {media} 满足 ROI >= {target_roi} 的记录数: {len(filtered_df)}")
-
-            if filtered_df.empty:
-                print(f"组合 - {country}, {media} 没有满足 ROI 阈值的预测结果。")
-                continue
-
-            # 找到 'cost' 最大的记录
-            max_cost_row = filtered_df.loc[filtered_df['cost'].idxmax()]
-            print(f"组合 - {country}, {media} 选择的最大预测花费金额记录: cost = {max_cost_row['cost']}")
-
-            # 将选择的记录添加到列表中
-            selected_rows.append(max_cost_row)
-
-    if not selected_rows:
-        print("没有任何组合满足 ROI 条件。")
-        return pd.DataFrame()
-
-    # 将所有选择的记录合并为一个 DataFrame
-    result_df = pd.DataFrame(selected_rows)
-    
-    return result_df
-
 def main():
     global dayStr
 
@@ -319,10 +254,10 @@ def main():
 
     retDf = pd.DataFrame()
     for (platform, media, country, group_name, pay_user_group_name,max_r), group in groupData:
-        # for test
-        if (platform == 'android' and media == 'ALL' and country == 'ALL' and max_r == 1e10) == False:
-            # print(f"Skip platform: {platform}, media: {media}, country: {country}")
-            continue
+        # # for test
+        # if (platform == 'android' and media == 'ALL' and country == 'ALL' and max_r == 1e10) == False:
+        #     # print(f"Skip platform: {platform}, media: {media}, country: {country}")
+        #     continue
 
         print(f"platform: {platform}, media: {media}, country: {country}, group_name: {group_name}, pay_user_group_name: {pay_user_group_name}, max_r: {max_r}")
         
@@ -361,7 +296,6 @@ def main():
         last15DaysDf = group[group['install_day'] >= last15Days]
         predictArppu = last15DaysDf['revenue_1d'].sum()/last15DaysDf['pu_1d'].sum()
         print('predictArppu:',predictArppu)
-        # return
 
         for cost_change_ratio in [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]:
             date_range = pd.date_range(start=currentMonday, end=currentMonday + pd.Timedelta(days=6), freq='D')
@@ -369,9 +303,15 @@ def main():
             inputDf['cost'] = groupCopy['last_week_cost*cost_pct'] * (1 + cost_change_ratio)
             inputDf['is_weekend'] = inputDf['ds'].apply(lambda x: 1 if x.weekday() >= 5 else 0)
             inputDf['cost_change_ratio'] = inputDf['cost'].pct_change()
-            # inputDf['cost_change_ratio'].iloc[0] = (inputDf['cost'].iloc[0] - lastSundayCost) / lastSundayCost
             inputDf.loc[0, 'cost_change_ratio'] = (inputDf.loc[0, 'cost'] - lastSundayCost) / lastSundayCost
+
+            inputDf.dropna(inplace=True)
+            if inputDf.empty:
+                print('inputDf is empty')
+                print(f"跳过组合: {platform}, {media}, {country}, {group_name}, {pay_user_group_name}, {currentMondayStr}, {cost_change_ratio}")
+                continue
             # print(inputDf)
+
             
             model = loadModels(platform, media, country, group_name, pay_user_group_name, currentMondayStr)
             
@@ -435,7 +375,7 @@ def main():
         
     groupDf = allRet.groupby(['platform','media','country'])
     for (platform, media, country), group in groupDf:
-        target_roi = getRoiThreshold(dayStr, platform, media, country)
+        target_roi = getRoiThreshold(currentMondayStr, platform, media, country)
 
         # # for test
         # target_roi = target_roi * 0.5
