@@ -40,7 +40,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20240624'  # 本地测试时的日期，可自行修改
+        dayStr = '20241202'  # 本地测试时的日期，可自行修改
 
     print('dayStr:', dayStr)
 
@@ -298,6 +298,10 @@ def main():
         print('predictArppu:',predictArppu)
 
         for cost_change_ratio in [-0.2, -0.15, -0.1, 0, 0.1, 0.15, 0.2]:
+            # # for test
+            # if cost_change_ratio != -0.15:
+            #     continue
+
             date_range = pd.date_range(start=currentMonday, end=currentMonday + pd.Timedelta(days=6), freq='D')
             inputDf = pd.DataFrame(date_range, columns=['ds'])
             inputDf['cost'] = groupCopy['last_week_cost*cost_pct'] * (1 + cost_change_ratio)
@@ -310,7 +314,7 @@ def main():
                 print('inputDf is empty')
                 print(f"跳过组合: {platform}, {media}, {country}, {group_name}, {pay_user_group_name}, {currentMondayStr}, {cost_change_ratio}")
                 continue
-            # print(inputDf)
+            print(inputDf)
 
             
             model = loadModels(platform, media, country, group_name, pay_user_group_name, currentMondayStr)
@@ -375,7 +379,7 @@ def main():
         
     groupDf = allRet.groupby(['platform','media','country'])
     for (platform, media, country), group in groupDf:
-        target_roi = getRoiThreshold(currentMondayStr, platform, media, country)
+        target_roi = getRoiThreshold(lastSundayStr, platform, media, country)
 
         # 适度保守
         target_roi = target_roi * 1.05
