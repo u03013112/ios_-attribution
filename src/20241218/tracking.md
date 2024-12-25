@@ -1,0 +1,1 @@
+{lpurl}? campaignid={campaignid}& adgroupid={adgroupid}& creative={creative}& device={device}
