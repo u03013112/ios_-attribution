@@ -50,11 +50,12 @@ group by
 
 
 def calculate_macd(data, col, short_window, long_window, signal_window):
-    data[col + '_EMA' + str(short_window)] = data[col].ewm(span=short_window).mean()
-    data[col + '_EMA' + str(long_window)] = data[col].ewm(span=long_window).mean()
-    data[col + '_DIF'] = data[col + '_EMA' + str(short_window)] - data[col + '_EMA' + str(long_window)]
-    data[col + '_DEA'] = data[col + '_DIF'].ewm(span=signal_window).mean()
-    data[col + '_MACD'] = data[col + '_DIF'] - data[col + '_DEA']
+    data = data.copy()  # 确保我们在副本上操作
+    data.loc[:, col + '_EMA' + str(short_window)] = data[col].ewm(span=short_window).mean()
+    data.loc[:, col + '_EMA' + str(long_window)] = data[col].ewm(span=long_window).mean()
+    data.loc[:, col + '_DIF'] = data[col + '_EMA' + str(short_window)] - data[col + '_EMA' + str(long_window)]
+    data.loc[:, col + '_DEA'] = data[col + '_DIF'].ewm(span=signal_window).mean()
+    data.loc[:, col + '_MACD'] = data[col + '_DIF'] - data[col + '_DEA']
     return data
 
 def backtest_macd(data, col, short_window, long_window, signal_window):
@@ -141,43 +142,36 @@ def main():
             long_window = best_params['long_window']
             signal_window = best_params['signal_window']
 
-        # 使用最佳参数计算MACD
+        # 根据列名选择 totalDf 或 totalDf_trimmed
         if col == 'ROI_d7':
-            print('ROI_d7')
-            print(totalDf.tail(10))
-            totalDf_trimmed = totalDf.iloc[:-7]  # 去掉最后7天的数据
-            totalDf_trimmed = calculate_macd(totalDf_trimmed, col, short_window, long_window, signal_window)
+            totalDf_trimmed = totalDf.iloc[:-7].copy()  # 去掉最后7天的数据并复制
         else:
-            totalDf = calculate_macd(totalDf, col, short_window, long_window, signal_window)
+            totalDf_trimmed = totalDf.copy()
+
+        # 使用最佳参数计算MACD
+        totalDf_trimmed = calculate_macd(totalDf_trimmed, col, short_window, long_window, signal_window)
 
         # 画图，3张图，竖着排列，x坐标是install_day
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(26, 18), sharex=True)
 
-        # 第一张图，y坐标是col，col + '_EMA12'，col + '_EMA26'
-        ax1.plot(totalDf['install_day'], totalDf[col], label=col, color='blue')
-        ax1.plot(totalDf['install_day'], totalDf[col + '_EMA' + str(short_window)], label=col + f' EMA{short_window}', color='red')
-        ax1.plot(totalDf['install_day'], totalDf[col + '_EMA' + str(long_window)], label=col + f' EMA{long_window}', color='green')
+        # 第一张图，y坐标是col，col + '_EMA' + str(short_window)，col + '_EMA' + str(long_window)
+        ax1.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col], label=col, color='blue')
+        ax1.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_EMA' + str(short_window)], label=col + f' EMA{short_window}', color='red')
+        ax1.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_EMA' + str(long_window)], label=col + f' EMA{long_window}', color='green')
         ax1.set_title(f'{col} and EMAs')
         ax1.legend()
         ax1.grid(True)  # 添加网格线
 
         # 第二张图，y坐标是MACD 和 信号线
-        if col == 'ROI_d7':
-            ax2.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_DIF'], label=f'DIF={short_window}EMA-{long_window}EMA', color='blue')
-            ax2.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_DEA'], label=f'DIF_EMA{signal_window}', color='red')
-        else:
-            ax2.plot(totalDf['install_day'], totalDf[col + '_DIF'], label=f'DIF={short_window}EMA-{long_window}EMA', color='blue')
-            ax2.plot(totalDf['install_day'], totalDf[col + '_DEA'], label=f'DIF_EMA{signal_window}', color='red')
+        ax2.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_DIF'], label=f'DIF={short_window}EMA-{long_window}EMA', color='blue')
+        ax2.plot(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_DEA'], label=f'DIF_EMA{signal_window}', color='red')
         ax2.axhline(y=0, color='black', linestyle='--')  # 添加 y=0 的横线
         ax2.set_title(f'{col} MACD and Signal Line')
         ax2.legend()
         ax2.grid(True)  # 添加网格线
 
         # 第三张图，y坐标是柱状图
-        if col == 'ROI_d7':
-            ax3.bar(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_MACD'], label='MACD Histogram', color='blue')
-        else:
-            ax3.bar(totalDf['install_day'], totalDf[col + '_MACD'], label='MACD Histogram', color='blue')
+        ax3.bar(totalDf_trimmed['install_day'], totalDf_trimmed[col + '_MACD'], label='MACD Histogram', color='blue')
         ax3.axhline(y=0, color='black', linestyle='--')  # 添加 y=0 的横线
         ax3.set_title(f'{col} MACD Histogram')
         ax3.legend()
@@ -190,6 +184,6 @@ def main():
         plt.tight_layout()
         plt.savefig(f'/src/data/20241218_MACD_{col}.png')
         plt.close()
-
+        
 if __name__ == '__main__':
     main()
