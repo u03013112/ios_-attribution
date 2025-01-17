@@ -284,6 +284,150 @@ def getCorrBetweenStrengthAndScore3():
     print('分组数据的相关系数：')
     print(corr)
 
+def getCorrBetweenStrengthAndScore4():
+    df = getStrengthAndScore()
+    
+
+    corr = df[['strength_a','score_a']]
+    corr = corr.corr()
+
+    print('strength_a 和 score_a 的相关系数：')
+    print(corr)
+
+    corr = df[['strength_b','score_b']]
+    corr = corr.corr()
+
+    print('strength_b 和 score_b 的相关系数：')
+    print(corr)
+
+    # 合并数据
+    combined_df = pd.DataFrame({
+        'strength': pd.concat([df['strength_a'], df['strength_b']]),
+        'score': pd.concat([df['score_a'], df['score_b']])
+    })
+    
+    # 去除异常值
+    strength_99 = combined_df['strength'].quantile(0.99)
+    score_99 = combined_df['score'].quantile(0.99)
+    
+    combined_df['strength'] = combined_df['strength'].clip(upper=strength_99)
+    combined_df['score'] = combined_df['score'].clip(upper=score_99)
+    
+    # 计算0%到100%的分位数
+    quantiles = combined_df['strength'].quantile([i/20 for i in range(21)])
+    
+    # 按照strength进行分组
+    combined_df['strength_group'] = pd.cut(combined_df['strength'], bins=quantiles, include_lowest=True, labels=False)
+    
+    # 计算每组中score的平均值
+    grouped_df = combined_df.groupby('strength_group')['score'].mean().reset_index()
+    
+    # 计算strength的分组分位数与分组内score均值的相关系数
+    grouped_df['strength_quantile'] = quantiles.values[1:]  # 去掉第一个0%分位数
+    final_corr = grouped_df[['strength_quantile', 'score']].corr()
+    
+    print('strength的分组分位数与分组内score均值的相关系数：')
+    print(final_corr)
+
+    # 绘制图表
+    plt.figure(figsize=(10, 6))
+    plt.plot(grouped_df['strength_quantile'], grouped_df['score'], marker='o')
+    plt.xlabel('Strength Quantile')
+    plt.ylabel('Average Score')
+    plt.title('Average Score by Strength Quantile')
+    plt.grid(True)
+    plt.savefig('/src/data/pic.png')
+
+def getCorrBetweenStrengthAndScore5():
+    df = getStrengthAndScore()
+    print('raw len(df):', len(df))
+
+    # 根据score_a和score_b确定胜负组
+    win_group = df[df['score_a'] > df['score_b']][['strength_a', 'score_a']].rename(columns={'strength_a': 'strength', 'score_a': 'score'})
+    win_group = win_group.append(df[df['score_b'] > df['score_a']][['strength_b', 'score_b']].rename(columns={'strength_b': 'strength', 'score_b': 'score'}))
+    print('win_group len:', len(win_group))
+
+    lose_group = df[df['score_a'] < df['score_b']][['strength_a', 'score_a']].rename(columns={'strength_a': 'strength', 'score_a': 'score'})
+    lose_group = lose_group.append(df[df['score_b'] < df['score_a']][['strength_b', 'score_b']].rename(columns={'strength_b': 'strength', 'score_b': 'score'}))
+    print('lose_group len:', len(lose_group))
+
+    def process_group(group, group_name):
+        # 去除异常值
+        strength_99 = group['strength'].quantile(0.99)
+        score_99 = group['score'].quantile(0.99)
+        
+        group['strength'] = group['strength'].clip(upper=strength_99)
+        group['score'] = group['score'].clip(upper=score_99)
+        
+        # 计算0%到100%的分位数
+        quantiles = group['strength'].quantile([i/20 for i in range(21)])
+        
+        # 按照strength进行分组
+        group['strength_group'] = pd.cut(group['strength'], bins=quantiles, include_lowest=True, labels=False)
+        
+        # 计算每组中score的平均值
+        grouped_df = group.groupby('strength_group')['score'].mean().reset_index()
+        
+        # 计算strength的分组分位数与分组内score均值的相关系数
+        grouped_df['strength_quantile'] = quantiles.values[1:]  # 去掉第一个0%分位数
+        final_corr = grouped_df[['strength_quantile', 'score']].corr()
+        
+        print(f'{group_name}组的strength分组分位数与分组内score均值的相关系数：')
+        print(final_corr)
+        
+        # 绘制图表
+        plt.figure(figsize=(10, 6))
+        plt.plot(grouped_df['strength_quantile'], grouped_df['score'], marker='o')
+        plt.xlabel('Strength Quantile')
+        plt.ylabel('Average Score')
+        plt.title(f'Average Score by Strength Quantile ({group_name} Group)')
+        plt.grid(True)
+        plt.savefig(f'/src/data/pic_{group_name}.png')
+    
+    # 处理战胜组
+    process_group(win_group, 'win')
+    
+    # 处理战败组
+    process_group(lose_group, 'lose')
+
+
+def quality():
+    df = getStrengthAndScore()
+    
+    # 计算是否是质量局
+    df['quality_match'] = ((df[['score_a', 'score_b']].max(axis=1) - df[['score_a', 'score_b']].min(axis=1)) / df[['score_a', 'score_b']].min(axis=1)).apply(lambda x: 1 if x < 1 else 0)
+    
+    # 拆分成a、b组
+    a_group = df[['strength_a', 'score_a', 'quality_match']].rename(columns={'strength_a': 'strength', 'score_a': 'score'})
+    b_group = df[['strength_b', 'score_b', 'quality_match']].rename(columns={'strength_b': 'strength', 'score_b': 'score'})
+    
+    # 合并a、b组
+    combined_df = pd.concat([a_group, b_group])
+    
+    # 去除异常值
+    strength_99 = combined_df['strength'].quantile(0.99)
+    combined_df['strength'] = combined_df['strength'].clip(upper=strength_99)
+    
+    # 计算0%到100%的分位数
+    quantiles = combined_df['strength'].quantile([i/20 for i in range(21)])
+    
+    # 按照strength进行分组
+    combined_df['strength_group'] = pd.cut(combined_df['strength'], bins=quantiles, include_lowest=True, labels=False)
+    
+    # 计算每组中是否质量局的平均值
+    grouped_df = combined_df.groupby('strength_group')['quality_match'].mean().reset_index()
+    
+    # 计算strength的分组分位数与分组内是否质量局均值的相关系数
+    grouped_df['strength_quantile'] = quantiles.values[1:]  # 去掉第一个0%分位数
+    
+    # 绘制图表
+    plt.figure(figsize=(10, 6))
+    plt.plot(grouped_df['strength_quantile'], grouped_df['quality_match'], marker='o')
+    plt.xlabel('Strength Quantile')
+    plt.ylabel('Average Quality Match')
+    plt.title('Average Quality Match by Strength Quantile')
+    plt.grid(True)
+    plt.savefig('/src/data/pic_quality_match.png')
 
 def rocAndAUC():
     from sklearn.metrics import roc_curve, roc_auc_score
@@ -365,11 +509,14 @@ def main():
     # getCorrBetweenStrengthAndScore()
     # getCorrBetweenStrengthAndScore2()
     # getCorrBetweenStrengthAndScore3()
+    # getCorrBetweenStrengthAndScore4()
+    # getCorrBetweenStrengthAndScore5()
+    quality()
     # drawStrengthAndScore()
     # drawStrengthAndScore2()    
     # rocAndAUC()
 
-    evaluateStrengthWithMetrics()
+    # evaluateStrengthWithMetrics()
 
 if __name__ == '__main__':
     main()

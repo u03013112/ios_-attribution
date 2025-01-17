@@ -24,7 +24,25 @@ alliance_data AS (
             WHEN alliance_id = teamaallianceid THEN teamagroup
             WHEN alliance_id = teamballianceid THEN teambgroup
         END AS alliance_group,
-        strength
+        CASE
+            WHEN alliance_id = teamaallianceid THEN teama30levelplayercount
+            WHEN alliance_id = teamballianceid THEN teamb30levelplayercount
+        END AS team30levelplayercount,
+        CASE
+            WHEN alliance_id = teamaallianceid THEN teamaactivelevel
+            WHEN alliance_id = teamballianceid THEN teambactivelevel
+        END AS teamactivelevel,
+        CASE
+            WHEN alliance_id = teamaallianceid THEN teamahighestlevel
+            WHEN alliance_id = teamballianceid THEN teambhighestlevel
+        END AS teamhighestlevel,
+        CASE
+            WHEN alliance_id = teamaallianceid THEN servera
+            WHEN alliance_id = teamballianceid THEN serverb
+        END AS server_num,
+        strength,
+        strengthinfo,
+        strengthinfo2
     FROM
         ta.v_event_15
     WHERE
@@ -75,19 +93,31 @@ SELECT
     br.wk,
     br.alliance_a_id,
     ad_a.alliance_group AS group_a,
+    ad_a.team30levelplayercount AS team30levelplayercount_a,
+    ad_a.teamactivelevel AS teamactivelevel_a,
+    ad_a.teamhighestlevel AS teamhighestlevel_a,
+    ad_a.server_num AS server_num_a,
     ad_a.strength AS strength_a,
+    ad_a.strengthinfo AS strengthinfo_a,
+    ad_a.strengthinfo2 AS strengthinfo2_a,
     br.score_a,
     br.alliance_b_id,
     ad_b.alliance_group AS group_b,
+    ad_b.team30levelplayercount AS team30levelplayercount_b,
+    ad_b.teamactivelevel AS teamactivelevel_b,
+    ad_b.teamhighestlevel AS teamhighestlevel_b,
+    ad_b.server_num AS server_num_b,
     ad_b.strength AS strength_b,
+    ad_b.strengthinfo AS strengthinfo_b,
+    ad_b.strengthinfo2 AS strengthinfo2_b,
     br.score_b,
     br.is_win,
     br.is_quality
 FROM
     battle_results br
     LEFT JOIN alliance_data ad_a ON br.alliance_a_id = ad_a.alliance_id
-    AND ad_a.alliance_group = br.group_a
+    AND br.group_a = CAST(ad_a.alliance_group AS VARCHAR)
     AND br.wk = ad_a.wk
     LEFT JOIN alliance_data ad_b ON br.alliance_b_id = ad_b.alliance_id
-    AND ad_b.alliance_group = br.group_b
+    AND br.group_b = CAST(ad_b.alliance_group AS VARCHAR)
     AND br.wk = ad_b.wk;
