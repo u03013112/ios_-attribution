@@ -10,6 +10,7 @@ from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 
+import re
 import json
 import os
 
@@ -21,7 +22,7 @@ def getData():
     # 将 'wk' 列转换为日期格式
     df['wk'] = pd.to_datetime(df['wk'])
 
-    def parse_strengthinfo_column(df, column_name):
+    def parse_and_sort_strengthinfo_column(df, column_name):
         # 初始化存储解析后数据的列表
         parsed_data = []
 
@@ -30,9 +31,10 @@ def getData():
 
         for data in all_data:
             row_data = {}
+            sorted_data = sorted(data.items(), key=lambda item: float(item[1].split('|')[0]), reverse=True)
             for i in range(1, 31):
-                if i <= len(data):
-                    uid, info = list(data.items())[i-1]
+                if i <= len(sorted_data):
+                    uid, info = sorted_data[i-1]
                     parts = info.split('|')
                     match_score = parts[0]
                     attributes = parts[1].split(';')
@@ -65,12 +67,12 @@ def getData():
     columns_to_parse = ['strengthinfo_a', 'strengthinfo2_a', 'strengthinfo_b', 'strengthinfo2_b']
 
     for col in columns_to_parse:
-        parsed_df = parse_strengthinfo_column(df, col)
+        parsed_df = parse_and_sort_strengthinfo_column(df, col)
         df = pd.concat([df, parsed_df], axis=1)
 
     return df
 
-def prepareData(df):
+def prepareData(df, N):
     # 目标变量
     y = df['is_quality']
 
@@ -80,7 +82,18 @@ def prepareData(df):
         'alliance_b_id', 'group_b', 'strengthinfo_b', 'strengthinfo2_b', 'score_b', 'is_win', 'is_quality',
         'strength_a','strength_b'
     ]
-    x = df.drop(columns=columns_to_exclude)
+
+    # 只保留前 N 名的数据
+    columns_to_include = []
+    for col in df.columns:
+        if col not in columns_to_exclude:
+            match = re.search(r'_(\d+)$', col)
+            if match:
+                index = int(match.group(1))
+                if index <= N:
+                    columns_to_include.append(col)
+
+    x = df[columns_to_include]
 
     return x, y
 
@@ -91,6 +104,21 @@ def func1(x_train, x_test, y_train, y_test):
 
     # 训练模型
     clf.fit(x_train, y_train)
+
+    # 获取特征重要性
+    feature_importances = clf.feature_importances_
+
+    # 创建包含特征重要性的 DataFrame
+    feature_importance_df = pd.DataFrame({
+        'feature': x_train.columns,
+        'importance': feature_importances
+    })
+
+    # 按重要性排序
+    feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False)
+
+    # 保存特征重要性到文件
+    feature_importance_df.to_csv('/src/data/input1.csv', index=False)
 
     # 预测
     y_pred = clf.predict(x_test)
@@ -128,7 +156,7 @@ def func1_p1(x_train, x_test, y_train, y_test, N):
     feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False)
 
     # 保存特征重要性到文件
-    feature_importance_df.to_csv('/src/data/input.csv', index=False)
+    feature_importance_df.to_csv('/src/data/input2.csv', index=False)
 
     # 选择前 N 个重要特征
     top_features = feature_importance_df.head(N)['feature']
@@ -142,6 +170,8 @@ def func1_p1(x_train, x_test, y_train, y_test, N):
 
     # 预测
     y_pred = clf.predict(x_test_top)
+    yPredDf = pd.DataFrame(y_pred)
+    yPredDf.to_csv('/src/data/y_pred.csv', index=False)
 
     # 计算准确率、召回率和F1分数
     accuracy = accuracy_score(y_test, y_pred)
@@ -188,6 +218,11 @@ def func2(x_train, x_test, y_train, y_test, validation_split=0.2, epochs=100, ba
     y_prob = model.predict(x_test).flatten()
     y_pred = (y_prob >= 0.3).astype(int)
 
+    y_probDf = pd.DataFrame(y_prob)
+    y_probDf.to_csv('/src/data/y_prob2.csv', index=False)
+    y_predDf = pd.DataFrame(y_pred)
+    y_predDf.to_csv('/src/data/y_pred2.csv', index=False)
+
     # 计算准确率、召回率和F1分数
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
@@ -204,6 +239,7 @@ def func2(x_train, x_test, y_train, y_test, validation_split=0.2, epochs=100, ba
 
 def main():
     filename = '/src/data/20250117a2_data.csv'
+    # filename = '/src/data/20250120a2_data.csv'
     if os.path.exists(filename):
         print('已存在%s'%filename)
         df = pd.read_csv(filename)
@@ -211,7 +247,7 @@ def main():
         df = getData()
         df.to_csv(filename, index=False)
 
-    x,y = prepareData(df)
+    x,y = prepareData(df,5)
     
     # xForSave = x.head(10)
     # xForSave.to_csv('/src/data/20250117a2_x.csv',index=False)
@@ -220,8 +256,8 @@ def main():
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=0)
 
     # func1(x_train, x_test, y_train, y_test)
-    func1_p1(x_train, x_test, y_train, y_test, 20)
-    # model, history = func2(x_train, x_test, y_train, y_test)
+    # func1_p1(x_train, x_test, y_train, y_test, 20)
+    model, history = func2(x_train, x_test, y_train, y_test)
 
 
 if __name__ == '__main__':
