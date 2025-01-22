@@ -85,8 +85,8 @@ def getAddScoreData():
 
 
 def main():
-    filename = '/src/data/20250117a2_data_for_test.csv'
-    # filename = '/src/data/20250117a2_data.csv'
+    # filename = '/src/data/20250117a2_data_for_test.csv'
+    filename = '/src/data/20250117a2_data.csv'
     if os.path.exists(filename):
         print('已存在%s' % filename)
         df = pd.read_csv(filename)
@@ -107,6 +107,7 @@ def main():
     x = x[columns_to_save]
     # 每一行是一场战斗，添加一列战斗编号
     x['battle_number'] = range(len(x))
+    x[['wk', 'battle_number','strength_a', 'strength_b']].to_csv('/src/data/20250121final_summary2.csv', index=False)
 
         # 拆分 a 队部分
     strengthADf0 = x[['wk', 'battle_number', 'strength_a', 'score_a']]
@@ -250,9 +251,9 @@ def main():
     result_df_b['match_score'] = (result_df_b['attribute1'] * 1 + result_df_b['attribute2'] * 0.6 + result_df_b['attribute3'] * 0.3 + result_df_b['attribute4'] * 0.1) / 1000
     # result_df_b['match_score2'] = result_df_b['match_score_old'] / result_df_b['live_rate']
 
-    print('重排序前 result_df_b:')
-    print(result_df_b[result_df_b['battle_number'] == 0])
-    
+    # print('重排序前 result_df_b:')
+    # print(result_df_b[result_df_b['battle_number'] == 0])
+
 
     # 按照wk，battle_number 分组，组内按照 match_score 降序排序，重排 number，并将uid == 0 的行删除
     result_df_b = result_df_b.sort_values(by=['wk', 'battle_number', 'match_score'], ascending=[True, True, False])
@@ -261,105 +262,46 @@ def main():
 
     result_df_b.to_csv('/src/data/20250121result_df_b2.csv', index=False)
 
-    print('result_df_b')
-    print(result_df_b[result_df_b['battle_number'] == 0])
-    return
-
-    # 重新将数据汇总成每个 wk + battle_number 一行：
-    # 按照 wk + battle_number 分组，计算每个分组的 add_score_sum == 0 的人数占比，记作 add_score_zero_rate
-    # 计算每个分组中 add_score_sum == 0 的 match_score 占比，记作 add_score_zero_match_score_rate
-    grouped_b = result_df_b.groupby(['wk', 'battle_number'])
-    summary_df_b = grouped_b.apply(lambda g: pd.Series({
-        'add_score_zero_rate_b': (g['add_score_sum'] == 0).mean(),
-        'add_score_zero_match_score_rate_b': g.loc[g['add_score_sum'] == 0, 'match_score'].sum() / g['match_score'].sum() if g['match_score'].sum() != 0 else 0
-    })).reset_index()
-
-    summary_df_b = summary_df_b.merge(strengthBDf0, on=['wk', 'battle_number'], how='left')
-    print('summary result (b 队)')
-    print(summary_df_b[summary_df_b['battle_number'] == 0])
-
-        # 合并 a 队和 b 队的结果
-    final_summary_df = pd.merge(summary_df_a, summary_df_b, on=['wk', 'battle_number'], how='left')
-
-    # 选择最终需要的列
-    final_columns = [
-        'wk', 'battle_number', 
-        'add_score_zero_rate_a', 'add_score_zero_match_score_rate_a', 'strength_a', 'score_a',
-        'add_score_zero_rate_b', 'add_score_zero_match_score_rate_b', 'strength_b', 'score_b'
-    ]
-    final_summary_df = final_summary_df[final_columns]
-
-    print('final summary result')
-    print(final_summary_df[final_summary_df['battle_number'] == 0])
-
-    # 将结果保存到文件
-    final_summary_df.to_csv('/src/data/20250121final_summary.csv', index=False)
-
-def debug():
-    # filename = '/src/data/20250121result_df_a.csv'
-    filename = '/src/data/20250121result_df_b.csv'
-    df = pd.read_csv(filename)
-
-    print(df[df['battle_number'] == 262])
-
-def debug2():
-    filename = '/src/data/20250121_combined_result_all.csv'
-    df = pd.read_csv(filename)
-
-    print(df[df['battle_number'] == 262])
-
-def analyze():
-    filename = '/src/data/20250121final_summary.csv'
-    df = pd.read_csv(filename)
-
-    # 将a队和b队的数据合并
-    aDf = df[['wk', 'battle_number', 'add_score_zero_match_score_rate_a', 'strength_a']]
-    aDf.rename(columns={'add_score_zero_match_score_rate_a': 'add_score_zero_match_score_rate', 'strength_a': 'strength'}, inplace=True)
-    bDf = df[['wk', 'battle_number', 'add_score_zero_match_score_rate_b', 'strength_b']]
-    bDf.rename(columns={'add_score_zero_match_score_rate_b': 'add_score_zero_match_score_rate', 'strength_b': 'strength'}, inplace=True)
-
-    df = pd.concat([aDf, bDf], axis=0)
-    # 按照 strength 的分位数每分组，计算每5%分一组，个分组的 add_score_zero_match_score_rate 的均值
-    df['strength_group'] = pd.qcut(df['strength'], 20, duplicates='drop')
-    grouped = df.groupby(['strength_group'])
-    result = grouped['add_score_zero_match_score_rate'].mean()
-    print(result)
-
-    # 画图，横轴为 strength，纵轴为 add_score_zero_match_score_rate 的均值
+    # print('result_df_b')
+    # print(result_df_b[result_df_b['battle_number'] == 0])
     
-    # 将 Interval 的中点作为 x 轴的值
-    x = [interval.mid for interval in result.index]
-    y = result.values
+    # # 重新将数据汇总成每个 wk + battle_number 一行：
+    # # 按照 wk + battle_number 分组，计算每个分组的 add_score_sum == 0 的人数占比，记作 add_score_zero_rate
+    # # 计算每个分组中 add_score_sum == 0 的 match_score 占比，记作 add_score_zero_match_score_rate
+    # grouped_b = result_df_b.groupby(['wk', 'battle_number'])
+    # summary_df_b = grouped_b.apply(lambda g: pd.Series({
+    #     'add_score_zero_rate_b': (g['add_score_sum'] == 0).mean(),
+    #     'add_score_zero_match_score_rate_b': g.loc[g['add_score_sum'] == 0, 'match_score'].sum() / g['match_score'].sum() if g['match_score'].sum() != 0 else 0
+    # })).reset_index()
 
+    # summary_df_b = summary_df_b.merge(strengthBDf0, on=['wk', 'battle_number'], how='left')
+    # print('summary result (b 队)')
+    # print(summary_df_b[summary_df_b['battle_number'] == 0])
 
-    # 设置图的尺寸
-    plt.figure(figsize=(15, 6))  # 宽15英寸，高6英寸
+    #     # 合并 a 队和 b 队的结果
+    # final_summary_df = pd.merge(summary_df_a, summary_df_b, on=['wk', 'battle_number'], how='left')
 
-    # 绘制折线图
-    plt.plot(x, y, marker='o', linestyle='-', color='b', label='Add Score Zero Match Score Rate')
+    # # 选择最终需要的列
+    # final_columns = [
+    #     'wk', 'battle_number', 
+    #     'add_score_zero_rate_a', 'add_score_zero_match_score_rate_a', 'strength_a', 'score_a',
+    #     'add_score_zero_rate_b', 'add_score_zero_match_score_rate_b', 'strength_b', 'score_b'
+    # ]
+    # final_summary_df = final_summary_df[final_columns]
 
-    # 添加散点图以突出显示每个点
-    plt.scatter(x, y, color='r')
+    # print('final summary result')
+    # print(final_summary_df[final_summary_df['battle_number'] == 0])
 
-    # 添加标签和标题
-    plt.xlabel('Strength')
-    plt.ylabel('Add Score Zero Match Score Rate')
-    plt.title('Add Score Zero Match Score Rate by Strength')
-    plt.legend()
-
-    # 网格线
-    plt.grid(True)
-
-    # 保存图像
-    plt.savefig('/src/data/20250121result.png')
+    # # 将结果保存到文件
+    # final_summary_df.to_csv('/src/data/20250121final_summary.csv', index=False)
 
 # 数据整理
 def prepareDataForTrain(recalculate=False):
-    result_a_path = '/src/data/20250121result_df_a.csv'
-    result_b_path = '/src/data/20250121result_df_b.csv'
-    summary_path = '/src/data/20250121final_summary.csv'
+    result_a_path = '/src/data/20250121result_df_a2.csv'
+    result_b_path = '/src/data/20250121result_df_b2.csv'
+    summary_path = '/src/data/20250121final_summary2.csv'
 
-    filename = '/src/data/20250121_combined_result.csv'
+    filename = '/src/data/20250121_combined_result2.csv'
 
     if recalculate or not (os.path.exists(filename)):
         # 读取数据
@@ -395,7 +337,7 @@ def prepareDataForTrain(recalculate=False):
         # 计算 add_score_sum 和出战状态
         combinedDf['is_active'] = (combinedDf['add_score_sum'] > 0).astype(int)
 
-        combinedDf.to_csv('/src/data/20250121_combined_result_all.csv', index=False)
+        combinedDf.to_csv('/src/data/20250121_combined_result_all2.csv', index=False)
 
         # 选择需要的列
         columns_needed = ['uid', 'wk', 'match_score', 'match_score_rate', 'strength_percentile', 'add_score_sum', 'is_active', 'team', 'strength']
@@ -494,13 +436,13 @@ def decisionTreeClassification(recalculate=False):
     plt.title('Model Performance by Strength Percentile')
     plt.legend()
     plt.grid(True)  # 网格线
-    plt.savefig('/src/data/20250121dt.png')  # 保存图像
+    plt.savefig('/src/data/20250121dt2.png')  # 保存图像
 
     # 可视化决策树
     plt.figure(figsize=(20, 20))
     plot_tree(clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'])
     plt.title('Decision Tree Visualization')
-    plt.savefig('/src/data/20250121dt_tree.png')  # 保存决策树图像
+    plt.savefig('/src/data/20250121dt_tree2.png')  # 保存决策树图像
 
 
 if __name__ == "__main__":
@@ -509,5 +451,5 @@ if __name__ == "__main__":
     # debug2()
     # analyze()
     # prepareData()
-    # decisionTreeClassification()
+    decisionTreeClassification()
     
