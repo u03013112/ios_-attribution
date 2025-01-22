@@ -1,12 +1,8 @@
-# 用户活跃度调查 & 预测
+# 与activity.py 区别
+# 逻辑整理，取出不必要的逻辑
 
-# 1. 用户活跃度重要程度占比
-# 先认为目前的战斗力统计
-# 然后按照用户在队伍中的战斗力占比作为 期望贡献占比
-# 再统计实际在比赛中的得分占比，作为实际贡献占比
-# 找到主要贡献差异
-# 比如：活跃度为0的用户数占比，战斗力占比
-# 要再按照目前队伍匹配分
+# 用重新计算的个人匹配分替代之前方案中算好的个人匹配分
+# 额外的，计算按照新算出来的用户活性，重新计算个人匹配分，然后再按照简单公式计算队伍匹配分。再给队伍匹配分进行评分。
 
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
@@ -77,30 +73,6 @@ def getData():
 
     return df
 
-def prepareData(df, N):
-    # 目标变量
-    y = df['is_quality']
-
-    # 特征变量，排除指定的列
-    columns_to_exclude = [
-        'alliance_a_id', 'group_a', 'strengthinfo_a', 'strengthinfo2_a', 'score_a',
-        'alliance_b_id', 'group_b', 'strengthinfo_b', 'strengthinfo2_b', 'score_b', 'is_win', 'is_quality',
-    ]
-
-    # 只保留前 N 名的数据
-    columns_to_include = ['wk', 'strength_a','strength_b','score_a','score_b']
-    for col in df.columns:
-        if col not in columns_to_exclude:
-            match = re.search(r'_(\d+)$', col)
-            if match:
-                index = int(match.group(1))
-                if index <= N:
-                    columns_to_include.append(col)
-
-    x = df[columns_to_include]
-
-    return x, y
-
 def getAddScoreData():
     # filename = '沙漠风暴 add_score_20250120.csv'
     filename = '/src/data/add_score_2024-11-25_2025-01-20.csv'
@@ -113,8 +85,8 @@ def getAddScoreData():
 
 
 def main():
-    # filename = '/src/data/20250117a2_data_for_test.csv'
-    filename = '/src/data/20250117a2_data.csv'
+    filename = '/src/data/20250117a2_data_for_test.csv'
+    # filename = '/src/data/20250117a2_data.csv'
     if os.path.exists(filename):
         print('已存在%s' % filename)
         df = pd.read_csv(filename)
@@ -124,13 +96,13 @@ def main():
 
     df['wk'] = pd.to_datetime(df['wk'])
     N = 30  # 只使用前 N 名的数据
-    x, y = prepareData(df, N)
+    x = df.copy()
 
     # x.to_csv('/src/data/x.csv', index=False)
     columns_to_save = ['wk','strength_a', 'strength_b', 'score_a', 'score_b']
     for i in range(1, N + 1):
-        columns_to_save += [f'strengthinfo_a_uid_{i}', f'strengthinfo_a_match_score_{i}']
-        columns_to_save += [f'strengthinfo_b_uid_{i}', f'strengthinfo_b_match_score_{i}']
+        columns_to_save += [f'strengthinfo_a_uid_{i}', f'strengthinfo_a_match_score_{i}', f'strengthinfo_a_live_rate_{i}', f'strengthinfo_a_attribute1_{i}',f'strengthinfo_a_attribute2_{i}',f'strengthinfo_a_attribute3_{i}',f'strengthinfo_a_attribute4_{i}']
+        columns_to_save += [f'strengthinfo_b_uid_{i}', f'strengthinfo_b_match_score_{i}', f'strengthinfo_b_live_rate_{i}', f'strengthinfo_b_attribute1_{i}',f'strengthinfo_b_attribute2_{i}',f'strengthinfo_b_attribute3_{i}',f'strengthinfo_b_attribute4_{i}']
 
     x = x[columns_to_save]
     # 每一行是一场战斗，添加一列战斗编号
@@ -140,27 +112,52 @@ def main():
     strengthADf0 = x[['wk', 'battle_number', 'strength_a', 'score_a']]
     strengthADf1 = x[['wk', 'battle_number']]
     for i in range(1, N + 1):
-        strengthADf1 = pd.concat([strengthADf1, x[[f'strengthinfo_a_uid_{i}', f'strengthinfo_a_match_score_{i}']]], axis=1)
+        strengthADf1 = pd.concat([strengthADf1, x[[f'strengthinfo_a_uid_{i}', f'strengthinfo_a_match_score_{i}', f'strengthinfo_a_live_rate_{i}', f'strengthinfo_a_attribute1_{i}',f'strengthinfo_a_attribute2_{i}',f'strengthinfo_a_attribute3_{i}',f'strengthinfo_a_attribute4_{i}']]], axis=1)
     
     # print('before melt (a 队)')
     # print(strengthADf1.head())
     
     # 将 uid 和 match_score 分别 melt 成两张表
     uid_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_uid_{i}' for i in range(1, N + 1)], 
-                       var_name='variable', value_name='uid')
-    score_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_match_score_{i}' for i in range(1, N + 1)], 
-                         var_name='variable', value_name='match_score')
+                    var_name='variable', value_name='uid')
+    # match_score_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_match_score_{i}' for i in range(1, N + 1)],
+    #                 var_name='variable', value_name='match_score_old')
+    # live_rate_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_live_rate_{i}' for i in range(1, N + 1)],
+    #                 var_name='variable', value_name='live_rate')
+    att1_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_attribute1_{i}' for i in range(1, N + 1)], 
+                    var_name='variable', value_name='attribute1')
+    att2_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_attribute2_{i}' for i in range(1, N + 1)],
+                    var_name='variable', value_name='attribute2')
+    att3_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_attribute3_{i}' for i in range(1, N + 1)],
+                    var_name='variable', value_name='attribute3')
+    att4_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_attribute4_{i}' for i in range(1, N + 1)],
+                    var_name='variable', value_name='attribute4')
     
     # 提取 number
     uid_df_a['number'] = uid_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
-    score_df_a['number'] = score_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    # match_score_df_a['number'] = match_score_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    # live_rate_df_a['number'] = live_rate_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    att1_df_a['number'] = att1_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    att2_df_a['number'] = att2_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    att3_df_a['number'] = att3_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
+    att4_df_a['number'] = att4_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
     
     # 删除无用列
     uid_df_a = uid_df_a.drop(columns=['variable'])
-    score_df_a = score_df_a.drop(columns=['variable'])
+    # match_score_df_a = match_score_df_a.drop(columns=['variable'])
+    # live_rate_df_a = live_rate_df_a.drop(columns=['variable'])
+    att1_df_a = att1_df_a.drop(columns=['variable'])
+    att2_df_a = att2_df_a.drop(columns=['variable'])
+    att3_df_a = att3_df_a.drop(columns=['variable'])
+    att4_df_a = att4_df_a.drop(columns=['variable'])
     
     # 合并
-    result_df_a = pd.merge(uid_df_a, score_df_a, on=['wk', 'battle_number', 'number'])
+    result_df_a = pd.merge(uid_df_a, att1_df_a, on=['wk', 'battle_number', 'number'])
+    # result_df_a = pd.merge(result_df_a, match_score_df_a, on=['wk', 'battle_number', 'number'])
+    # result_df_a = pd.merge(result_df_a, live_rate_df_a, on=['wk', 'battle_number', 'number'])
+    result_df_a = pd.merge(result_df_a, att2_df_a, on=['wk', 'battle_number', 'number'])
+    result_df_a = pd.merge(result_df_a, att3_df_a, on=['wk', 'battle_number', 'number'])
+    result_df_a = pd.merge(result_df_a, att4_df_a, on=['wk', 'battle_number', 'number'])
     
     addScoreDf = getAddScoreData()
     addScoreDf = addScoreDf.groupby(['wk', 'uid']).agg({'add_score_sum': 'sum'}).reset_index()
@@ -168,56 +165,105 @@ def main():
     result_df_a = pd.merge(result_df_a, addScoreDf, on=['wk', 'uid'], how='left')
     result_df_a['add_score_sum'] = result_df_a['add_score_sum'].fillna(0)
 
-    result_df_a.to_csv('/src/data/20250121result_df_a.csv', index=False)
+    # 计算新的 match_score
+    result_df_a['match_score'] = (result_df_a['attribute1'] * 1 + result_df_a['attribute2'] * 0.6 + result_df_a['attribute3'] * 0.3 + result_df_a['attribute4'] * 0.1) / 1000
+    # result_df_a['match_score2'] = result_df_a['match_score_old'] / result_df_a['live_rate']
 
-    # print('result_df_a')
+    # print('重排序前 result_df_a:')
     # print(result_df_a[result_df_a['battle_number'] == 0])
+    # print(result_df_a[result_df_a['battle_number'] == 1])
+    # 按照wk，battle_number 分组，组内按照 match_score 降序排序，重排 number，并将uid == 0 的行删除
+    result_df_a = result_df_a.sort_values(by=['wk', 'battle_number', 'match_score'], ascending=[True, True, False])
+    result_df_a['number'] = result_df_a.groupby(['wk', 'battle_number']).cumcount() + 1
+    result_df_a = result_df_a[result_df_a['uid'] != 0]
 
-    # 重新将数据汇总成每个 wk + battle_number 一行：
-    # 按照 wk + battle_number 分组，计算每个分组的 add_score_sum == 0 的人数占比，记作 add_score_zero_rate
-    # 计算每个分组中 add_score_sum == 0 的 match_score 占比，记作 add_score_zero_match_score_rate
-    grouped_a = result_df_a.groupby(['wk', 'battle_number'])
-    summary_df_a = grouped_a.apply(lambda g: pd.Series({
-        'add_score_zero_rate_a': (g['add_score_sum'] == 0).mean(),
-        'add_score_zero_match_score_rate_a': g.loc[g['add_score_sum'] == 0, 'match_score'].sum() / g['match_score'].sum() if g['match_score'].sum() != 0 else 0
-    })).reset_index()
+    result_df_a.to_csv('/src/data/20250121result_df_a2.csv', index=False)
+    # print('result_df_a:')
+    # print(result_df_a[result_df_a['battle_number'] == 0])
+    # print(result_df_a[result_df_a['battle_number'] == 1])
+    
+    # # 重新将数据汇总成每个 wk + battle_number 一行：
+    # # 按照 wk + battle_number 分组，计算每个分组的 add_score_sum == 0 的人数占比，记作 add_score_zero_rate
+    # # 计算每个分组中 add_score_sum == 0 的 match_score 占比，记作 add_score_zero_match_score_rate
+    # grouped_a = result_df_a.groupby(['wk', 'battle_number'])
+    # summary_df_a = grouped_a.apply(lambda g: pd.Series({
+    #     'add_score_zero_rate_a': (g['add_score_sum'] == 0).mean(),
+    #     'add_score_zero_match_score_rate_a': g.loc[g['add_score_sum'] == 0, 'match_score'].sum() / g['match_score'].sum() if g['match_score'].sum() != 0 else 0
+    # })).reset_index()
 
-    summary_df_a = summary_df_a.merge(strengthADf0, on=['wk', 'battle_number'], how='left')
-    print('summary result (a 队)')
-    print(summary_df_a[summary_df_a['battle_number'] == 0])
+    # summary_df_a = summary_df_a.merge(strengthADf0, on=['wk', 'battle_number'], how='left')
+    # print('summary result (a 队)')
+    # print(summary_df_a[summary_df_a['battle_number'] == 0])
 
-        # 拆分 b 队部分
+    # 拆分 b 队部分
     strengthBDf0 = x[['wk', 'battle_number', 'strength_b', 'score_b']]
     strengthBDf1 = x[['wk', 'battle_number']]
     for i in range(1, N + 1):
-        strengthBDf1 = pd.concat([strengthBDf1, x[[f'strengthinfo_b_uid_{i}', f'strengthinfo_b_match_score_{i}']]], axis=1)
-    
-    # print('before melt (b 队)')
-    # print(strengthBDf1.head())
-    
+        strengthBDf1 = pd.concat([strengthBDf1, x[[f'strengthinfo_b_uid_{i}', f'strengthinfo_b_match_score_{i}', f'strengthinfo_b_live_rate_{i}', f'strengthinfo_b_attribute1_{i}',f'strengthinfo_b_attribute2_{i}',f'strengthinfo_b_attribute3_{i}',f'strengthinfo_b_attribute4_{i}']]], axis=1)
+
     # 将 uid 和 match_score 分别 melt 成两张表
     uid_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_uid_{i}' for i in range(1, N + 1)], 
-                       var_name='variable', value_name='uid')
-    score_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_match_score_{i}' for i in range(1, N + 1)], 
-                         var_name='variable', value_name='match_score')
-    
+                    var_name='variable', value_name='uid')
+    # match_score_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_match_score_{i}' for i in range(1, N + 1)],
+    #                 var_name='variable', value_name='match_score_old')
+    # live_rate_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_live_rate_{i}' for i in range(1, N + 1)],
+    #                 var_name='variable', value_name='live_rate')
+    att1_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_attribute1_{i}' for i in range(1, N + 1)], 
+                        var_name='variable', value_name='attribute1')
+    att2_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_attribute2_{i}' for i in range(1, N + 1)],
+                        var_name='variable', value_name='attribute2')
+    att3_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_attribute3_{i}' for i in range(1, N + 1)],
+                        var_name='variable', value_name='attribute3')
+    att4_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_attribute4_{i}' for i in range(1, N + 1)],
+                        var_name='variable', value_name='attribute4')
+
     # 提取 number
-    uid_df_b['number'] = uid_df_b['variable'].str.extract(r'_(\d+)$').astype(int)
-    score_df_b['number'] = score_df_b['variable'].str.extract(r'_(\d+)$').astype(int)
-    
+    uid_df_b['number'] = uid_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    # match_score_df_b['number'] = match_score_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    # live_rate_df_b['number'] = live_rate_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    att1_df_b['number'] = att1_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    att2_df_b['number'] = att2_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    att3_df_b['number'] = att3_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+    att4_df_b['number'] = att4_df_b['variable'].str.extract(r'_(\d+)').astype(int)
+
     # 删除无用列
     uid_df_b = uid_df_b.drop(columns=['variable'])
-    score_df_b = score_df_b.drop(columns=['variable'])
-    
+    # match_score_df_b = match_score_df_b.drop(columns=['variable'])
+    # live_rate_df_b = live_rate_df_b.drop(columns=['variable'])
+    att1_df_b = att1_df_b.drop(columns=['variable'])
+    att2_df_b = att2_df_b.drop(columns=['variable'])
+    att3_df_b = att3_df_b.drop(columns=['variable'])
+    att4_df_b = att4_df_b.drop(columns=['variable'])
+
     # 合并
-    result_df_b = pd.merge(uid_df_b, score_df_b, on=['wk', 'battle_number', 'number'])
-    
+    result_df_b = pd.merge(uid_df_b, att1_df_b, on=['wk', 'battle_number', 'number'])
+    # result_df_b = pd.merge(result_df_b, match_score_df_b, on=['wk', 'battle_number', 'number'])
+    # result_df_b = pd.merge(result_df_b, live_rate_df_b, on=['wk', 'battle_number', 'number'])
+    result_df_b = pd.merge(result_df_b, att2_df_b, on=['wk', 'battle_number', 'number'])
+    result_df_b = pd.merge(result_df_b, att3_df_b, on=['wk', 'battle_number', 'number'])
+    result_df_b = pd.merge(result_df_b, att4_df_b, on=['wk', 'battle_number', 'number'])
+
     result_df_b = pd.merge(result_df_b, addScoreDf, on=['wk', 'uid'], how='left')
     result_df_b['add_score_sum'] = result_df_b['add_score_sum'].fillna(0)
 
-    result_df_b.to_csv('/src/data/20250121result_df_b.csv', index=False)
-    # print('result_df_b')
-    # print(result_df_b[result_df_b['battle_number'] == 0])
+    # 计算新的 match_score
+    result_df_b['match_score'] = (result_df_b['attribute1'] * 1 + result_df_b['attribute2'] * 0.6 + result_df_b['attribute3'] * 0.3 + result_df_b['attribute4'] * 0.1) / 1000
+    # result_df_b['match_score2'] = result_df_b['match_score_old'] / result_df_b['live_rate']
+
+    print('重排序前 result_df_b:')
+    print(result_df_b[result_df_b['battle_number'] == 0])
+    
+
+    # 按照wk，battle_number 分组，组内按照 match_score 降序排序，重排 number，并将uid == 0 的行删除
+    result_df_b = result_df_b.sort_values(by=['wk', 'battle_number', 'match_score'], ascending=[True, True, False])
+    result_df_b['number'] = result_df_b.groupby(['wk', 'battle_number']).cumcount() + 1
+    result_df_b = result_df_b[result_df_b['uid'] != 0]
+
+    result_df_b.to_csv('/src/data/20250121result_df_b2.csv', index=False)
+
+    print('result_df_b')
+    print(result_df_b[result_df_b['battle_number'] == 0])
+    return
 
     # 重新将数据汇总成每个 wk + battle_number 一行：
     # 按照 wk + battle_number 分组，计算每个分组的 add_score_sum == 0 的人数占比，记作 add_score_zero_rate
@@ -458,10 +504,10 @@ def decisionTreeClassification(recalculate=False):
 
 
 if __name__ == "__main__":
-    # main()
+    main()
     # debug()
     # debug2()
     # analyze()
     # prepareData()
-    decisionTreeClassification()
+    # decisionTreeClassification()
     
