@@ -10,9 +10,10 @@
 
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
@@ -255,6 +256,12 @@ def debug():
 
     print(df[df['battle_number'] == 262])
 
+def debug2():
+    filename = '/src/data/20250121_combined_result_all.csv'
+    df = pd.read_csv(filename)
+
+    print(df[df['battle_number'] == 262])
+
 def analyze():
     filename = '/src/data/20250121final_summary.csv'
     df = pd.read_csv(filename)
@@ -273,7 +280,7 @@ def analyze():
     print(result)
 
     # 画图，横轴为 strength，纵轴为 add_score_zero_match_score_rate 的均值
-    import matplotlib.pyplot as plt
+    
     # 将 Interval 的中点作为 x 轴的值
     x = [interval.mid for interval in result.index]
     y = result.values
@@ -301,54 +308,58 @@ def analyze():
     plt.savefig('/src/data/20250121result.png')
 
 # 数据整理
-def prepareData():
-    # 读取数据
-    aDf = pd.read_csv('/src/data/20250121result_df_a.csv')
-    bDf = pd.read_csv('/src/data/20250121result_df_b.csv')
-    summaryDf = pd.read_csv('/src/data/20250121final_summary.csv')
+def prepareDataForTrain(recalculate=False):
+    result_a_path = '/src/data/20250121result_df_a.csv'
+    result_b_path = '/src/data/20250121result_df_b.csv'
+    summary_path = '/src/data/20250121final_summary.csv'
 
-    # # 过滤出 wk == 2024-11-25 的部分
-    # aDf = aDf[aDf['wk'] == '2024-11-25']
-    # bDf = bDf[bDf['wk'] == '2024-11-25']
-    # summaryDf = summaryDf[summaryDf['wk'] == '2024-11-25']
+    filename = '/src/data/20250121_combined_result.csv'
 
-    # 添加 team 列
-    aDf['team'] = 'a'
-    bDf['team'] = 'b'
+    if recalculate or not (os.path.exists(filename)):
+        # 读取数据
+        aDf = pd.read_csv(result_a_path)
+        bDf = pd.read_csv(result_b_path)
+        summaryDf = pd.read_csv(summary_path)
 
-    # 合并 a 和 b 队的数据
-    combinedDf = pd.concat([aDf, bDf], axis=0)
+        # 添加 team 列
+        aDf['team'] = 'a'
+        bDf['team'] = 'b'
 
-    # 计算 match_score_rate
-    combinedDf['match_score_rate'] = combinedDf.groupby(['wk', 'battle_number', 'team'])['match_score'].transform(lambda x: x / x.sum())
+        # 合并 a 和 b 队的数据
+        combinedDf = pd.concat([aDf, bDf], axis=0)
 
-    # 计算 strength_percentile
-    # 先将 a 队和 b 队的 strength 数据合并在一起
-    strengthDf = summaryDf[['wk', 'battle_number', 'strength_a', 'strength_b']]
-    print('before melt')
-    print(strengthDf.head())
-    strengthDf = strengthDf.melt(id_vars=['wk', 'battle_number'], value_vars=['strength_a', 'strength_b'], 
-                                 var_name='team', value_name='strength')
-    print('after melt')
-    print(strengthDf.head())
-    strengthDf['team'] = strengthDf['team'].apply(lambda x: 'a' if x == 'strength_a' else 'b')
-    print('after team')
-    print(strengthDf.head())
+        # 计算 match_score_rate
+        combinedDf['match_score_rate'] = combinedDf.groupby(['wk', 'battle_number', 'team'])['match_score'].transform(lambda x: x / x.sum())
 
-    # 计算每个 wk 的 strength 分位数
-    strengthDf['strength_percentile'] = strengthDf.groupby('wk')['strength'].rank(pct=True)
+        # 计算 strength_percentile
+        # 先将 a 队和 b 队的 strength 数据合并在一起
+        strengthDf = summaryDf[['wk', 'battle_number', 'strength_a', 'strength_b']]
+        strengthDf = strengthDf.melt(id_vars=['wk', 'battle_number'], value_vars=['strength_a', 'strength_b'], 
+                                     var_name='team', value_name='strength')
+        strengthDf['team'] = strengthDf['team'].apply(lambda x: 'a' if x == 'strength_a' else 'b')
 
-    # 将 strength_percentile 合并到 combinedDf
-    combinedDf = combinedDf.merge(strengthDf[['wk', 'battle_number', 'team', 'strength_percentile', 'strength']], 
-                                  on=['wk', 'battle_number', 'team'], 
-                                  how='left')
+        # 计算每个 wk 的 strength 分位数
+        strengthDf['strength_percentile'] = strengthDf.groupby('wk')['strength'].rank(pct=True)
 
-    # 计算 add_score_sum 和出战状态
-    combinedDf['is_active'] = (combinedDf['add_score_sum'] > 0).astype(int)
+        # 将 strength_percentile 合并到 combinedDf
+        combinedDf = combinedDf.merge(strengthDf[['wk', 'battle_number', 'team', 'strength_percentile', 'strength']], 
+                                      on=['wk', 'battle_number', 'team'], 
+                                      how='left')
 
-    # 选择需要的列
-    columns_needed = ['uid', 'wk', 'match_score', 'match_score_rate', 'strength_percentile', 'add_score_sum', 'is_active', 'team', 'strength']
-    result_df = combinedDf[columns_needed]
+        # 计算 add_score_sum 和出战状态
+        combinedDf['is_active'] = (combinedDf['add_score_sum'] > 0).astype(int)
+
+        combinedDf.to_csv('/src/data/20250121_combined_result_all.csv', index=False)
+
+        # 选择需要的列
+        columns_needed = ['uid', 'wk', 'match_score', 'match_score_rate', 'strength_percentile', 'add_score_sum', 'is_active', 'team', 'strength']
+        result_df = combinedDf[columns_needed]
+
+        # 保存结果
+        result_df.to_csv(filename, index=False)
+    else:
+        # 直接从记录结果中获取结果
+        result_df = pd.read_csv(filename)
 
     # 拆分成 x 和 y
     x = result_df[['match_score_rate', 'strength_percentile']]
@@ -360,9 +371,8 @@ def prepareData():
 
     return x, y
 
-def decisionTreeClassification():
-    # 调用 prepareData 函数
-    x, y = prepareData()
+def decisionTreeClassification(recalculate=False):
+    x, y = prepareDataForTrain(recalculate)
 
     # 检查并处理 NaN 值
     if x.isnull().values.any():
@@ -376,7 +386,6 @@ def decisionTreeClassification():
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
     # 创建决策树分类器
-    # clf = DecisionTreeClassifier(random_state=42)
     clf = DecisionTreeClassifier(random_state=0, max_depth=3, min_samples_split=10, min_samples_leaf=5, criterion='gini')
 
     # 训练模型
@@ -396,10 +405,58 @@ def decisionTreeClassification():
     print(f'Recall: {recall:.2f}')
     print(f'F1 Score: {f1:.2f}')
 
+    # 将测试集结果与原始数据合并
+    x_test['y_true'] = y_test
+    x_test['y_pred'] = y_pred
+
+    # 按照 strength_percentile 分组计算每组的准确率、精确率、召回率和 F1 分数
+    x_test['strength_group'] = pd.cut(x_test['strength_percentile'], bins=np.arange(0, 1.05, 0.05), include_lowest=True)
+    grouped = x_test.groupby('strength_group')
+    
+    accuracy_by_group = grouped.apply(lambda g: accuracy_score(g['y_true'], g['y_pred']))
+    precision_by_group = grouped.apply(lambda g: precision_score(g['y_true'], g['y_pred'], zero_division=0))
+    recall_by_group = grouped.apply(lambda g: recall_score(g['y_true'], g['y_pred'], zero_division=0))
+    f1_by_group = grouped.apply(lambda g: f1_score(g['y_true'], g['y_pred'], zero_division=0))
+
+    # 绘制图表
+    x0 = [interval.mid for interval in accuracy_by_group.index]
+    y_accuracy = accuracy_by_group.values
+    y_precision = precision_by_group.values
+    y_recall = recall_by_group.values
+    y_f1 = f1_by_group.values
+
+    plt.figure(figsize=(15, 6))  # 设置图的尺寸
+
+    plt.plot(x0, y_accuracy, marker='o', linestyle='-', color='b', label='Accuracy')
+    plt.plot(x0, y_precision, marker='o', linestyle='-', color='g', label='Precision')
+    plt.plot(x0, y_recall, marker='o', linestyle='-', color='r', label='Recall')
+    plt.plot(x0, y_f1, marker='o', linestyle='-', color='c', label='F1 Score')
+
+    plt.scatter(x0, y_accuracy, color='b')
+    plt.scatter(x0, y_precision, color='g')
+    plt.scatter(x0, y_recall, color='r')
+    plt.scatter(x0, y_f1, color='c')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Score')
+    plt.title('Model Performance by Strength Percentile')
+    plt.legend()
+    plt.grid(True)  # 网格线
+    plt.savefig('/src/data/20250121dt.png')  # 保存图像
+
+    # 可视化决策树
+    plt.figure(figsize=(20, 20))
+    plot_tree(clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'])
+    plt.title('Decision Tree Visualization')
+    plt.savefig('/src/data/20250121dt_tree.png')  # 保存决策树图像
+
+
 if __name__ == "__main__":
     # main()
     # debug()
+    
+    debug2()
     # analyze()
     # prepareData()
-    decisionTreeClassification()
+    # decisionTreeClassification()
     
