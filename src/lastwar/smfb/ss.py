@@ -134,5 +134,225 @@ group by 1,2
     print('save to /src/data/add_score_%s_%s.csv'%(startDayStr,endDayStr))
     return df
 
+# 获取用户的个人积分历史数据，因为要检查过去历史3场的个人积分，所以要从2024-11-04开始
+def getIndividualScoreTotalData(startDayStr='2024-11-04',endDayStr='2025-01-20'):
+    sql = f'''
+WITH ranked_data AS (
+    SELECT 
+        "#account_id",
+        date_trunc('week', "#event_time") AS wk,
+        sum(individual_score_total) AS individual_score_total,
+        ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
+    FROM ta.v_event_15 
+    WHERE 
+        "$part_event" = 's_dragon_battle_user_score' AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+    GROUP BY "#account_id", date_trunc('week', "#event_time")
+)
+SELECT 
+    "#account_id",
+    wk,
+    individual_score_total,
+    COALESCE(
+        AVG(individual_score_total) OVER (
+            PARTITION BY "#account_id" 
+            ORDER BY rn 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ), 0
+    ) AS individual_score_total_mean
+FROM ranked_data
+ORDER BY "#account_id", wk;
+'''
+    lines = ssSql(sql=sql)
+
+    print('lines:',len(lines))
+    print(lines[:10])
+
+    data = []
+    for line in lines:
+        if line == '':
+            continue
+        j = json.loads(line)
+        data.append(j)
+
+    df = pd.DataFrame(data,columns=["#account_id","wk","individual_score_total","individual_score_total_mean"])
+    df.to_csv(f'/src/data/individual_score_total_{startDayStr}_{endDayStr}.csv',index=False)
+    print('save to /src/data/individual_score_total_%s_%s.csv'%(startDayStr,endDayStr))
+    return df
+
+
+def getLoginData(startDayStr='2024-11-04',endDayStr='2025-01-20'):
+    sql = f'''
+WITH base_data AS (
+    SELECT 
+        "#account_id",
+        date_trunc('week', "#event_time") AS wk,  -- 保持周一
+        date_trunc('week', "#event_time") + INTERVAL '3' DAY AS thursday,  -- 计算周四
+        "#event_time"
+    FROM v_event_15 
+    WHERE "$part_event" = 's_login' AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+)
+SELECT 
+    "#account_id",
+    wk,
+    COUNT(CASE 
+        WHEN "#event_time" >= thursday - INTERVAL '3' DAY 
+        AND "#event_time" < thursday
+        THEN 1 
+        ELSE NULL 
+    END) AS "3day_login_count",
+    COUNT(CASE 
+        WHEN "#event_time" >= thursday - INTERVAL '7' DAY 
+        AND "#event_time" < thursday
+        THEN 1 
+        ELSE NULL 
+    END) AS "7day_login_count"
+FROM base_data
+GROUP BY "#account_id", wk
+ORDER BY "#account_id", wk;
+'''
+
+    lines = ssSql(sql=sql)
+
+    print('lines:',len(lines))
+    print(lines[:10])
+
+    data = []
+    for line in lines:
+        if line == '':
+            continue
+        j = json.loads(line)
+        data.append(j)
+
+    df = pd.DataFrame(data,columns=["#account_id","wk","3day_login_count","7day_login_count"])
+    df.to_csv(f'/src/data/login_{startDayStr}_{endDayStr}.csv',index=False)
+
+# 沙漠风暴 目前线上计算 是否出站数据获得
+# TODO：7日登录次数，目前统计有误，和3日登陆的一致，需要修正
+
+def getData(startDayStr='2024-11-04',endDayStr='2025-01-20'):
+    sql = f'''
+WITH wk_account AS (
+    SELECT
+        date_trunc('week', "#event_time") AS wk,
+        key AS "#account_id",
+        strength
+    FROM ta.v_event_15,
+        UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
+    WHERE
+        "$part_event" = 'alliance_dragon_battle_match'
+        AND  "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+),
+add_score_data AS (
+    SELECT 
+        "#account_id",
+        date_trunc('week', "#event_time") AS wk,
+        SUM(add_score) AS add_score_sum
+    FROM ta.v_event_15 
+    WHERE 
+        "$part_event" = 's_desertStorm_point'
+        AND  "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+        AND add_score > 0
+        AND minute("#event_time") <= 15
+    GROUP BY "#account_id", date_trunc('week', "#event_time")
+),
+ranked_data AS (
+    SELECT 
+        "#account_id",
+        date_trunc('week', "#event_time") AS wk,
+        SUM(individual_score_total) AS individual_score_total,
+        ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
+    FROM ta.v_event_15 
+    WHERE 
+        "$part_event" = 's_dragon_battle_user_score' 
+        AND  "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+    GROUP BY "#account_id", date_trunc('week', "#event_time")
+),
+individual_score_mean AS (
+    SELECT 
+        "#account_id",
+        wk,
+        individual_score_total,
+        COALESCE(
+            AVG(individual_score_total) OVER (
+                PARTITION BY "#account_id" 
+                ORDER BY rn 
+                ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+            ), 0
+        ) AS individual_score_total_mean
+    FROM ranked_data
+),
+base_data AS (
+    SELECT 
+        "#account_id",
+        date_trunc('week', "#event_time") AS wk,  -- 保持周一
+        date_trunc('week', "#event_time") + INTERVAL '3' DAY AS thursday,  -- 计算周四
+        "#event_time"
+    FROM v_event_15 
+    WHERE "$part_event" = 's_login' AND  "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
+),
+login_counts AS (
+    SELECT 
+        "#account_id",
+        wk,
+        COUNT(CASE 
+            WHEN "#event_time" >= thursday - INTERVAL '3' DAY 
+            AND "#event_time" < thursday
+            THEN 1 
+            ELSE NULL 
+        END) AS "3day_login_count",
+        COUNT(CASE 
+            WHEN "#event_time" >= thursday - INTERVAL '7' DAY 
+            AND "#event_time" < thursday
+            THEN 1 
+            ELSE NULL 
+        END) AS "7day_login_count"
+    FROM base_data
+    GROUP BY "#account_id", wk
+)
+SELECT
+    w.wk,
+    w."#account_id",
+    w.strength,
+    COALESCE(a.add_score_sum, 0) AS add_score_sum,
+    CASE 
+        WHEN COALESCE(a.add_score_sum, 0) > 0 THEN 1
+        ELSE 0
+    END AS activity,
+    COALESCE(i.individual_score_total_mean, 0) AS individual_score_total_mean,
+    COALESCE(l."3day_login_count", 0) AS "3day_login_count",
+    COALESCE(l."7day_login_count", 0) AS "7day_login_count"
+FROM wk_account w
+LEFT JOIN add_score_data a
+ON w.wk = a.wk AND w."#account_id" = a."#account_id"
+LEFT JOIN individual_score_mean i
+ON w.wk = i.wk AND w."#account_id" = i."#account_id"
+LEFT JOIN login_counts l
+ON w.wk = l.wk AND w."#account_id" = l."#account_id"
+ORDER BY w."#account_id", w.wk;
+    '''
+
+    lines = ssSql(sql=sql)
+
+    print('lines:',len(lines))
+    print(lines[:10])
+
+    data = []
+
+    for line in lines:
+        if line == '':
+            continue
+        j = json.loads(line)
+        data.append(j)
+
+    df = pd.DataFrame(data,columns=["wk","#account_id","strength","add_score_sum","activity","individual_score_total_mean","3day_login_count","7day_login_count"])
+    df.to_csv(f'/src/data/20250121smfb_data_20241125_20250120.csv',index=False)
+
+
 if __name__ == '__main__':
-    getAddScoreData(startDayStr='2024-11-25',endDayStr='2025-01-20')
+    # getAddScoreData(startDayStr='2024-11-25',endDayStr='2025-01-20')
+
+    # getIndividualScoreTotalData(startDayStr='2024-11-04',endDayStr='2025-01-20')
+
+    # getLoginData(startDayStr='2024-11-04',endDayStr='2025-01-20')
+
+    getData(startDayStr='2024-11-25',endDayStr='2025-01-20')

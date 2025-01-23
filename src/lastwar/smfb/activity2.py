@@ -107,9 +107,10 @@ def main():
     x = x[columns_to_save]
     # 每一行是一场战斗，添加一列战斗编号
     x['battle_number'] = range(len(x))
-    x[['wk', 'battle_number','strength_a', 'strength_b']].to_csv('/src/data/20250121final_summary2.csv', index=False)
+    x[['wk', 'battle_number','strength_a', 'strength_b', 'score_a', 'score_b']].to_csv('/src/data/20250121final_summary2.csv', index=False)
+    print('save to /src/data/20250121final_summary2.csv')
 
-        # 拆分 a 队部分
+    # 拆分 a 队部分
     strengthADf0 = x[['wk', 'battle_number', 'strength_a', 'score_a']]
     strengthADf1 = x[['wk', 'battle_number']]
     for i in range(1, N + 1):
@@ -444,12 +445,263 @@ def decisionTreeClassification(recalculate=False):
     plt.title('Decision Tree Visualization')
     plt.savefig('/src/data/20250121dt_tree2.png')  # 保存决策树图像
 
+    # 保存模型
+    import joblib
+    joblib.dump(clf, '/src/data/20250121dt_model2.pkl')
+
+def prepareDataForTest(recalculate=False):
+    result_a_path = '/src/data/20250121result_df_a2.csv'
+    result_b_path = '/src/data/20250121result_df_b2.csv'
+    summary_path = '/src/data/20250121final_summary2.csv'
+
+    filename = '/src/data/20250121_combined_result2.csv'
+
+    if recalculate or not (os.path.exists(filename)):
+        # 读取数据
+        aDf = pd.read_csv(result_a_path)
+        bDf = pd.read_csv(result_b_path)
+        summaryDf = pd.read_csv(summary_path)
+
+        # 添加 team 列
+        aDf['team'] = 'a'
+        bDf['team'] = 'b'
+
+        # 合并 a 和 b 队的数据
+        combinedDf = pd.concat([aDf, bDf], axis=0)
+
+        # 计算 match_score_rate
+        combinedDf['match_score_rate'] = combinedDf.groupby(['wk', 'battle_number', 'team'])['match_score'].transform(lambda x: x / x.sum())
+
+        # 计算 strength_percentile
+        # 先将 a 队和 b 队的 strength 数据合并在一起
+        strengthDf = summaryDf[['wk', 'battle_number', 'strength_a', 'strength_b']]
+        strengthDf = strengthDf.melt(id_vars=['wk', 'battle_number'], value_vars=['strength_a', 'strength_b'], 
+                                    var_name='team', value_name='strength')
+        strengthDf['team'] = strengthDf['team'].apply(lambda x: 'a' if x == 'strength_a' else 'b')
+
+        # 计算每个 wk 的 strength 分位数
+        strengthDf['strength_percentile'] = strengthDf.groupby('wk')['strength'].rank(pct=True)
+
+        # 将 strength_percentile 合并到 combinedDf
+        combinedDf = combinedDf.merge(strengthDf[['wk', 'battle_number', 'team', 'strength_percentile', 'strength']], 
+                                    on=['wk', 'battle_number', 'team'], 
+                                    how='left')
+
+        # 计算 add_score_sum 和出战状态
+        combinedDf['is_active'] = (combinedDf['add_score_sum'] > 0).astype(int)
+
+        combinedDf.to_csv('/src/data/20250121_combined_result_all2.csv', index=False)
+
+        # 选择需要的列
+        columns_needed = ['uid', 'wk', 'match_score', 'match_score_rate', 'strength_percentile', 'add_score_sum', 'is_active', 'team', 'strength']
+        result_df = combinedDf[columns_needed]
+
+        # 保存结果
+        result_df.to_csv(filename, index=False)
+    else:
+        # 直接从记录结果中获取结果
+        result_df = pd.read_csv(filename)
+
+    # 
+    # print('去除 uid 为 0 的数据')
+    # print('去除前：',len(result_df))
+    # result_df = result_df[result_df['uid'] != 0]
+    # print('去除后：',len(result_df))
+
+    # print('result_df 中包含的wk:')
+    # print(result_df.sort_values(['wk']).groupby('wk').size())
+
+    # 将 wk >= '2024-12-30' 的数据作为测试数据
+    train_df = result_df[result_df['wk'] < '2024-12-30']
+    test_df = result_df[result_df['wk'] >= '2024-12-30']
+    print('train_df:', len(train_df))
+    print('test_df:', len(test_df))
+
+    # x 中要保留更多信息，以便后续分析
+
+    trainX = train_df[['wk', 'uid', 'match_score_rate', 'strength_percentile']]
+    trainY = train_df[['wk', 'uid','is_active']]
+
+    testX = test_df[['wk', 'uid', 'match_score_rate', 'strength_percentile']]
+    testY = test_df[['wk', 'uid','is_active']]
+
+    return trainX, trainY, testX, testY
+
+
+def test():
+    # 需要数据
+    # wk，battle_number，score_a，score_b
+    # 用score_a，score_b 计算是否质量局，即 (大的队伍的score - 小的队伍的score) / (小的队伍的score) < 1
+    # is_quality 是质量局的标志，1 为质量局，0 为非质量局
+    filename = '/src/data/20250121final_summary2.csv'
+    df = pd.read_csv(filename)
+    df['bigger_score'] = df[['score_a', 'score_b']].max(axis=1)
+    df['smaller_score'] = df[['score_a', 'score_b']].min(axis=1)
+    df['is_quality'] = ((df['bigger_score'] - df['smaller_score']) / df['smaller_score']) < 1
+    df['is_quality'] = df['is_quality'].astype(int)
+    # print(df.head())
+
+    trainX, trainY, testX, testY = prepareDataForTest()
+
+    trainX = trainX.fillna(0)
+    testX = testX.fillna(0)
+
+    # 创建决策树分类器
+    clf = DecisionTreeClassifier(random_state=0, max_depth=2, min_samples_split=10, min_samples_leaf=5, criterion='gini')
+
+    # 训练模型
+    clf.fit(trainX[['match_score_rate', 'strength_percentile']], trainY[['is_active']])
+
+    # 预测
+    y_pred = clf.predict(testX[['match_score_rate', 'strength_percentile']])
+    # 计算准确率、精确率、召回率和 F1 分数
+    accuracy = accuracy_score(testY[['is_active']], y_pred)
+    precision = precision_score(testY[['is_active']], y_pred)
+    recall = recall_score(testY[['is_active']], y_pred)
+    f1 = f1_score(testY[['is_active']], y_pred)
+
+    print(f'Accuracy: {accuracy:.2f}')
+    print(f'Precision: {precision:.2f}')
+    print(f'Recall: {recall:.2f}')
+    print(f'F1 Score: {f1:.2f}')
+
+
+    # 将测试集结果与原始数据合并
+    testX['is_active'] = testY['is_active']
+    testX['y_true'] = testY['is_active']
+    testX['y_pred'] = y_pred
+
+    # print('testX:')
+    # print(testX.head())
+    testX.to_csv('/src/data/20250121testX2.csv', index=False)
+
+
+    # 按照 strength_percentile 分组计算每组的准确率、精确率、召回率和 F1 分数
+    testX['strength_group'] = pd.cut(testX['strength_percentile'], bins=np.arange(0, 1.05, 0.05), include_lowest=True)
+    grouped = testX.groupby('strength_group')
+    
+    accuracy_by_group = grouped.apply(lambda g: accuracy_score(g['y_true'], g['y_pred']))
+    precision_by_group = grouped.apply(lambda g: precision_score(g['y_true'], g['y_pred'], zero_division=0))
+    recall_by_group = grouped.apply(lambda g: recall_score(g['y_true'], g['y_pred'], zero_division=0))
+    f1_by_group = grouped.apply(lambda g: f1_score(g['y_true'], g['y_pred'], zero_division=0))
+
+    # 绘制图表
+    x0 = [interval.mid for interval in accuracy_by_group.index]
+    y_accuracy = accuracy_by_group.values
+    y_precision = precision_by_group.values
+    y_recall = recall_by_group.values
+    y_f1 = f1_by_group.values
+
+    plt.figure(figsize=(15, 6))  # 设置图的尺寸
+
+    plt.plot(x0, y_accuracy, marker='o', linestyle='-', color='b', label='Accuracy')
+    plt.plot(x0, y_precision, marker='o', linestyle='-', color='g', label='Precision')
+    plt.plot(x0, y_recall, marker='o', linestyle='-', color='r', label='Recall')
+    plt.plot(x0, y_f1, marker='o', linestyle='-', color='c', label='F1 Score')
+
+    plt.scatter(x0, y_accuracy, color='b')
+    plt.scatter(x0, y_precision, color='g')
+    plt.scatter(x0, y_recall, color='r')
+    plt.scatter(x0, y_f1, color='c')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Score')
+    plt.title('Model Performance by Strength Percentile')
+    plt.legend()
+    plt.grid(True)  # 网格线
+    plt.savefig('/src/data/20250121dt2.png')  # 保存图像
+
+    # 可视化决策树
+    plt.figure(figsize=(20, 20))
+    plot_tree(clf, filled=True, feature_names=['match_score_rate', 'strength_percentile'], class_names=['No', 'Yes'])
+    plt.title('Decision Tree Visualization')
+    plt.savefig('/src/data/20250121dt_tree2.png')  # 保存决策树图像
+
+
+    # 过滤，只要匹配分数前 10 的数据
+    N = 10
+
+    result_a_path = '/src/data/20250121result_df_a2.csv'
+    aDf = pd.read_csv(result_a_path)
+
+    aDf = aDf[aDf['wk'] >= '2024-12-30']
+    aDf = aDf[aDf['number'] <= N]
+
+    aDf = aDf.merge(testX[['wk','uid','y_pred', 'is_active']], on=['wk', 'uid'], how='left')
+    aDf = aDf[['wk', 'battle_number', 'uid','match_score','y_pred', 'is_active']]
+    
+    aDf['match_score2'] = aDf['match_score'] * aDf['y_pred']
+    # aDf['match_score2'] = aDf['match_score'] * aDf['is_active']
+
+    print(aDf[aDf['battle_number'] == 6])
+    aDfSummary = aDf.groupby(['wk', 'battle_number']).agg({'match_score2': 'sum'}).reset_index()
+    print('aDfSummary:')
+    print(aDfSummary.head())
+
+    result_b_path = '/src/data/20250121result_df_b2.csv'
+    bDf = pd.read_csv(result_b_path)
+    bDf = bDf[bDf['wk'] >= '2024-12-30']
+    bDf = bDf[bDf['number'] <= N]
+
+    bDf = bDf.merge(testX[['wk','uid','y_pred', 'is_active']], on=['wk', 'uid'], how='left')
+    bDf = bDf[['wk', 'battle_number', 'uid','match_score','y_pred', 'is_active']]
+    
+    bDf['match_score2'] = bDf['match_score'] * bDf['y_pred']
+    # bDf['match_score2'] = bDf['match_score'] * bDf['is_active']
+
+    print(bDf[bDf['battle_number'] == 6])
+    bDfSummary = bDf.groupby(['wk', 'battle_number']).agg({'match_score2': 'sum'}).reset_index()
+    print('bDfSummary:')
+    print(bDfSummary.head())
+    
+    df = df[df['wk'] >= '2024-12-30']
+    df = df[['wk', 'battle_number', 'is_quality']]
+    aDfSummary = aDfSummary[['wk', 'battle_number', 'match_score2']]
+    aDfSummary.rename(columns={'match_score2': 'strength_a'}, inplace=True)
+    df = df.merge(aDfSummary, on=['wk', 'battle_number'], how='left')
+    bDfSummary = bDfSummary[['wk', 'battle_number', 'match_score2']]
+    bDfSummary.rename(columns={'match_score2': 'strength_b'}, inplace=True)
+    df = df.merge(bDfSummary, on=['wk', 'battle_number'], how='left')
+
+    print('final result:')
+    print(df.head())
+    
+    # 按照decisionTreeClassification的模型，重新计算strength_a，strength_b
+    # 计算 两队的strength_diff_ratio 即 (大的队伍的strength - 小的队伍的strength) / (小的队伍的strength)
+    # 然后计算 每场比赛的 strength_diff_ratio 小于 N 的情况下，预测为质量局，预测的precision，recall，f1
+    # 其中N为 5% 到 25% 之间的值
+
+    df['bigger_strength'] = df[['strength_a', 'strength_b']].max(axis=1)
+    df['smaller_strength'] = df[['strength_a', 'strength_b']].min(axis=1)
+    df['strength_diff_ratio'] = (df['bigger_strength'] - df['smaller_strength']) / df['smaller_strength']
+
+    # 定义阈值范围
+    
+    thresholds = np.linspace(0, 1.5, 151)
+    result = []
+
+    for threshold in thresholds:
+        df['is_quality_pred'] = (df['strength_diff_ratio'] < threshold).astype(int)
+        precision = precision_score(df['is_quality'], df['is_quality_pred'])
+        recall = recall_score(df['is_quality'], df['is_quality_pred'])
+        f1 = f1_score(df['is_quality'], df['is_quality_pred'])
+        result.append([threshold, precision, recall, f1])
+
+    result = pd.DataFrame(result, columns=['threshold', 'precision', 'recall', 'f1'])
+    print('result:')
+    print(result)
+    result.to_csv('/src/data/20250121result2.csv', index=False)
+
+    
 
 if __name__ == "__main__":
-    main()
+    # main()
     # debug()
     # debug2()
     # analyze()
     # prepareData()
-    decisionTreeClassification()
+    # decisionTreeClassification()
+
+    test()
+    
     
