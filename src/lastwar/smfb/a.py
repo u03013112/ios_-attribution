@@ -342,6 +342,8 @@ def getCorrBetweenStrengthAndScore5():
     df = getStrengthAndScore()
     print('raw len(df):', len(df))
 
+    df = df[df['is_quality'] == 1]
+
     # 根据score_a和score_b确定胜负组
     win_group = df[df['score_a'] > df['score_b']][['strength_a', 'score_a']].rename(columns={'strength_a': 'strength', 'score_a': 'score'})
     win_group = win_group.append(df[df['score_b'] > df['score_a']][['strength_b', 'score_b']].rename(columns={'strength_b': 'strength', 'score_b': 'score'}))
@@ -510,8 +512,8 @@ def main():
     # getCorrBetweenStrengthAndScore2()
     # getCorrBetweenStrengthAndScore3()
     # getCorrBetweenStrengthAndScore4()
-    # getCorrBetweenStrengthAndScore5()
-    quality()
+    getCorrBetweenStrengthAndScore5()
+    # quality()
     # drawStrengthAndScore()
     # drawStrengthAndScore2()    
     # rocAndAUC()

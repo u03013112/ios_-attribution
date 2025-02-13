@@ -147,9 +147,9 @@ def main():
     
     # 将 uid 和 match_score 分别 melt 成两张表
     uid_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_uid_{i}' for i in range(1, N + 1)], 
-                       var_name='variable', value_name='uid')
+                    var_name='variable', value_name='uid')
     score_df_a = pd.melt(strengthADf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_a_match_score_{i}' for i in range(1, N + 1)], 
-                         var_name='variable', value_name='match_score')
+                    var_name='variable', value_name='match_score')
     
     # 提取 number
     uid_df_a['number'] = uid_df_a['variable'].str.extract(r'_(\d+)$').astype(int)
@@ -197,9 +197,9 @@ def main():
     
     # 将 uid 和 match_score 分别 melt 成两张表
     uid_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_uid_{i}' for i in range(1, N + 1)], 
-                       var_name='variable', value_name='uid')
+                    var_name='variable', value_name='uid')
     score_df_b = pd.melt(strengthBDf1, id_vars=['wk', 'battle_number'], value_vars=[f'strengthinfo_b_match_score_{i}' for i in range(1, N + 1)], 
-                         var_name='variable', value_name='match_score')
+                    var_name='variable', value_name='match_score')
     
     # 提取 number
     uid_df_b['number'] = uid_df_b['variable'].str.extract(r'_(\d+)$').astype(int)

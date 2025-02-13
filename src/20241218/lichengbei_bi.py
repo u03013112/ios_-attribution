@@ -135,7 +135,7 @@ select
     country,
     sum(usd) as cost,
     sum(d7) as revenue_d7
-from tmp_lw_cost_and_roi_by_day
+from view_lw_cost_and_roi_by_day_aos
 where
     install_day >= 20240401
 group by
@@ -154,7 +154,7 @@ select
     country,
     sum(usd) as cost,
     sum(d7) as revenue_d7
-from tmp_lw_cost_and_roi_by_day_ios
+from view_lw_cost_and_roi_by_day_ios
 where
     install_day >= 20240401
 group by

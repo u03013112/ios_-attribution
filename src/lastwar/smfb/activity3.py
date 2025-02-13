@@ -19,16 +19,25 @@ import matplotlib.pyplot as plt
 def main():
     df = pd.read_csv('/src/data/20250121smfb_data_20241125_20250120.csv')
 
+    # wkList = df['wk'].unique()
+    # print(wkList)
+    # return
     # 数据进行一定的裁剪
-    df = df[df['wk'] >= '2024-12-30']
+    df = df[(df['wk'] >= '2024-12-30') & (df['wk'] <= '2025-01-06')]
 
     df['y_pred'] = 1
     # 1.1
     df.loc[(df['individual_score_total_mean'] > 0) & (df['individual_score_total_mean'] < 5000),'y_pred'] = 0
+    print('1.1:',df['y_pred'].value_counts())
     # 1.2
     df.loc[(df['individual_score_total_mean'] >= 5000) & (df['7day_login_count'] == 0),'y_pred'] = 0
+    print('1.2:',df['y_pred'].value_counts())
     # 2.1
     df.loc[(df['individual_score_total_mean'] == 0) & (df['3day_login_count'] == 0),'y_pred'] = 0
+    print('2.1:',df['y_pred'].value_counts())
+
+    print(df['y_pred'].value_counts())
+    print(df['activity'].value_counts())
 
     # 计算整体准确率
     accuracy = accuracy_score(df['activity'], df['y_pred'])
@@ -72,5 +81,54 @@ def main():
     plt.grid(True)  # 网格线
     plt.savefig('/src/data/20250121dt3.png')  # 保存图像
 
+def debug():
+    # 读取第一个文件
+    df = pd.read_csv('/src/data/20250121smfb_data_20241125_20250120.csv')
+    df['wk'] = pd.to_datetime(df['wk'])
+    df = df[(df['wk'] >= '2024-12-30') & (df['wk'] <= '2025-01-06')]
+    df0 = df[['#account_id']]
+    df0['source'] = '0'
+    print('len(df0):',df0.shape[0])
+    print('number of unique #account_id:',df0['#account_id'].nunique())
+
+    # 读取第二个文件
+    result_a_path = '/src/data/20250121result_df_a2.csv'
+    result_b_path = '/src/data/20250121result_df_b2.csv'
+    
+    aDf = pd.read_csv(result_a_path)
+    bDf = pd.read_csv(result_b_path)
+
+    aDf = pd.concat([aDf, bDf], axis=0)
+
+    aDf['wk'] = pd.to_datetime(aDf['wk'])
+    aDf = aDf[(aDf['wk'] >= '2024-12-30') & (aDf['wk'] <= '2025-01-06')]
+    aDf.rename(columns={'uid': '#account_id'}, inplace=True)
+    dfa0 = aDf[['#account_id']]
+    dfa0['source'] = 'a'
+    print('len(dfa0):',dfa0.shape[0])
+    print('number of unique #account_id:',dfa0['#account_id'].nunique())
+
+    # 合并两个 DataFrame
+    merged_df = pd.merge(df0, dfa0, on='#account_id', how='outer', suffixes=('_df0', '_dfa0'))
+    # print("Merged DataFrame columns:", merged_df.columns)
+    # print(merged_df.head(10))
+
+    # 只在 df0 中存在的 #account_id
+    only_in_df0 = merged_df[merged_df['source_dfa0'].isnull()]
+    print('只在 df0 中的:', only_in_df0.shape[0])
+    print('例子:', only_in_df0.head(10))
+
+    # 只在 dfa0 中存在的 #account_id
+    only_in_dfa0 = merged_df[merged_df['source_df0'].isnull()]
+    print('只在 dfa0 中的:', only_in_dfa0.shape[0])
+    print('例子:', only_in_dfa0.head(10))
+
+    
+    
+
+
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    debug()

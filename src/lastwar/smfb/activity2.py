@@ -513,7 +513,7 @@ def prepareDataForTest(recalculate=False):
 
     # 将 wk >= '2024-12-30' 的数据作为测试数据
     train_df = result_df[result_df['wk'] < '2024-12-30']
-    test_df = result_df[result_df['wk'] >= '2024-12-30']
+    test_df = result_df[(result_df['wk'] >= '2024-12-30') & (result_df['wk'] <= '2025-01-06')]
     print('train_df:', len(train_df))
     print('test_df:', len(test_df))
 
@@ -692,7 +692,328 @@ def test():
     print(result)
     result.to_csv('/src/data/20250121result2.csv', index=False)
 
+
+# test2 往数据中加入更多特征
+def prepareDataForTest2(recalculate=False):
+    result_a_path = '/src/data/20250121result_df_a2.csv'
+    result_b_path = '/src/data/20250121result_df_b2.csv'
+    summary_path = '/src/data/20250121final_summary2.csv'
+
+    filename = '/src/data/20250121_combined_result2.csv'
+
+    if recalculate or not (os.path.exists(filename)):
+        # 读取数据
+        aDf = pd.read_csv(result_a_path)
+        bDf = pd.read_csv(result_b_path)
+        summaryDf = pd.read_csv(summary_path)
+
+        # 添加 team 列
+        aDf['team'] = 'a'
+        bDf['team'] = 'b'
+
+        # 合并 a 和 b 队的数据
+        combinedDf = pd.concat([aDf, bDf], axis=0)
+
+        # 计算 match_score_rate
+        combinedDf['match_score_rate'] = combinedDf.groupby(['wk', 'battle_number', 'team'])['match_score'].transform(lambda x: x / x.sum())
+
+        # 计算 strength_percentile
+        # 先将 a 队和 b 队的 strength 数据合并在一起
+        strengthDf = summaryDf[['wk', 'battle_number', 'strength_a', 'strength_b']]
+        strengthDf = strengthDf.melt(id_vars=['wk', 'battle_number'], value_vars=['strength_a', 'strength_b'], 
+                                    var_name='team', value_name='strength')
+        strengthDf['team'] = strengthDf['team'].apply(lambda x: 'a' if x == 'strength_a' else 'b')
+
+        # 计算每个 wk 的 strength 分位数
+        strengthDf['strength_percentile'] = strengthDf.groupby('wk')['strength'].rank(pct=True)
+
+        # 将 strength_percentile 合并到 combinedDf
+        combinedDf = combinedDf.merge(strengthDf[['wk', 'battle_number', 'team', 'strength_percentile', 'strength']], 
+                                    on=['wk', 'battle_number', 'team'], 
+                                    how='left')
+
+        # 计算 add_score_sum 和出战状态
+        combinedDf['is_active'] = (combinedDf['add_score_sum'] > 0).astype(int)
+
+        combinedDf.to_csv('/src/data/20250121_combined_result_all2.csv', index=False)
+
+        # 选择需要的列
+        columns_needed = ['uid', 'wk', 'match_score', 'match_score_rate', 'strength_percentile', 'add_score_sum', 'is_active', 'team', 'strength']
+        result_df = combinedDf[columns_needed]
+
+        # 保存结果
+        result_df.to_csv(filename, index=False)
+    else:
+        # 直接从记录结果中获取结果
+        result_df = pd.read_csv(filename)
+
+    result_df['wk'] = pd.to_datetime(result_df['wk'])
+    # print('result_df 中包含的wk:')
+    # print(result_df.sort_values(['wk']).groupby('wk').size())
+
+    newFilename = '/src/data/20250121smfb_data_20241125_20250120.csv'
+    newDf = pd.read_csv(newFilename)
+    newDf['wk'] = pd.to_datetime(newDf['wk'])
+    newDf.rename(columns={'#account_id': 'uid'}, inplace=True)
+    # print('newDf 中包含的wk:')
+    # print(newDf.sort_values(['wk']).groupby('wk').size())
+
+    result_df = result_df.merge(newDf[['wk', 'uid', 'individual_score_total_mean', '3day_login_count','7day_login_count']], on=['wk', 'uid'], how='left')
+
+    # 将 wk >= '2024-12-30' 的数据作为测试数据
+    train_df = result_df[result_df['wk'] < '2024-12-30']
+    test_df = result_df[(result_df['wk'] >= '2024-12-30') & (result_df['wk'] <= '2025-01-06')]
+    print('train_df:', len(train_df))
+    print('test_df:', len(test_df))
+
+    # x 中要保留更多信息，以便后续分析
+
+    trainX = train_df[['wk', 'uid', 'match_score_rate', 'strength_percentile', 'individual_score_total_mean', '3day_login_count','7day_login_count']]
+    trainY = train_df[['wk', 'uid','is_active']]
+
+    testX = test_df[['wk', 'uid', 'match_score_rate', 'strength_percentile', 'individual_score_total_mean', '3day_login_count','7day_login_count']]
+    testY = test_df[['wk', 'uid','is_active']]
+
+    return trainX, trainY, testX, testY
+
+
+
+def test2():
+    trainX, trainY, testX, testY = prepareDataForTest2()
+
+    trainX = trainX.fillna(0)
+    testX = testX.fillna(0)
+
+    # for test 简单验算一下现有规则的准确率
+    testX['y_true'] = testY['is_active']
+    testX['y_pred'] = 1
+    testX.loc[(testX['individual_score_total_mean'] > 0)
+            & (testX['individual_score_total_mean'] < 5000), 'y_pred'] = 0
+    testX.loc[(testX['individual_score_total_mean'] >= 5000) &
+            (testX['7day_login_count'] == 0), 'y_pred'] = 0
+    testX.loc[(testX['individual_score_total_mean'] == 0) &
+            (testX['3day_login_count'] == 0), 'y_pred'] = 0
     
+    accuracy = accuracy_score(testX['y_true'], testX['y_pred'])
+    precision = precision_score(testX['y_true'], testX['y_pred'])
+    recall = recall_score(testX['y_true'], testX['y_pred'])
+    f1 = f1_score(testX['y_true'], testX['y_pred'])
+    print('test2:')
+    print(f'Accuracy: {accuracy:.2f}')
+    print(f'Precision: {precision:.2f}')
+    print(f'Recall: {recall:.2f}')
+    print(f'F1 Score: {f1:.2f}')
+    return
+
+    # 创建决策树分类器
+    clf = DecisionTreeClassifier(random_state=0, max_depth=2, min_samples_split=10, min_samples_leaf=5, criterion='gini')
+
+    # 训练模型
+    clf.fit(trainX[['match_score_rate', 'strength_percentile','individual_score_total_mean', '3day_login_count','7day_login_count']], trainY[['is_active']])
+
+    # 预测
+    y_pred = clf.predict(testX[['match_score_rate', 'strength_percentile','individual_score_total_mean', '3day_login_count','7day_login_count']])
+    # 计算准确率、精确率、召回率和 F1 分数
+    accuracy = accuracy_score(testY[['is_active']], y_pred)
+    precision = precision_score(testY[['is_active']], y_pred)
+    recall = recall_score(testY[['is_active']], y_pred)
+    f1 = f1_score(testY[['is_active']], y_pred)
+
+    print(f'Accuracy: {accuracy:.2f}')
+    print(f'Precision: {precision:.2f}')
+    print(f'Recall: {recall:.2f}')
+    print(f'F1 Score: {f1:.2f}')
+
+
+def test3():
+    filename = '/src/data/20250121smfb_data_20241125_20250120.csv'
+    df = pd.read_csv(filename)
+    df['wk'] = pd.to_datetime(df['wk'])
+    df.rename(columns={'#account_id': 'uid'}, inplace=True)
+    
+    trainDf = df[df['wk'] < '2024-12-30']
+    testDf = df[(df['wk'] >= '2024-12-30') & (df['wk'] <= '2025-01-06')]
+
+    clf = DecisionTreeClassifier(random_state=0, max_depth=2, min_samples_split=10, min_samples_leaf=5, criterion='gini')
+
+    # 训练模型
+    clf.fit(trainDf[['individual_score_total_mean', '3day_login_count','7day_login_count']], trainDf[['activity']])
+    # 预测
+
+    y_pred = clf.predict(testDf[['individual_score_total_mean', '3day_login_count','7day_login_count']])
+
+    # 计算准确率、精确率、召回率和 F1 分数
+    accuracy = accuracy_score(testDf[['activity']], y_pred)
+    precision = precision_score(testDf[['activity']], y_pred)
+    recall = recall_score(testDf[['activity']], y_pred)
+    f1 = f1_score(testDf[['activity']], y_pred)
+
+    print(f'Accuracy: {accuracy:.2f}')
+    print(f'Precision: {precision:.2f}')
+    print(f'Recall: {recall:.2f}')
+    print(f'F1 Score: {f1:.2f}')
+
+
+    # 将测试集结果与原始数据合并
+    testX = testDf[['wk', 'uid', 'strength', 'activity']].copy()
+    testX.rename(columns={'activity': 'y_true'}, inplace=True)
+    testX['y_pred'] = y_pred
+
+    testX.to_csv('/src/data/20250121testX3.csv', index=False)
+
+    # 按照 strength 的分位数分组计算每组的准确率、精确率、召回率和 F1 分数
+    testX['strength_group'] = pd.qcut(testX['strength'], q=20, duplicates='drop')
+    grouped = testX.groupby('strength_group')
+    
+    accuracy_by_group = grouped.apply(lambda g: accuracy_score(g['y_true'], g['y_pred']))
+    precision_by_group = grouped.apply(lambda g: precision_score(g['y_true'], g['y_pred'], zero_division=0))
+    recall_by_group = grouped.apply(lambda g: recall_score(g['y_true'], g['y_pred'], zero_division=0))
+    f1_by_group = grouped.apply(lambda g: f1_score(g['y_true'], g['y_pred'], zero_division=0))
+
+    # 绘制图表
+    x0 = [interval.mid for interval in accuracy_by_group.index]
+    y_accuracy = accuracy_by_group.values
+    y_precision = precision_by_group.values
+    y_recall = recall_by_group.values
+    y_f1 = f1_by_group.values
+
+    plt.figure(figsize=(15, 6))  # 设置图的尺寸
+
+    plt.plot(x0, y_accuracy, marker='o', linestyle='-', color='b', label='Accuracy')
+    plt.plot(x0, y_precision, marker='o', linestyle='-', color='g', label='Precision')
+    plt.plot(x0, y_recall, marker='o', linestyle='-', color='r', label='Recall')
+    plt.plot(x0, y_f1, marker='o', linestyle='-', color='c', label='F1 Score')
+
+    plt.scatter(x0, y_accuracy, color='b')
+    plt.scatter(x0, y_precision, color='g')
+    plt.scatter(x0, y_recall, color='r')
+    plt.scatter(x0, y_f1, color='c')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Score')
+    plt.title('Model Performance by Strength Percentile')
+    plt.legend()
+    plt.grid(True)  # 网格线
+    plt.savefig('/src/data/20250121dt3.png')  # 保存图像
+
+    # 可视化决策树
+    plt.figure(figsize=(20, 20))
+    plot_tree(clf, filled=True, feature_names=['individual_score_total_mean', '3day_login_count','7day_login_count'], class_names=['No', 'Yes'])
+    plt.title('Decision Tree Visualization')
+    plt.savefig('/src/data/20250121dt_tree3.png')  # 保存决策树图像
+
+
+def simplified_decision_tree(individual_score_total_mean):
+    if individual_score_total_mean <= 3.0:
+        return 0  # No
+    else:
+        return 1  # Yes
+
+def debug3():
+    filename = '/src/data/20250121smfb_data_20241125_20250120.csv'
+    df = pd.read_csv(filename)
+    df['wk'] = pd.to_datetime(df['wk'])
+    df.rename(columns={'#account_id': 'uid'}, inplace=True)
+    
+    trainDf = df[df['wk'] < '2024-12-30']
+    testDf = df[(df['wk'] >= '2024-12-30') & (df['wk'] <= '2025-01-06')]
+
+    # 使用简化的决策规则进行预测
+    y_pred = testDf['individual_score_total_mean'].apply(simplified_decision_tree)
+
+    # 计算准确率、精确率、召回率和 F1 分数
+    accuracy = accuracy_score(testDf['activity'], y_pred)
+    precision = precision_score(testDf['activity'], y_pred)
+    recall = recall_score(testDf['activity'], y_pred)
+    f1 = f1_score(testDf['activity'], y_pred)
+
+    print(f'Accuracy: {accuracy:.2f}')
+    print(f'Precision: {precision:.2f}')
+    print(f'Recall: {recall:.2f}')
+    print(f'F1 Score: {f1:.2f}')
+
+    # 将测试集结果与原始数据合并
+    testX = testDf[['wk', 'uid', 'strength', 'activity']].copy()
+    testX.rename(columns={'activity': 'y_true'}, inplace=True)
+    testX['y_pred'] = y_pred
+
+    testX.to_csv('/src/data/20250121testX3_debug.csv', index=False)
+
+    # 按照 strength 的分位数分组计算每组的准确率、精确率、召回率和 F1 分数
+    testX['strength_group'] = pd.qcut(testX['strength'], q=20, duplicates='drop')
+    grouped = testX.groupby('strength_group')
+    
+    accuracy_by_group = grouped.apply(lambda g: accuracy_score(g['y_true'], g['y_pred']))
+    precision_by_group = grouped.apply(lambda g: precision_score(g['y_true'], g['y_pred'], zero_division=0))
+    recall_by_group = grouped.apply(lambda g: recall_score(g['y_true'], g['y_pred'], zero_division=0))
+    f1_by_group = grouped.apply(lambda g: f1_score(g['y_true'], g['y_pred'], zero_division=0))
+
+    # 绘制图表
+    x0 = [interval.mid for interval in accuracy_by_group.index]
+    y_accuracy = accuracy_by_group.values
+    y_precision = precision_by_group.values
+    y_recall = recall_by_group.values
+    y_f1 = f1_by_group.values
+
+    plt.figure(figsize=(15, 6))  # 设置图的尺寸
+
+    plt.plot(x0, y_accuracy, marker='o', linestyle='-', color='b', label='Accuracy')
+    plt.plot(x0, y_precision, marker='o', linestyle='-', color='g', label='Precision')
+    plt.plot(x0, y_recall, marker='o', linestyle='-', color='r', label='Recall')
+    plt.plot(x0, y_f1, marker='o', linestyle='-', color='c', label='F1 Score')
+
+    plt.scatter(x0, y_accuracy, color='b')
+    plt.scatter(x0, y_precision, color='g')
+    plt.scatter(x0, y_recall, color='r')
+    plt.scatter(x0, y_f1, color='c')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Score')
+    plt.title('Model Performance by Strength Percentile')
+    plt.legend()
+    plt.grid(True)  # 网格线
+
+    plt.savefig('/src/data/20250121debug3.png')  # 保存图像
+
+def debug3_1():
+    filename = '/src/data/20250121smfb_data_20241125_20250120.csv'
+    df = pd.read_csv(filename)
+    df['wk'] = pd.to_datetime(df['wk'])
+    df.rename(columns={'#account_id': 'uid'}, inplace=True)
+    
+    # 选择测试集数据
+    testDf = df[(df['wk'] >= '2024-12-30') & (df['wk'] <= '2025-01-06')].copy()
+
+    # 抽样1000条数据
+    sampleDf = testDf.sample(n=1000, random_state=0)
+    sampleDf.to_csv('/src/data/20250121testX3_debug3_1_sample.csv', index=False)
+
+    # 按照 strength 的分位数分组
+    testDf['strength_group'] = pd.qcut(testDf['strength'], q=20, duplicates='drop')
+    grouped = testDf.groupby('strength_group')
+
+    # 计算每组的 activity 均值
+    activity_mean_by_group = grouped['activity'].mean()
+
+    # 绘制图表
+    x0 = [interval.mid for interval in activity_mean_by_group.index]
+    y_activity_mean = activity_mean_by_group.values
+
+    plt.figure(figsize=(15, 6))  # 设置图的尺寸
+
+    plt.plot(x0, y_activity_mean, marker='o', linestyle='-', color='b', label='Activity Mean')
+
+    plt.scatter(x0, y_activity_mean, color='b')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Activity Mean')
+    plt.title('Activity Mean by Strength Percentile')
+    plt.legend()
+    plt.grid(True)  # 网格线
+    plt.savefig('/src/data/20250121activity_mean_by_strength.png')  # 保存图像
+
+    # 保存分组后的数据
+    testDf.to_csv('/src/data/20250121testX3_debug3_1.csv', index=False)
 
 if __name__ == "__main__":
     # main()
@@ -702,6 +1023,13 @@ if __name__ == "__main__":
     # prepareData()
     # decisionTreeClassification()
 
-    test()
+    # test()
+
+    debug3()
+    # debug3_1()
+
+    # test2()
+
+    # test3()
     
     
