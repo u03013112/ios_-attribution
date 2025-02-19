@@ -82,8 +82,9 @@ def getLowestRevenueServers(df, N):
 # 使用 Prophet 进行时间序列预测
 def prophet_forecast(df, column, periods):
     df_prophet = df[['day', column]].rename(columns={'day': 'ds', column: 'y'})
-    model = Prophet(seasonality_mode='multiplicative',weekly_seasonality=True,yearly_seasonality=True)
+    # model = Prophet(seasonality_mode='multiplicative',weekly_seasonality=True,yearly_seasonality=True)
     # model = Prophet(weekly_seasonality=True,yearly_seasonality=True)
+    model = Prophet(seasonality_mode='multiplicative',yearly_seasonality=True)
     model.fit(df_prophet)
     
     future = model.make_future_dataframe(periods=periods, freq='W')
@@ -163,11 +164,15 @@ def plot_forecast2(server_id, train_df, forecast_df, target_revenues, endday):
     print(f'save file /src/data/20250213_prophet2_{server_id}.png')
     plt.close()
 
-def prophet1(target_revenues=[70, 140], future_periods=28, start_date='2024-11-01'):
+def prophet1(target_revenues=[70, 140], future_periods=8, start_date='2024-11-01'):
     df = getData()
+    start_date = '2024-11-01'
+    # for test ,只计算 2024-11-01 之后的数据
+    df = df[df['day'] >= start_date]
 
     # 只计算10,13,17 三个服务器
-    df = df[(df['server_id_int'] == 10) | (df['server_id_int'] == 13) | (df['server_id_int'] == 17)]
+    # df = df[(df['server_id_int'] == 10) | (df['server_id_int'] == 13) | (df['server_id_int'] == 17)]
+    df = df[(df['server_id_int'] == 10)]
 
     # 过滤掉最近4周收入和为0的服务器
     endday = df['day'].max()
@@ -294,6 +299,295 @@ def prophet1(target_revenues=[70, 140], future_periods=28, start_date='2024-11-0
     # 保存结果
     results_df.to_csv(f'/src/data/20250213_prophet1_results.csv', index=False)
     return results_df
+
+def prophetForecastLogistic(df, column, periods):
+    df_prophet = df[['day', column]].rename(columns={'day': 'ds', column: 'y'})
+    # model = Prophet(seasonality_mode='multiplicative',weekly_seasonality=True,yearly_seasonality=True)
+
+    cap = 30000
+    floor = 435.81
+
+    df_prophet['cap'] = cap
+    df_prophet['floor'] = floor
+
+    model = Prophet(growth='logistic', seasonality_mode='multiplicative',weekly_seasonality=True, yearly_seasonality=True)
+    model.fit(df_prophet)
+    
+    future = model.make_future_dataframe(periods=periods, freq='W')
+    future['cap'] = cap
+    future['floor'] = floor
+
+    forecast = model.predict(future)
+    
+    return model, forecast
+
+
+
+# growth='logistic'
+# 目的是给预测值加上一个上下限，即预测值的波动范围，防止出现收入为负的情况
+def prophet1Logistic(target_revenues=[70, 140], future_periods=28, start_date='2024-11-01'):
+    df = getData()
+
+    # 只计算10,13,17 三个服务器
+    # df = df[(df['server_id_int'] == 10) | (df['server_id_int'] == 13) | (df['server_id_int'] == 17)]
+    df = df[(df['server_id_int'] == 10)]
+
+    # 过滤掉最近4周收入和为0的服务器
+    endday = df['day'].max()
+    print(f'最近数据的最后一天：{endday}')
+    startDay = endday - pd.DateOffset(weeks=4)
+    recent = df[df['day'] >= startDay]
+    server_revenue = recent.groupby('server_id')['revenue'].sum()
+    active_servers = server_revenue[server_revenue > 0].index
+    df = df[df['server_id'].isin(active_servers)]
+
+    # 找到endday之后第一个周一，记作nextMonday
+    nextMonday = endday + pd.DateOffset(days=(7 - endday.weekday()))
+    print(f'最近数据的最后一天的下一个周一：{nextMonday}')
+
+    # 按服务器ID分组
+    servers = df['server_id_int'].unique()
+    results = []
+
+    for server_id in servers:
+        server_df = df[df['server_id_int'] == server_id]
+        print(f'服务器 {server_id} 的数据量：{len(server_df)}')
+        print(server_df.head())
+
+        # 确保数据是按周的格式，并以周一为起始日
+        server_df = server_df.set_index('day').resample('W', label='left').sum().reset_index()
+        print(f'服务器 {server_id} 按周统计后的数据量：{len(server_df)}')
+        print(server_df.head())
+
+        # 使用全部数据进行训练
+        train_df = server_df
+
+        # 计算指定时间段内的收入最大值和最小值
+        period_df = server_df[(server_df['day'] >= start_date) & (server_df['day'] <= endday)]
+        max_revenue = period_df['revenue'].max()
+        min_revenue = period_df['revenue'].min()
+        width = (max_revenue - min_revenue) / 2
+
+        print(f'服务器 {server_id} 在 {start_date} 到 {endday} 之间的收入最大值：{max_revenue}')
+        print(f'服务器 {server_id} 在 {start_date} 到 {endday} 之间的收入最小值：{min_revenue}')
+        print(f'服务器 {server_id} 在 {start_date} 到 {endday} 之间的收入波动范围：{width}')
+
+        # 训练 Prophet 模型并进行预测
+        model, forecast = prophetForecastLogistic(train_df, 'revenue', periods=0)
+
+        # 提取预测值
+        forecast = forecast[:len(train_df)]
+
+        # 评估模型性能
+        mse, rmse, mape, r2 = evaluate_regression_model(train_df['revenue'], forecast['yhat'])
+
+        print(f'服务器 {server_id} - MSE: {mse}, RMSE: {rmse}, MAPE: {mape}, R²: {r2}')
+
+        # 预测未来趋势，从整个数据集之后开始
+        future_forecast = model.make_future_dataframe(periods=future_periods, freq='W', include_history=False)
+        future_forecast = future_forecast[future_forecast['ds'] > nextMonday]
+        
+        future_forecast['cap'] = 2562.07
+        future_forecast['floor'] = 435.81
+
+        print(f'服务器 {server_id} 未来预测数据量：{len(future_forecast)}')
+        print(future_forecast.head())
+        future_forecast = model.predict(future_forecast)
+
+        # 拼接训练集和预测集
+        forecast_df = pd.concat([forecast[['ds', 'yhat']], future_forecast[['ds', 'yhat']]])
+
+        future_forecast['yhat_lower'] = future_forecast['yhat'] - width
+        future_forecast['yhat_upper'] = future_forecast['yhat'] + width
+
+        # 计算新的 yhat_lower 和 yhat_upper
+        forecast_df['yhat_lower'] = forecast_df['yhat'] - width
+        forecast_df['yhat_upper'] = forecast_df['yhat'] + width
+
+        for target_revenue in target_revenues:
+            # 求解未来时间
+            future_trend = future_forecast['yhat'].values
+            future_trend_lower = future_forecast['yhat_lower'].values
+            future_trend_upper = future_forecast['yhat_upper'].values
+
+            target_date = None
+            target_date_lower = None
+            target_date_upper = None
+
+            for i, revenue in enumerate(future_trend):
+                if revenue <= target_revenue:
+                    target_date = future_forecast['ds'].iloc[i]
+                    break
+
+            for i, revenue in enumerate(future_trend_lower):
+                if revenue <= target_revenue:
+                    target_date_lower = future_forecast['ds'].iloc[i]
+                    break
+
+            for i, revenue in enumerate(future_trend_upper):
+                if revenue <= target_revenue:
+                    target_date_upper = future_forecast['ds'].iloc[i]
+                    break
+
+            results.append({
+                'server_id': server_id,
+                'target_revenue': target_revenue,
+                'target_date': target_date,
+                'target_date_lower': target_date_lower,
+                'target_date_upper': target_date_upper,
+                'mse': mse,
+                'rmse': rmse,
+                'mape': mape,
+                'r2': r2
+            })
+
+        # 增加一列 yhat_upper - yhat_lower
+        forecast_df['yhat_diff'] = forecast_df['yhat_upper'] - forecast_df['yhat_lower']
+
+        # 保存预测部分的日期，yhat，yhat lower，yhat upper 到 CSV
+        forecast_df[['ds', 'yhat', 'yhat_lower', 'yhat_upper', 'yhat_diff']].to_csv(f'/src/data/20250213_prophet1_results_{server_id}.csv', index=False)
+
+        # 绘制图表
+        plot_forecast(server_id, train_df.rename(columns={'day': 'ds', 'revenue': 'y'}), forecast_df, target_revenues, endday)
+
+    # 输出结果
+    results_df = pd.DataFrame(results)
+    # 按照目标日期排序，升序
+    results_df = results_df.sort_values(['target_date', 'target_revenue'], ascending=True)
+
+    print(results_df)
+
+    # 保存结果
+    results_df.to_csv(f'/src/data/20250213_prophet1_results.csv', index=False)
+    return results_df
+
+def prophet1New(target_revenues=[70, 140], future_periods=28, start_date='2024-11-01'):
+    df = getData()
+
+    # 只计算10,13,17 三个服务器
+    df = df[(df['server_id_int'] == 10) | (df['server_id_int'] == 13) | (df['server_id_int'] == 17)]
+
+    # 过滤掉最近4周收入和为0的服务器
+    endday = df['day'].max()
+    print(f'最近数据的最后一天：{endday}')
+    startDay = endday - pd.DateOffset(weeks=4)
+    recent = df[df['day'] >= startDay]
+    server_revenue = recent.groupby('server_id')['revenue'].sum()
+    active_servers = server_revenue[server_revenue > 0].index
+    df = df[df['server_id'].isin(active_servers)]
+
+    # 找到endday之后第一个周一，记作nextMonday
+    nextMonday = endday + pd.DateOffset(days=(7 - endday.weekday()))
+    print(f'最近数据的最后一天的下一个周一：{nextMonday}')
+
+    # 按服务器ID分组
+    servers = df['server_id_int'].unique()
+    results = []
+
+    for server_id in servers:
+        server_df = df[df['server_id_int'] == server_id]
+        print(f'服务器 {server_id} 的数据量：{len(server_df)}')
+        print(server_df.head())
+
+        # 确保数据是按周的格式，并以周一为起始日
+        server_df = server_df.set_index('day').resample('W', label='left').sum().reset_index()
+        print(f'服务器 {server_id} 按周统计后的数据量：{len(server_df)}')
+        print(server_df.head())
+
+        # 计算收入变化率
+        server_df['revenue_pct'] = server_df['revenue'].pct_change().fillna(0)
+        print(f'服务器 {server_id} 收入变化率：')
+        print(server_df[['day', 'revenue', 'revenue_pct']].head())
+
+        # 使用全部数据进行训练
+        train_df = server_df[['day', 'revenue_pct']].rename(columns={'day': 'ds', 'revenue_pct': 'y'})
+
+        # 训练 Prophet 模型并进行预测
+        model = Prophet(weekly_seasonality=True, yearly_seasonality=True)
+        model.fit(train_df)
+
+        # 预测训练集
+        train_forecast = model.predict(train_df[['ds']])
+        train_df['yhat'] = train_forecast['yhat']
+
+        # 将预测的变化率转换回收入金额
+        initial_revenue = server_df['revenue'].iloc[0]
+        train_df['revenue_hat'] = initial_revenue
+        for i in range(1, len(train_df)):
+            train_df.at[i, 'revenue_hat'] = train_df.at[i-1, 'revenue_hat'] * (1 + train_df.at[i, 'yhat'])
+
+        # 计算 R²
+        r2 = r2_score(server_df['revenue'].iloc[1:], train_df['revenue_hat'].iloc[1:])
+        print(f'服务器 {server_id} 的 R²：{r2}')
+
+        # 预测未来趋势，从整个数据集之后开始
+        future = model.make_future_dataframe(periods=future_periods, freq='W')
+        future = future[future['ds'] > nextMonday]
+        forecast = model.predict(future)
+
+        # 拼接训练集和预测集
+        forecast_df = pd.concat([train_df[['ds', 'y', 'yhat']], forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]])
+
+        # 计算预测的收入
+        forecast_df['revenue'] = initial_revenue
+        forecast_df['revenue_lower'] = initial_revenue
+        forecast_df['revenue_upper'] = initial_revenue
+        for i in range(1, len(forecast_df)):
+            forecast_df.at[i, 'revenue'] = forecast_df.at[i-1, 'revenue'] * (1 + forecast_df.at[i, 'yhat'])
+            forecast_df.at[i, 'revenue_lower'] = forecast_df.at[i-1, 'revenue_lower'] * (1 + forecast_df.at[i, 'yhat_lower'])
+            forecast_df.at[i, 'revenue_upper'] = forecast_df.at[i-1, 'revenue_upper'] * (1 + forecast_df.at[i, 'yhat_upper'])
+
+        for target_revenue in target_revenues:
+            # 求解未来时间
+            future_trend = forecast_df['revenue'].values
+            future_trend_lower = forecast_df['revenue_lower'].values
+            future_trend_upper = forecast_df['revenue_upper'].values
+
+            target_date = None
+            target_date_lower = None
+            target_date_upper = None
+
+            for i, revenue in enumerate(future_trend):
+                if revenue <= target_revenue:
+                    target_date = forecast_df['ds'].iloc[i]
+                    break
+
+            for i, revenue in enumerate(future_trend_lower):
+                if revenue <= target_revenue:
+                    target_date_lower = forecast_df['ds'].iloc[i]
+                    break
+
+            for i, revenue in enumerate(future_trend_upper):
+                if revenue <= target_revenue:
+                    target_date_upper = forecast_df['ds'].iloc[i]
+                    break
+
+            results.append({
+                'server_id': server_id,
+                'target_revenue': target_revenue,
+                'target_date': target_date,
+                'target_date_lower': target_date_lower,
+                'target_date_upper': target_date_upper,
+                'r2': r2
+            })
+
+        # 保存预测部分的日期，yhat，yhat lower，yhat upper 到 CSV
+        forecast_df[['ds', 'revenue', 'revenue_lower', 'revenue_upper']].to_csv(f'/src/data/20250213_prophet1New_results_{server_id}.csv', index=False)
+
+        # 绘制图表
+        plot_forecast(server_id, train_df.rename(columns={'ds': 'day', 'revenue_hat': 'revenue'}), forecast_df.rename(columns({'ds': 'day', 'yhat': 'revenue'})), target_revenues, endday)
+
+    # 输出结果
+    results_df = pd.DataFrame(results)
+    # 按照目标日期排序，升序
+    results_df = results_df.sort_values(['target_date', 'target_revenue'], ascending=True)
+
+    print(results_df)
+
+    # 保存结果
+    results_df.to_csv(f'/src/data/20250213_prophet1New_results.csv', index=False)
+    return results_df
+
 
 def prophet2(target_revenues=[70,140], future_periods=28):
     df = getData()
@@ -514,5 +808,8 @@ if __name__ == '__main__':
     # df0 = getLowestRevenueServers(df, 4)
     # print(df0)
 
-    prophet1()
+    # prophet1()
     # prophet2()
+
+    # prophet1Logistic()
+    prophet1New()
