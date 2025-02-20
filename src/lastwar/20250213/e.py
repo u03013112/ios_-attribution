@@ -1,6 +1,3 @@
-# 将3~36服的季节性进行捕捉
-# 然后用这个通用季节性，再单独去预测每个服的收入
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -51,14 +48,19 @@ def func1():
 
     df0 = df0[['day', 'revenue','server_id_int']]
     df0 = df0.rename(columns={'day':'ds','revenue':'y','server_id_int':'server_id'})
+    df0['cap'] = 1e5
+    df0['floor'] = 0
 
     # 拟合 Prophet 模型，捕捉通用季节性
-    model0 = Prophet(daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=True)
+    model0 = Prophet(growth='logistic',daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=True)
     model0.fit(df0)
 
     # 提取通用季节性
     future = model0.make_future_dataframe(periods=0)
+    future['cap'] = 1e5
+    future['floor'] = 0
     forecast = model0.predict(future)
+    forecast.to_csv("/src/data/20250220_forecast0.csv", index=False)
     
     seasonal = forecast[['ds', 'yearly', 'weekly', 'daily']]
     seasonal = seasonal.rename(columns={'yearly':'yearly0','weekly':'weekly0','daily':'daily0'})
@@ -86,9 +88,11 @@ def func1():
 
         # 再次检查并填充 NaN 值
         server_data = server_data.fillna(0)
+        server_data['cap'] = 1e5
+        server_data['floor'] = 0
 
         # 训练单独的 Prophet 模型
-        model = Prophet()
+        model = Prophet(growth='logistic',yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True)
         model.add_regressor('yearly0')
         model.add_regressor('weekly0')
         model.add_regressor('daily0')
@@ -96,11 +100,14 @@ def func1():
         
         # 预测未来
         future = model.make_future_dataframe(periods=90)
+        future['cap'] = 1e5
+        future['floor'] = 0
         future_seasonal = model0.predict(future)
         future_seasonal = future_seasonal[['ds', 'yearly', 'weekly', 'daily']]
         future_seasonal.rename(columns={'yearly':'yearly0','weekly':'weekly0','daily':'daily0'}, inplace=True)
         future = future.merge(future_seasonal, on='ds', how='left')
         forecast = model.predict(future)
+        forecast.to_csv(f"/src/data/20250220_forecast_{server_id}.csv", index=False)
         
         # 计算去除季节性后的趋势
         server_data['yhat'] = model.predict(server_data)['yhat']
@@ -134,12 +141,12 @@ for result in results:
     forecast_trend = result['forecast_trend']  # 新增的部分
     
     plt.figure(figsize=(10, 6))
-    plt.plot(trend['ds'], trend['trend'], label='Trend (Seasonality Removed)')
+    # plt.plot(trend['ds'], trend['trend'], label='Trend (Seasonality Removed)')
     plt.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
     
     # 预测部分
     plt.plot(forecast['ds'], forecast['yhat'], label='Forecasted Revenue', linestyle='--')
-    plt.plot(forecast_trend['ds'], forecast_trend['trend'], label='Forecasted Trend', linestyle='--')  # 新增的部分
+    plt.plot(forecast_trend['ds'], forecast_trend['trend'], label='Forecasted Trend (Seasonality Removed)', linestyle='--')  # 新增的部分
     
     # 添加竖线分隔当前数据和预测数据
     plt.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
