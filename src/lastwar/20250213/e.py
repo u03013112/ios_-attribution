@@ -106,12 +106,16 @@ def func1():
         server_data['yhat'] = model.predict(server_data)['yhat']
         server_data['trend'] = server_data['yhat'] - server_data['yearly0'] - server_data['weekly0'] - server_data['daily0']
         
+        # 计算预测部分的趋势
+        forecast['trend'] = forecast['yhat'] - forecast['yearly0'] - forecast['weekly0'] - forecast['daily0']
+        
         # 保存结果
         results.append({
             'server_id': server_id,
             'forecast': forecast,
             'trend': server_data[['ds', 'trend']],
-            'actual': server_data[['ds', 'y']]
+            'actual': server_data[['ds', 'y']],
+            'forecast_trend': forecast[['ds', 'trend']]  # 新增的部分
         })
     
     return results
@@ -126,10 +130,20 @@ for result in results:
     server_id = result['server_id']
     trend = result['trend']
     actual = result['actual']
+    forecast = result['forecast']
+    forecast_trend = result['forecast_trend']  # 新增的部分
     
     plt.figure(figsize=(10, 6))
     plt.plot(trend['ds'], trend['trend'], label='Trend (Seasonality Removed)')
     plt.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
+    
+    # 预测部分
+    plt.plot(forecast['ds'], forecast['yhat'], label='Forecasted Revenue', linestyle='--')
+    plt.plot(forecast_trend['ds'], forecast_trend['trend'], label='Forecasted Trend', linestyle='--')  # 新增的部分
+    
+    # 添加竖线分隔当前数据和预测数据
+    plt.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
+    
     plt.axhline(y=0, color='r', linestyle='--')
     plt.title(f'Trend and Actual Revenue for Server {server_id}')
     plt.xlabel('Date')
