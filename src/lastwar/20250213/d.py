@@ -47,65 +47,110 @@ def getData():
 
 def func1():
     df = getData()
-    server_10 = df[df['server_id_int'] == 10].sort_values('day').reset_index(drop=True)
-    
-    # 使用累计付费金额
-    server_10['cum_revenue'] = server_10['revenue'].cumsum()
-    
-    # 准备数据以适应 Prophet 模型
-    prophet_df = server_10[['day', 'cum_revenue']].rename(columns={'day': 'ds', 'cum_revenue': 'y'})
-    
-    # 拟合 Prophet 模型
-    model = Prophet()
-    model.fit(prophet_df)
-    
-    # 生成未来的日期数据
-    future = model.make_future_dataframe(periods=30)  # 预测未来30天
-    forecast = model.predict(future)
-    
-    # 计算 R2 分数
-    y_true = prophet_df['y']
-    y_pred = forecast['yhat'][:len(y_true)]
-    r2 = r2_score(y_true, y_pred)
-    print(f'R2 Score: {r2}')
-    
-    # 绘制累计付费金额的预测结果
-    plt.figure(figsize=(10, 6))
-    plt.plot(server_10['day'], server_10['cum_revenue'], label='Actual Cumulative Revenue')
-    plt.plot(forecast['ds'], forecast['yhat'], label='Predicted Cumulative Revenue')
-    plt.fill_between(forecast['ds'], forecast['yhat_lower'], forecast['yhat_upper'], color='gray', alpha=0.2)
-    plt.legend()
-    plt.title('Cumulative Revenue Prediction')
-    plt.xlabel('Date')
-    plt.ylabel('Cumulative Revenue')
-    plt.savefig('/src/data/20250219_prophet1_cum_revenue.png')
-    plt.close()
-    
-    # 计算每日收入的预测结果
-    forecast['daily_revenue'] = forecast['yhat'].diff()
-    forecast['daily_revenue_lower'] = forecast['yhat_lower'].diff()
-    forecast['daily_revenue_upper'] = forecast['yhat_upper'].diff()
-    
-    # 去除第一个 NaN 值
-    forecast = forecast.dropna(subset=['daily_revenue'])
-    
-    # 计算每日收入的 R2 分数
-    y_true = server_10['revenue']
-    y_pred = forecast['daily_revenue'][:len(y_true)]
-    r2 = r2_score(y_true, y_pred)
-    print(f'Daily Revenue R2 Score: {r2}')
+    # df = df[df['day'] >= '2024-10-16']
+    results = []
 
-    # 绘制每日收入的预测结果
-    plt.figure(figsize=(10, 6))
-    plt.plot(server_10['day'], server_10['revenue'], label='Actual Daily Revenue')
-    plt.plot(forecast['ds'], forecast['daily_revenue'], label='Predicted Daily Revenue')
-    plt.fill_between(forecast['ds'], forecast['daily_revenue_lower'], forecast['daily_revenue_upper'], color='gray', alpha=0.2)
-    plt.legend()
-    plt.title('Daily Revenue Prediction')
-    plt.xlabel('Date')
-    plt.ylabel('Daily Revenue')
-    plt.savefig('/src/data/20250219_prophet1_daily_revenue.png')
-    plt.close()
+    for server_id in range(3, 37):
+        server_data = df[df['server_id_int'] == server_id].sort_values('day').reset_index(drop=True)
+        
+        if server_data.empty:
+            continue
+        
+        # 检查最近4周的收入和是否小于10美元
+        if server_data['revenue'].tail(28).sum() < 10:
+            continue
+        
+        # 使用累计付费金额
+        server_data['cum_revenue'] = server_data['revenue'].cumsum()
+        
+        # 准备数据以适应 Prophet 模型
+        prophet_df = server_data[['day', 'cum_revenue']].rename(columns={'day': 'ds', 'cum_revenue': 'y'})
+        
+        # 拟合 Prophet 模型
+        model = Prophet()
+        model.fit(prophet_df)
+        
+        # 生成未来的日期数据
+        future = model.make_future_dataframe(periods=90)  # 预测未来30天
+        forecast = model.predict(future)
+        
+        # 计算 R2 分数
+        y_true = prophet_df['y']
+        y_pred = forecast['yhat'][:len(y_true)]
+        r2 = r2_score(y_true, y_pred)
+        
+        # 计算每日收入的预测结果
+        forecast['daily_revenue'] = forecast['yhat'].diff()
+        forecast['daily_revenue_lower'] = forecast['yhat_lower'].diff()
+        forecast['daily_revenue_upper'] = forecast['yhat_upper'].diff()
+        
+        # 去除第一个 NaN 值
+        forecast = forecast.dropna(subset=['daily_revenue'])
 
+        # 计算每日收入中，已有数据最后4周的最大收入金额与最小收入金额，计算差值作为置信宽度
+        # 后面判断是否低于10美元和20美元时使用 预测收入金额 - 置信宽度 、 预测收入金额 + 置信宽度 与 10/20 美元的大小关系
+        # 得出低于10美元和20美元的日期的区间，最小日期，最大与日期
+        last_28_days = server_data['revenue'].tail(28)
+        min_revenue = last_28_days.min()
+        max_revenue = last_28_days.max()
+        confidence_width = (max_revenue - min_revenue) / 4
+        forecast['daily_revenue_lower'] = forecast['daily_revenue'] - confidence_width
+        forecast['daily_revenue_upper'] = forecast['daily_revenue'] + confidence_width
+        
+        # 计算每日收入的 R2 分数
+        y_true_daily = server_data['revenue']
+        y_pred_daily = forecast['daily_revenue'][:len(y_true_daily)]
+        r2_daily = r2_score(y_true_daily, y_pred_daily)
+        
+        # 找到每日收入低于10美元和20美元的日期（从预测数据开始）
+        forecast_future = forecast[len(y_true_daily):]
+        below_10_min = forecast_future[forecast_future['daily_revenue'] - confidence_width < 10]['ds'].min()
+        below_10_max = forecast_future[forecast_future['daily_revenue'] + confidence_width < 10]['ds'].max()
+        below_20_min = forecast_future[forecast_future['daily_revenue'] - confidence_width < 20]['ds'].min()
+        below_20_max = forecast_future[forecast_future['daily_revenue'] + confidence_width < 20]['ds'].max()
+        
+        # 记录结果
+        results.append({
+            'server_id': server_id,
+            'below_10_usd_date_min': below_10_min,
+            'below_10_usd_date_max': below_10_max,
+            'below_20_usd_date_min': below_20_min,
+            'below_20_usd_date_max': below_20_max,
+            'r2': r2,
+            'r2_daily': r2_daily
+        })
+        
+        # 绘制累计付费金额的预测结果
+        plt.figure(figsize=(10, 6))
+        plt.plot(server_data['day'], server_data['cum_revenue'], label='Actual Cumulative Revenue')
+        plt.plot(forecast['ds'], forecast['yhat'], label='Predicted Cumulative Revenue')
+        plt.fill_between(forecast['ds'], forecast['yhat_lower'], forecast['yhat_upper'], color='gray', alpha=0.2)
+        plt.axvline(x=server_data['day'].max(), color='r', linestyle='--', label='End of Actual Data')
+        plt.legend()
+        plt.title(f'Cumulative Revenue Prediction for Server {server_id}')
+        plt.xlabel('Date')
+        plt.ylabel('Cumulative Revenue')
+        plt.savefig(f'/src/data/20250219_prophet1_cum_revenue_server_{server_id}.png')
+        plt.close()
+        
+        # 绘制每日收入的预测结果
+        plt.figure(figsize=(10, 6))
+        plt.plot(server_data['day'], server_data['revenue'], label='Actual Daily Revenue')
+        plt.plot(forecast['ds'], forecast['daily_revenue'], label='Predicted Daily Revenue')
+        plt.fill_between(forecast['ds'], forecast['daily_revenue_lower'], forecast['daily_revenue_upper'], color='gray', alpha=0.2)
+        plt.axvline(x=server_data['day'].max(), color='r', linestyle='--', label='End of Actual Data')
+        plt.axhline(y=10, color='g', linestyle='--', label='10 USD')
+        plt.axhline(y=20, color='b', linestyle='--', label='20 USD')
+        plt.legend()
+        plt.title(f'Daily Revenue Prediction for Server {server_id}')
+        plt.xlabel('Date')
+        plt.ylabel('Daily Revenue')
+        plt.savefig(f'/src/data/20250219_prophet1_daily_revenue_server_{server_id}.png')
+        plt.close()
+
+    # 保存结果到CSV文件
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('/src/data/20250219_prophet1_results.csv', index=False)
+        
 if __name__ == '__main__':
     func1()
