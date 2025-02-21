@@ -43,6 +43,7 @@ def getData():
 
 def func1():
     df = getData()
+    # df = df[df['day'] >= '2024-10-16']
 
     df0 = df[(df['server_id_int'] >= 3) & (df['server_id_int'] <= 36)]
 
@@ -70,9 +71,9 @@ def func1():
     results = []
 
     for server_id in range(3, 37):
-        # for test
-        if server_id != 10:
-            continue
+        # # for test
+        # if server_id != 10:
+        #     continue
 
         server_data = df0[df0['server_id'] == server_id].sort_values('ds').reset_index(drop=True)
         
@@ -92,7 +93,8 @@ def func1():
         server_data['floor'] = 0
 
         # 训练单独的 Prophet 模型
-        model = Prophet(growth='logistic',yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True)
+        # model = Prophet(growth='logistic',yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True)
+        model = Prophet(growth='logistic')
         model.add_regressor('yearly0')
         model.add_regressor('weekly0')
         model.add_regressor('daily0')
