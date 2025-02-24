@@ -70,11 +70,21 @@ def mainWeek():
         if len(weekly_data) < 2:
             continue
 
-        # 准备数据
-        x = np.arange(1, len(weekly_data) + 1)  # 时间序列（周数）
-        y_payusers = weekly_data['payusers'].values  # 目标值（payusers）
-        y_arppu = weekly_data['arppu'].values  # 目标值（arppu）
-        y_revenue = weekly_data['revenue'].values  # 目标值（revenue）
+        # 划分训练集和测试集（前80%训练，后20%测试）
+        split_index = int(len(weekly_data) * 0.8)
+        train_data = weekly_data.iloc[:split_index]
+        test_data = weekly_data.iloc[split_index:]
+        print('train data len:', len(train_data))
+        print('test data len:', len(test_data))
+
+        # 准备训练集和测试集数据
+        x_train = np.arange(1, len(train_data) + 1)  # 训练集时间序列（周数）
+        y_payusers_train = train_data['payusers'].values  # 训练集目标值（payusers）
+        y_arppu_train = train_data['arppu'].values  # 训练集目标值（arppu）
+
+        x_test = np.arange(len(train_data) + 1, len(weekly_data) + 1)  # 测试集时间序列（周数）
+        y_payusers_test = test_data['payusers'].values  # 测试集目标值（payusers）
+        y_arppu_test = test_data['arppu'].values  # 测试集目标值（arppu）
 
         # 初始化最佳MAPE和方案名
         best_payusers_mape = float('inf')
@@ -86,37 +96,39 @@ def mainWeek():
         best_payusers_predictions = None
         best_arppu_predictions = None
 
-        # 遍历所有模型，拟合payusers并计算MAPE
+        # 遍历所有模型，拟合payusers并计算测试集MAPE
         for model_name, model_func in roi_arpu_cpu_algorithm.MODELS.items():
             try:
                 # 获取模型
-                model = roi_arpu_cpu_algorithm.get_model(model_name, [x], y_payusers)
-                # 预测
-                y_pred, _ = model([x])
-                # 计算MAPE
-                mape = metrics.mean_absolute_percentage_error(y_payusers, y_pred)
+                model = roi_arpu_cpu_algorithm.get_model(model_name, [x_train], y_payusers_train)
+                # 预测测试集
+                y_pred_test, _ = model([x_test])
+                # 计算测试集MAPE
+                mape = metrics.mean_absolute_percentage_error(y_payusers_test, y_pred_test)
                 # 更新最佳方案
                 if mape < best_payusers_mape:
                     best_payusers_mape = mape
                     best_payusers_model_name = model_name
-                    best_payusers_predictions = y_pred
+                    # 记录测试集预测值
+                    best_payusers_predictions = y_pred_test
             except Exception as e:
                 print(f"Error fitting payusers with model {model_name} for server {server_id}: {e}")
 
-        # 遍历所有模型，拟合arppu并计算MAPE
+        # 遍历所有模型，拟合arppu并计算测试集MAPE
         for model_name, model_func in roi_arpu_cpu_algorithm.MODELS.items():
             try:
                 # 获取模型
-                model = roi_arpu_cpu_algorithm.get_model(model_name, [x], y_arppu)
-                # 预测
-                y_pred, _ = model([x])
-                # 计算MAPE
-                mape = metrics.mean_absolute_percentage_error(y_arppu, y_pred)
+                model = roi_arpu_cpu_algorithm.get_model(model_name, [x_train], y_arppu_train)
+                # 预测测试集
+                y_pred_test, _ = model([x_test])
+                # 计算测试集MAPE
+                mape = metrics.mean_absolute_percentage_error(y_arppu_test, y_pred_test)
                 # 更新最佳方案
                 if mape < best_arppu_mape:
                     best_arppu_mape = mape
                     best_arppu_model_name = model_name
-                    best_arppu_predictions = y_pred
+                    # 记录测试集预测值
+                    best_arppu_predictions = y_pred_test
             except Exception as e:
                 print(f"Error fitting arppu with model {model_name} for server {server_id}: {e}")
 
@@ -128,7 +140,7 @@ def mainWeek():
             'best_arppu_mape': best_arppu_mape,
             'best_payusers_predictions': best_payusers_predictions,
             'best_arppu_predictions': best_arppu_predictions,
-            'weekly_data': weekly_data
+            'test_data': test_data
         }
 
         # 按照最佳方案预测payusers和arppu，并计算收入的MAPE
@@ -138,23 +150,23 @@ def mainWeek():
                 y_revenue_pred = best_payusers_predictions * best_arppu_predictions
 
                 # 计算收入的MAPE
-                revenue_mape = metrics.mean_absolute_percentage_error(y_revenue, y_revenue_pred)
+                revenue_mape = metrics.mean_absolute_percentage_error(test_data['revenue'].values, y_revenue_pred)
                 # 记录收入的MAPE
                 best_models[server_id]['revenue_mape'] = revenue_mape
 
                 # 按月汇总（只计算11,12,1三个整月）的月汇总 payusers、arppu、revenue的月MAPE
-                weekly_data['month'] = weekly_data['week'].dt.to_timestamp().dt.month
-                monthly_data = weekly_data[weekly_data['month'].isin([11, 12, 1])].groupby('month').agg({
+                test_data['month'] = test_data['week'].dt.to_timestamp().dt.month
+                monthly_data = test_data[test_data['month'].isin([11, 12, 1])].groupby('month').agg({
                     'payusers': 'sum',
                     'arppu': 'mean',
                     'revenue': 'sum'
                 }).reset_index()
 
                 # 按月汇总预测值
-                weekly_data['payusers_pred'] = best_payusers_predictions
-                weekly_data['arppu_pred'] = best_arppu_predictions
-                weekly_data['revenue_pred'] = best_payusers_predictions * best_arppu_predictions
-                monthly_pred = weekly_data[weekly_data['month'].isin([11, 12, 1])].groupby('month').agg({
+                test_data['payusers_pred'] = best_payusers_predictions
+                test_data['arppu_pred'] = best_arppu_predictions
+                test_data['revenue_pred'] = best_payusers_predictions * best_arppu_predictions
+                monthly_pred = test_data[test_data['month'].isin([11, 12, 1])].groupby('month').agg({
                     'payusers_pred': 'sum',
                     'arppu_pred': 'mean',
                     'revenue_pred': 'sum'
@@ -182,6 +194,6 @@ def mainWeek():
               f"ARPPU Monthly MAPE = {result.get('arppu_monthly_mape', 'N/A')}, \n"
               f"Revenue Monthly MAPE = {result.get('revenue_monthly_mape', 'N/A')}\n")
 
-        
+
 if __name__ == '__main__':
     mainWeek()
