@@ -43,7 +43,7 @@ def getData():
 
 def func1():
     df = getData()
-    # df = df[df['day'] >= '2024-10-16']
+    df = df[df['day'] >= '2024-10-16']
 
     df0 = df[(df['server_id_int'] >= 3) & (df['server_id_int'] <= 36)]
 
