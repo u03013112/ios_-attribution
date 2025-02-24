@@ -2,6 +2,8 @@ import roi_arpu_cpu_algorithm
 import pandas as pd
 import numpy as np
 from sklearn import metrics
+import matplotlib.pyplot as plt
+
 
 def getData():
     df = pd.read_csv('payusers_revenue_20241016_20250223.csv')
@@ -43,9 +45,10 @@ def mainWeek():
     best_models = {}
 
     for server_id in range(3, 37):
-        # for test
-        if server_id != 10:
-            continue
+        print(f"Processing server {server_id}...")
+        # # for test
+        # if server_id != 10:
+        #     continue
 
         # 筛选当前服务器的数据
         server_data = df0[df0['server_id'] == server_id].sort_values('day').reset_index(drop=True)
@@ -74,8 +77,8 @@ def mainWeek():
         split_index = int(len(weekly_data) * 0.8)
         train_data = weekly_data.iloc[:split_index]
         test_data = weekly_data.iloc[split_index:]
-        print('train data len:', len(train_data))
-        print('test data len:', len(test_data))
+        # print('train data len:', len(train_data))
+        # print('test data len:', len(test_data))
 
         # 准备训练集和测试集数据
         x_train = np.arange(1, len(train_data) + 1)  # 训练集时间序列（周数）
@@ -93,24 +96,30 @@ def mainWeek():
         best_arppu_model_name = None
 
         # 存储最佳方案的预测值和真实值
-        best_payusers_predictions = None
-        best_arppu_predictions = None
+        best_payusers_predictions_train = None
+        best_payusers_predictions_test = None
+        best_arppu_predictions_train = None
+        best_arppu_predictions_test = None
 
         # 遍历所有模型，拟合payusers并计算测试集MAPE
         for model_name, model_func in roi_arpu_cpu_algorithm.MODELS.items():
             try:
                 # 获取模型
                 model = roi_arpu_cpu_algorithm.get_model(model_name, [x_train], y_payusers_train)
-                # 预测测试集
+                # 预测训练集和测试集
+                y_pred_train, _ = model([x_train])
                 y_pred_test, _ = model([x_test])
                 # 计算测试集MAPE
-                mape = metrics.mean_absolute_percentage_error(y_payusers_test, y_pred_test)
+                mape_test = metrics.mean_absolute_percentage_error(y_payusers_test, y_pred_test)
+                # 计算训练集MAPE
+                mape_train = metrics.mean_absolute_percentage_error(y_payusers_train, y_pred_train)
                 # 更新最佳方案
-                if mape < best_payusers_mape:
-                    best_payusers_mape = mape
+                if mape_test < best_payusers_mape:
+                    best_payusers_mape = mape_test
                     best_payusers_model_name = model_name
-                    # 记录测试集预测值
-                    best_payusers_predictions = y_pred_test
+                    # 记录训练集和测试集预测值
+                    best_payusers_predictions_train = y_pred_train
+                    best_payusers_predictions_test = y_pred_test
             except Exception as e:
                 print(f"Error fitting payusers with model {model_name} for server {server_id}: {e}")
 
@@ -119,27 +128,36 @@ def mainWeek():
             try:
                 # 获取模型
                 model = roi_arpu_cpu_algorithm.get_model(model_name, [x_train], y_arppu_train)
-                # 预测测试集
+                # 预测训练集和测试集
+                y_pred_train, _ = model([x_train])
                 y_pred_test, _ = model([x_test])
                 # 计算测试集MAPE
-                mape = metrics.mean_absolute_percentage_error(y_arppu_test, y_pred_test)
+                mape_test = metrics.mean_absolute_percentage_error(y_arppu_test, y_pred_test)
+                # 计算训练集MAPE
+                mape_train = metrics.mean_absolute_percentage_error(y_arppu_train, y_pred_train)
                 # 更新最佳方案
-                if mape < best_arppu_mape:
-                    best_arppu_mape = mape
+                if mape_test < best_arppu_mape:
+                    best_arppu_mape = mape_test
                     best_arppu_model_name = model_name
-                    # 记录测试集预测值
-                    best_arppu_predictions = y_pred_test
+                    # 记录训练集和测试集预测值
+                    best_arppu_predictions_train = y_pred_train
+                    best_arppu_predictions_test = y_pred_test
             except Exception as e:
                 print(f"Error fitting arppu with model {model_name} for server {server_id}: {e}")
 
         # 记录最佳方案
         best_models[server_id] = {
             'best_payusers_model': best_payusers_model_name,
-            'best_payusers_mape': best_payusers_mape,
+            'best_payusers_mape_train': mape_train,
+            'best_payusers_mape_test': best_payusers_mape,
             'best_arppu_model': best_arppu_model_name,
-            'best_arppu_mape': best_arppu_mape,
-            'best_payusers_predictions': best_payusers_predictions,
-            'best_arppu_predictions': best_arppu_predictions,
+            'best_arppu_mape_train': mape_train,
+            'best_arppu_mape_test': best_arppu_mape,
+            'best_payusers_predictions_train': best_payusers_predictions_train,
+            'best_payusers_predictions_test': best_payusers_predictions_test,
+            'best_arppu_predictions_train': best_arppu_predictions_train,
+            'best_arppu_predictions_test': best_arppu_predictions_test,
+            'train_data': train_data,
             'test_data': test_data
         }
 
@@ -147,52 +165,69 @@ def mainWeek():
         if best_payusers_model_name and best_arppu_model_name:
             try:
                 # 计算收入的预测值
-                y_revenue_pred = best_payusers_predictions * best_arppu_predictions
+                y_revenue_pred_train = best_payusers_predictions_train * best_arppu_predictions_train
+                y_revenue_pred_test = best_payusers_predictions_test * best_arppu_predictions_test
 
                 # 计算收入的MAPE
-                revenue_mape = metrics.mean_absolute_percentage_error(test_data['revenue'].values, y_revenue_pred)
+                revenue_mape_train = metrics.mean_absolute_percentage_error(train_data['revenue'].values, y_revenue_pred_train)
+                revenue_mape_test = metrics.mean_absolute_percentage_error(test_data['revenue'].values, y_revenue_pred_test)
                 # 记录收入的MAPE
-                best_models[server_id]['revenue_mape'] = revenue_mape
+                best_models[server_id]['revenue_mape_train'] = revenue_mape_train
+                best_models[server_id]['revenue_mape_test'] = revenue_mape_test
 
-                # 按月汇总（只计算11,12,1三个整月）的月汇总 payusers、arppu、revenue的月MAPE
-                test_data['month'] = test_data['week'].dt.to_timestamp().dt.month
-                monthly_data = test_data[test_data['month'].isin([11, 12, 1])].groupby('month').agg({
-                    'payusers': 'sum',
-                    'arppu': 'mean',
-                    'revenue': 'sum'
-                }).reset_index()
+                # 将每周时间、真实结果、预测结果保存到CSV
+                weekly_data['payusers_pred'] = np.concatenate([best_payusers_predictions_train, best_payusers_predictions_test])
+                weekly_data['arppu_pred'] = np.concatenate([best_arppu_predictions_train, best_arppu_predictions_test])
+                weekly_data['revenue_pred'] = weekly_data['payusers_pred'] * weekly_data['arppu_pred']
+                weekly_data.to_csv(f"/src/data/20250224_week_df_{server_id}.csv", index=False)
 
-                # 按月汇总预测值
-                test_data['payusers_pred'] = best_payusers_predictions
-                test_data['arppu_pred'] = best_arppu_predictions
-                test_data['revenue_pred'] = best_payusers_predictions * best_arppu_predictions
-                monthly_pred = test_data[test_data['month'].isin([11, 12, 1])].groupby('month').agg({
-                    'payusers_pred': 'sum',
-                    'arppu_pred': 'mean',
-                    'revenue_pred': 'sum'
-                }).reset_index()
+                # 画图
+                plt.figure(figsize=(10, 12))
+                plt.subplot(3, 1, 1)
+                plt.plot(weekly_data['week'].astype(str), weekly_data['payusers'], label='True Payusers')
+                plt.plot(weekly_data['week'].astype(str), weekly_data['payusers_pred'], label='Predicted Payusers')
+                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - Payusers')
+                plt.legend()
 
-                # 计算月MAPE
-                payusers_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['payusers'], monthly_pred['payusers_pred'])
-                arppu_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['arppu'], monthly_pred['arppu_pred'])
-                revenue_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['revenue'], monthly_pred['revenue_pred'])
+                plt.subplot(3, 1, 2)
+                plt.plot(weekly_data['week'].astype(str), weekly_data['arppu'], label='True ARPPU')
+                plt.plot(weekly_data['week'].astype(str), weekly_data['arppu_pred'], label='Predicted ARPPU')
+                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - ARPPU')
+                plt.legend()
 
-                # 记录月MAPE
-                best_models[server_id]['payusers_monthly_mape'] = payusers_monthly_mape
-                best_models[server_id]['arppu_monthly_mape'] = arppu_monthly_mape
-                best_models[server_id]['revenue_monthly_mape'] = revenue_monthly_mape
+                plt.subplot(3, 1, 3)
+                plt.plot(weekly_data['week'].astype(str), weekly_data['revenue'], label='True Revenue')
+                plt.plot(weekly_data['week'].astype(str), weekly_data['revenue_pred'], label='Predicted Revenue')
+                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - Revenue')
+                plt.legend()
+
+                plt.tight_layout()
+                plt.savefig(f"/src/data/20250224_week_df_{server_id}.png")
+                plt.close()
             except Exception as e:
-                print(f"Error calculating revenue MAPE for server {server_id}: {e}")
+                print(f"Error saving results for server {server_id}: {e}")
 
-    # 输出每个服务器的最佳方案和MAPE
+    # 输出最终结果
+    results_df = pd.DataFrame(columns=[
+        '服务器id', 'Best Payusers Model Name', 'Payusers train mape', 'Payusers test mape',
+        'Best arppu Model Name', 'arppu train mape', 'arppu test mape', 'revenue train mape', 'revenue test mape'
+    ])
     for server_id, result in best_models.items():
-        print(f"Server {server_id}: \n"
-              f"Best Payusers Model = {result['best_payusers_model']}, Payusers MAPE = {result['best_payusers_mape']:.4f}, \n"
-              f"Best ARPPU Model = {result['best_arppu_model']}, ARPPU MAPE = {result['best_arppu_mape']:.4f}, \n"
-              f"Revenue MAPE = {result.get('revenue_mape', 'N/A')}, \n"
-              f"Payusers Monthly MAPE = {result.get('payusers_monthly_mape', 'N/A')}, \n"
-              f"ARPPU Monthly MAPE = {result.get('arppu_monthly_mape', 'N/A')}, \n"
-              f"Revenue Monthly MAPE = {result.get('revenue_monthly_mape', 'N/A')}\n")
+        results_df = results_df.append({
+            '服务器id': server_id,
+            'Best Payusers Model Name': result['best_payusers_model'],
+            'Payusers train mape': result['best_payusers_mape_train'],
+            'Payusers test mape': result['best_payusers_mape_test'],
+            'Best arppu Model Name': result['best_arppu_model'],
+            'arppu train mape': result['best_arppu_mape_train'],
+            'arppu test mape': result['best_arppu_mape_test'],
+            'revenue train mape': result.get('revenue_mape_train', 'N/A'),
+            'revenue test mape': result.get('revenue_mape_test', 'N/A')
+        }, ignore_index=True)
+    results_df.to_csv("/src/data/20250224_final_results.csv", index=False)
 
 
 if __name__ == '__main__':
