@@ -325,7 +325,7 @@ def _init_models():
         # "spline": build_spline_model,
         "four_parameter": build_four_parameter_model,
         "four_parameter_and_linear": build_four_parameter_and_linear_model,
-        "five_parameter": build_five_parameter_model,
+        # "five_parameter": build_five_parameter_model,
         "five_parameter_and_linear": build_five_parameter_and_linear_model,
     }
     # for dimension in range(1, 10):
