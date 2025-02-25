@@ -99,11 +99,11 @@ def mainWeek():
         # 计算按周汇总数据
         # server_data['week'] = server_data['day'].dt.to_period('W')
         server_data['day'] = pd.to_datetime(server_data['day'])
-        # server_data['week'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
+        server_data['week'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
         
-        # 每2周 进行一次汇总，为了后续代码统一，仍旧命名为week
-        server_data['week_start'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
-        server_data['week'] = server_data['week_start'] - pd.to_timedelta(server_data['week_start'].dt.week % 2, unit='W')
+        # # 每2周 进行一次汇总，为了后续代码统一，仍旧命名为week
+        # server_data['week_start'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
+        # server_data['week'] = server_data['week_start'] - pd.to_timedelta(server_data['week_start'].dt.week % 2, unit='W')
 
         weekly_data = server_data.groupby('week').agg({'revenue': 'sum', 'payusers': 'sum'}).reset_index()
         weekly_data['arppu'] = weekly_data['revenue'] / weekly_data['payusers']
@@ -116,18 +116,20 @@ def mainWeek():
             continue
 
         # 划分训练集和测试集（前80%训练，后20%测试）
-        split_index = int(len(weekly_data) * 0.7)
+        # split_index = int(len(weekly_data) * 0.7)
+        split_index = 11
         train_data = weekly_data.iloc[:split_index]
         test_data = weekly_data.iloc[split_index:]
         split_day = weekly_data.iloc[split_index]['week']
-        # print(f"Split day for server {server_id}: {split_day}")
-        # print(f"Train data for server {server_id}: {len(train_data)} weeks")
-        # print(f"Test data for server {server_id}: {len(test_data)} weeks")
-        # return
 
-        # # 整月数据就这些，只能暂时这么分割
-        # train_data = weekly_data[(weekly_data['day']>= '2024-11-01') & (weekly_data['day']<= '2025-12-31')]
-        # test_data = weekly_data[(weekly_data['day']>= '2025-01-01') & (weekly_data['day']<= '2025-01-31')]
+        # split_day = '2025-01-01'
+        # train_data = weekly_data[(weekly_data['week']>= '2024-10-16') & (weekly_data['week']< split_day)]
+        # test_data = weekly_data[(weekly_data['week']>= split_day) ]
+
+        print(f"Split day for server {server_id}: {split_day}")
+        print(f"Train data for server {server_id}: {len(train_data)} weeks")
+        print(f"Test data for server {server_id}: {len(test_data)} weeks")
+        # return
 
         # 准备训练集和测试集数据
         x_train = np.arange(1, len(train_data) + 1)  # 训练集时间序列（周数）
@@ -140,8 +142,10 @@ def mainWeek():
 
         # 初始化最佳MAPE和方案名
         best_payusers_mape = float('inf')
+        test_payusers_mape = float('inf')
         best_payusers_model_name = None
         best_arppu_mape = float('inf')
+        test_arppu_mape = float('inf')
         best_arppu_model_name = None
 
         # 存储最佳方案的预测值和真实值
@@ -152,6 +156,7 @@ def mainWeek():
 
         # 遍历所有模型，拟合payusers并计算测试集MAPE
         for model_name, model_func in roi_arpu_cpu_algorithm.MODELS.items():
+            print(f"Processing model {model_name} for server {server_id}...")
             try:
                 # 获取模型
                 model = roi_arpu_cpu_algorithm.get_model(model_name, [x_train], y_payusers_train)
@@ -165,6 +170,7 @@ def mainWeek():
                 # 更新最佳方案
                 if mape_train < best_payusers_mape:
                     best_payusers_mape = mape_train
+                    test_payusers_mape = mape_test
                     best_payusers_model_name = model_name
                     # 记录训练集和测试集预测值
                     best_payusers_predictions_train = y_pred_train
@@ -187,6 +193,7 @@ def mainWeek():
                 # 更新最佳方案
                 if mape_train < best_arppu_mape:
                     best_arppu_mape = mape_train
+                    test_arppu_mape = mape_test
                     best_arppu_model_name = model_name
                     # 记录训练集和测试集预测值
                     best_arppu_predictions_train = y_pred_train
@@ -197,11 +204,11 @@ def mainWeek():
         # 记录最佳方案
         best_models[server_id] = {
             'best_payusers_model': best_payusers_model_name,
-            'best_payusers_mape_train': mape_train,
-            'best_payusers_mape_test': best_payusers_mape,
+            'best_payusers_mape_train': best_payusers_mape,
+            'best_payusers_mape_test': test_payusers_mape,
             'best_arppu_model': best_arppu_model_name,
-            'best_arppu_mape_train': mape_train,
-            'best_arppu_mape_test': best_arppu_mape,
+            'best_arppu_mape_train': best_arppu_mape,
+            'best_arppu_mape_test': test_arppu_mape,
             'best_payusers_predictions_train': best_payusers_predictions_train,
             'best_payusers_predictions_test': best_payusers_predictions_test,
             'best_arppu_predictions_train': best_arppu_predictions_train,
@@ -333,6 +340,7 @@ def mainWeek():
         try:
             # 计算按月汇总的MAPE
             monthly_data = pd.read_csv(f"/src/data/20250224_month_df_{server_id}.csv")
+            monthly_data = monthly_data[monthly_data['month'] == '2025-01-01']
             payusers_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['payusers'], monthly_data['payusers_pred'])
             arppu_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['arppu'], monthly_data['arppu_pred'])
             revenue_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['revenue'], monthly_data['revenue_pred'])

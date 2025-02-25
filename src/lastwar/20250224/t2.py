@@ -70,7 +70,7 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
 
     # 按服务器分组并计算ewm
     df = df.sort_values(by=['server_id', 'day'])
-    df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=14, adjust=False).mean())
+    # df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=14, adjust=False).mean())
 
     # df = df[df['day'] >= '2024-10-16']
     df = df[df['day'] >= '2024-01-01']
@@ -79,7 +79,9 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
     df = df[(df['server_id'] >= 3) & (df['server_id'] <= 36)]
     
     # for test
-    df = df[(df['server_id'] == 10)]
+    # df = df[(df['server_id'] == 10)]
+    df = df.groupby(['day']).sum().reset_index()
+    df['server_id'] = 0
 
     # 过滤掉最近4周收入和为0的服务器
     endday = df['day'].max()
@@ -111,9 +113,9 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
         test_df = server_df[server_df['ds'] >= start_date]
 
         # 训练 Prophet 模型并进行预测
-        model = Prophet(growth='logistic', seasonality_mode='multiplicative', yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True, interval_width=0.25)
+        # model = Prophet(growth='logistic', seasonality_mode='multiplicative', yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True, interval_width=0.25)
         # model = Prophet(growth='logistic', weekly_seasonality=True, daily_seasonality=True)
-        # model = Prophet()
+        model = Prophet()
         model.fit(train_df)
         
         train_forecast = model.predict(train_df[['ds', 'cap', 'floor']])

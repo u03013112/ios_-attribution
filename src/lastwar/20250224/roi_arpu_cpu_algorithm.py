@@ -136,6 +136,8 @@ def build_logarithmic_model(name, x, y):
     # y = a + b * np.log(x[0])
     def model(x, y):
         x_transformed = np.log(x[0]).reshape(-1, 1)
+        print('x_transformed:')
+        print(x_transformed)
         lr = LinearRegression()
         lr.fit(x_transformed, y)
         return lambda x: (lr.predict(np.log(x[0]).reshape(-1, 1)), lr)

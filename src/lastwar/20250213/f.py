@@ -44,12 +44,18 @@ def getData():
 
 def custom_loss(y_true, y_pred):
     # 添加一个惩罚项，确保预测值大于0
-    penalty = torch.sum(torch.abs(y_pred[y_pred < 0])) * 1000  # 增加惩罚力度
+    penalty = torch.sum(torch.abs(y_pred[y_pred < 0])) * 100000  # 增加惩罚力度
     return torch.mean((y_true - y_pred) ** 2) + penalty
 
 def func1():
     df = getData()
-    # df = df[df['day'] >= '2024-10-16']
+
+    # 按服务器分组并计算ewm
+    df = df.sort_values(by=['server_id_int', 'day'])
+    # df['revenue'] = df.groupby('server_id_int')['revenue'].transform(lambda x: x.ewm(span=7, adjust=False).mean())
+
+    # 从一个周一开始
+    df = df[df['day'] >= '2024-10-21']
 
     df0 = df[(df['server_id_int'] >= 3) & (df['server_id_int'] <= 36)]
 
@@ -59,9 +65,9 @@ def func1():
     results = []
 
     for server_id in range(3, 37):
-        # # for test
-        # if server_id != 10:
-        #     continue
+        # for test
+        if server_id != 10:
+            continue
 
         server_data = df0[df0['server_id'] == server_id].sort_values('ds').reset_index(drop=True)
         
@@ -79,99 +85,153 @@ def func1():
             yearly_seasonality=True,
             weekly_seasonality=True,
             daily_seasonality=True,
-            learning_rate=0.01, 
+            learning_rate=0.005, 
             loss_func=custom_loss
         )
         
         # 只保留 'ds' 和 'y' 列
         server_data_for_model = server_data[['ds', 'y']]
         
-        metrics = model.fit(server_data_for_model, freq='D')
+        trainDf = server_data_for_model[server_data_for_model['ds'] < '2024-12-30']
+        testDf = server_data_for_model[server_data_for_model['ds'] >= '2024-12-30']
+
+        metrics = model.fit(trainDf, freq='D')
         
-        # 预测未来
-        future = model.make_future_dataframe(server_data_for_model, periods=28, n_historic_predictions=True)
+        # # 预测未来
+        # future = model.make_future_dataframe(server_data_for_model, periods=28, n_historic_predictions=True)
+        # forecast = model.predict(future)
+        # forecast.to_csv(f"/src/data/20250220_forecast_{server_id}.csv", index=False)
+        
+        # # 计算 R² 值
+        # y_true = server_data['y'].values
+        # y_pred = []
+        # y_pred_dates = []
+
+
+        # 预测1月份的数据，预测从周一开始，所以稍微调整一下 2024-12-30~2025-01-26
+        future = model.make_future_dataframe(trainDf, periods=28, n_historic_predictions=False)
+        print(f"future:")
+        print(future)
+
         forecast = model.predict(future)
-        forecast.to_csv(f"/src/data/20250220_forecast_{server_id}.csv", index=False)
-        
-        # 计算 R² 值
-        y_true = server_data['y'].values
+        print(f"forecast:")
+        print(forecast)
+
+        future.to_csv(f"/src/data/20250220_debug_future_{server_id}.csv", index=False)
+        forecast.to_csv(f"/src/data/20250220_debug_forecast_{server_id}.csv", index=False)
+
         y_pred = []
         y_pred_dates = []
 
-        # 分段预测
-        for i in range(0, len(server_data) - 28, 28):
-            segment = server_data_for_model.iloc[:i+28]
-            future_segment = model.make_future_dataframe(segment, periods=28, n_historic_predictions=False)
-            forecast_segment = model.predict(future_segment)
-            # print('future_segment')
-            # print(future_segment)
-            # print('forecast_segment')
-            # print(forecast_segment[['ds','yhat1', 'yhat2', 'yhat3', 'yhat4', 'yhat5', 'yhat6', 'yhat7', 'yhat8', 'yhat9', 'yhat10', 'yhat11', 'yhat12', 'yhat13', 'yhat14', 'yhat15', 'yhat16', 'yhat17', 'yhat18', 'yhat19', 'yhat20', 'yhat21', 'yhat22', 'yhat23', 'yhat24', 'yhat25', 'yhat26', 'yhat27', 'yhat28']])
+        for j in range(28):
+            y_pred.append(forecast.iloc[28+j][f'yhat{j+1}'])
+            y_pred_dates.append(forecast.iloc[28+j]['ds'])
 
-            for j in range(28):
-                y_pred.append(forecast_segment.iloc[28+j][f'yhat{j+1}'])
-                y_pred_dates.append(forecast_segment.iloc[28+j]['ds'])
 
-        # 将 y_pred 转换为浮点数类型
+        y_true = testDf[(testDf['ds'] <= '2025-01-26')]['y'].values
         y_pred = np.array(y_pred).astype(np.float64)
-        
-        # 检查并处理 NaN 和无穷大值
-        if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
-            y_pred = np.nan_to_num(y_pred, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        # 确保 y_true 和 y_pred 的长度一致
-        min_length = min(len(y_true), len(y_pred))
-        y_true = y_true[:min_length]
-        y_pred = y_pred[:min_length]
-        y_pred_dates = y_pred_dates[:min_length]  # 确保 y_pred_dates 的长度一致
-        
-        r2 = r2_score(y_true, y_pred)
-        # print('y_pred:')
-        # print(y_pred)
+        print('y_true:')
+        print(y_true)
+        print('y_pred:')
+        print(y_pred)
 
-        # 保存结果
-        results.append({
-            'server_id': server_id,
-            'forecast': forecast,
-            'actual': server_data[['ds', 'y']],
-            'y_pred': y_pred,
-            'y_pred_dates': y_pred_dates,
-            'r2': r2
-        })
+        # 计算 R² 值
+        r2 = r2_score(y_true, y_pred)
+        
+        print(f"r2: {r2}")
+        # 计算mape
+        mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+        print(f"mape: {mape}")
+
+        totalMape = np.abs((y_true.sum() - y_pred.sum()) / y_true.sum()) * 100
+        print(f"totalMape: {totalMape}")
+
+        # 画图
+        plt.figure(figsize=(10, 6))
+        plt.plot(testDf['ds'], testDf['y'], label='Actual Revenue', alpha=0.6)
+        plt.plot(y_pred_dates, y_pred, label='Predicted Revenue', linestyle='--')
+        plt.title(f'Actual and Forecasted Revenue for Server {server_id} (R²={r2:.2f})')
+        plt.xlabel('Date')
+        plt.ylabel('Revenue')
+        plt.legend()
+        plt.savefig(f"/src/data/20250220_actual_forecast_{server_id}.png")
+        plt.close()
+        print(f"Actual and Forecasted Revenue for Server {server_id} saved.")
+
+
+
+
+
+#         # 分段预测
+#         for i in range(0, len(server_data) - 28, 28):
+#             segment = server_data_for_model.iloc[:i+28]
+#             future_segment = model.make_future_dataframe(segment, periods=28, n_historic_predictions=False)
+#             forecast_segment = model.predict(future_segment)
+            
+#             for j in range(28):
+#                 y_pred.append(forecast_segment.iloc[28+j][f'yhat{j+1}'])
+#                 y_pred_dates.append(forecast_segment.iloc[28+j]['ds'])
+
+#         # 将 y_pred 转换为浮点数类型
+#         y_pred = np.array(y_pred).astype(np.float64)
+        
+#         # 检查并处理 NaN 和无穷大值
+#         if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
+#             y_pred = np.nan_to_num(y_pred, nan=0.0, posinf=0.0, neginf=0.0)
+        
+#         # 确保 y_true 和 y_pred 的长度一致
+#         min_length = min(len(y_true), len(y_pred))
+#         y_true = y_true[:min_length]
+#         y_pred = y_pred[:min_length]
+#         y_pred_dates = y_pred_dates[:min_length]  # 确保 y_pred_dates 的长度一致
+        
+#         r2 = r2_score(y_true, y_pred)
+#         # print('y_pred:')
+#         # print(y_pred)
+
+#         # 保存结果
+#         results.append({
+#             'server_id': server_id,
+#             'forecast': forecast,
+#             'actual': server_data[['ds', 'y']],
+#             'y_pred': y_pred,
+#             'y_pred_dates': y_pred_dates,
+#             'r2': r2
+#         })
     
-    return results
+#     return results
 
 results = func1()
 print("func1() done.")
-# print("results:")
-# print(results)
+# # print("results:")
+# # print(results)
 
-# 分析实际收入和预测收入
-for result in results:
-    server_id = result['server_id']
-    actual = result['actual']
-    forecast = result['forecast']
-    y_pred = result['y_pred']
-    y_pred_dates = result['y_pred_dates']
-    r2 = result['r2']
+# # 分析实际收入和预测收入
+# for result in results:
+#     server_id = result['server_id']
+#     actual = result['actual']
+#     forecast = result['forecast']
+#     y_pred = result['y_pred']
+#     y_pred_dates = result['y_pred_dates']
+#     r2 = result['r2']
     
-    plt.figure(figsize=(10, 6))
-    plt.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
+#     plt.figure(figsize=(10, 6))
+#     plt.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
     
-    # 预测部分
-    plt.plot(forecast['ds'], forecast['yhat1'], label='Forecasted Revenue', linestyle='--')
+#     # 预测部分
+#     plt.plot(forecast['ds'], forecast['yhat1'], label='Forecasted Revenue', linestyle='--')
     
-    # 预测的28天结果
-    plt.plot(y_pred_dates, y_pred, label='Forecasted Revenue (28 days)', linestyle='-.')
+#     # 预测的28天结果
+#     plt.plot(y_pred_dates, y_pred, label='Forecasted Revenue (28 days)', linestyle='-.')
     
-    # 添加竖线分隔当前数据和预测数据
-    plt.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
+#     # 添加竖线分隔当前数据和预测数据
+#     plt.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
     
-    plt.axhline(y=0, color='r', linestyle='--')
-    plt.title(f'Actual and Forecasted Revenue for Server {server_id} (R²={r2:.2f})')
-    plt.xlabel('Date')
-    plt.ylabel('Revenue')
-    plt.legend()
-    plt.savefig(f"/src/data/20250220_actual_forecast_{server_id}.png")
-    print(f"Actual and Forecasted Revenue for Server {server_id} saved.")
-    plt.close()
+#     plt.axhline(y=0, color='r', linestyle='--')
+#     plt.title(f'Actual and Forecasted Revenue for Server {server_id} (R²={r2:.2f})')
+#     plt.xlabel('Date')
+#     plt.ylabel('Revenue')
+#     plt.legend()
+#     plt.savefig(f"/src/data/20250220_actual_forecast_{server_id}.png")
+#     print(f"Actual and Forecasted Revenue for Server {server_id} saved.")
+#     plt.close()
