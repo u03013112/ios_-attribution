@@ -35,6 +35,40 @@ def getData():
 
     return df
 
+def draw1():
+    df = getData()
+    # 筛选服务器ID在3到36之间的数据
+    df0 = df[(df['server_id'] >= 3) & (df['server_id'] <= 36)]
+
+    df0['week'] = df0['day'] - pd.to_timedelta(df0['day'].dt.dayofweek, unit='d')
+    weekDf = df0.groupby(['week','server_id']).agg({'payusers': 'sum', 'revenue': 'sum'}).reset_index()
+    weekDf['arppu'] = weekDf['revenue'] / weekDf['payusers']
+
+    
+    # 画图，每个服务器一条线，x轴是日期，y payusers
+    plt.figure(figsize=(10, 6))
+    for server_id, group in weekDf.groupby('server_id'):
+        plt.plot(group['week'], group['payusers'], label=f'Server {server_id}')
+    plt.title('Payusers by Server')
+    plt.xlabel('Date')
+    plt.ylabel('Payusers')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("/src/data/20250224_payusers.png")
+    plt.close()
+
+    # 画图，每个服务器一条线，x轴是日期，y arppu
+    plt.figure(figsize=(10, 6))
+    for server_id, group in weekDf.groupby('server_id'):
+        plt.plot(group['week'], group['arppu'], label=f'Server {server_id}')
+    plt.title('ARPPU by Server')
+    plt.xlabel('Date')
+    plt.ylabel('ARPPU')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("/src/data/20250224_arppu.png")
+    plt.close()
+
 def mainWeek():
     df = getData()
 
@@ -45,10 +79,11 @@ def mainWeek():
     best_models = {}
 
     for server_id in range(3, 37):
-        print(f"Processing server {server_id}...")
         # # for test
         # if server_id != 10:
         #     continue
+
+        print(f"Processing server {server_id}...")
 
         # 筛选当前服务器的数据
         server_data = df0[df0['server_id'] == server_id].sort_values('day').reset_index(drop=True)
@@ -62,7 +97,14 @@ def mainWeek():
             continue
     
         # 计算按周汇总数据
-        server_data['week'] = server_data['day'].dt.to_period('W')
+        # server_data['week'] = server_data['day'].dt.to_period('W')
+        server_data['day'] = pd.to_datetime(server_data['day'])
+        # server_data['week'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
+        
+        # 每2周 进行一次汇总，为了后续代码统一，仍旧命名为week
+        server_data['week_start'] = server_data['day'] - pd.to_timedelta(server_data['day'].dt.dayofweek, unit='d')
+        server_data['week'] = server_data['week_start'] - pd.to_timedelta(server_data['week_start'].dt.week % 2, unit='W')
+
         weekly_data = server_data.groupby('week').agg({'revenue': 'sum', 'payusers': 'sum'}).reset_index()
         weekly_data['arppu'] = weekly_data['revenue'] / weekly_data['payusers']
 
@@ -74,20 +116,27 @@ def mainWeek():
             continue
 
         # 划分训练集和测试集（前80%训练，后20%测试）
-        split_index = int(len(weekly_data) * 0.8)
+        split_index = int(len(weekly_data) * 0.7)
         train_data = weekly_data.iloc[:split_index]
         test_data = weekly_data.iloc[split_index:]
-        # print('train data len:', len(train_data))
-        # print('test data len:', len(test_data))
+        split_day = weekly_data.iloc[split_index]['week']
+        # print(f"Split day for server {server_id}: {split_day}")
+        # print(f"Train data for server {server_id}: {len(train_data)} weeks")
+        # print(f"Test data for server {server_id}: {len(test_data)} weeks")
+        # return
+
+        # # 整月数据就这些，只能暂时这么分割
+        # train_data = weekly_data[(weekly_data['day']>= '2024-11-01') & (weekly_data['day']<= '2025-12-31')]
+        # test_data = weekly_data[(weekly_data['day']>= '2025-01-01') & (weekly_data['day']<= '2025-01-31')]
 
         # 准备训练集和测试集数据
         x_train = np.arange(1, len(train_data) + 1)  # 训练集时间序列（周数）
         y_payusers_train = train_data['payusers'].values  # 训练集目标值（payusers）
-        y_arppu_train = train_data['arppu'].values  # 训练集目标值（arppu）
+        y_arppu_train = train_data['arppu'].values  # 训练集目标值（arppu')
 
         x_test = np.arange(len(train_data) + 1, len(weekly_data) + 1)  # 测试集时间序列（周数）
-        y_payusers_test = test_data['payusers'].values  # 测试集目标值（payusers）
-        y_arppu_test = test_data['arppu'].values  # 测试集目标值（arppu）
+        y_payusers_test = test_data['payusers'].values  # 测试集目标值（payusers')
+        y_arppu_test = test_data['arppu'].values  # 测试集目标值（arppu')
 
         # 初始化最佳MAPE和方案名
         best_payusers_mape = float('inf')
@@ -114,8 +163,8 @@ def mainWeek():
                 # 计算训练集MAPE
                 mape_train = metrics.mean_absolute_percentage_error(y_payusers_train, y_pred_train)
                 # 更新最佳方案
-                if mape_test < best_payusers_mape:
-                    best_payusers_mape = mape_test
+                if mape_train < best_payusers_mape:
+                    best_payusers_mape = mape_train
                     best_payusers_model_name = model_name
                     # 记录训练集和测试集预测值
                     best_payusers_predictions_train = y_pred_train
@@ -136,8 +185,8 @@ def mainWeek():
                 # 计算训练集MAPE
                 mape_train = metrics.mean_absolute_percentage_error(y_arppu_train, y_pred_train)
                 # 更新最佳方案
-                if mape_test < best_arppu_mape:
-                    best_arppu_mape = mape_test
+                if mape_train < best_arppu_mape:
+                    best_arppu_mape = mape_train
                     best_arppu_model_name = model_name
                     # 记录训练集和测试集预测值
                     best_arppu_predictions_train = y_pred_train
@@ -184,28 +233,74 @@ def mainWeek():
                 # 画图
                 plt.figure(figsize=(10, 12))
                 plt.subplot(3, 1, 1)
-                plt.plot(weekly_data['week'].astype(str), weekly_data['payusers'], label='True Payusers')
-                plt.plot(weekly_data['week'].astype(str), weekly_data['payusers_pred'], label='Predicted Payusers')
-                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.plot(weekly_data['week'], weekly_data['payusers'], label='True Payusers')
+                plt.plot(weekly_data['week'], weekly_data['payusers_pred'], label='Predicted Payusers')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
                 plt.title(f'Server {server_id} - Payusers')
                 plt.legend()
 
                 plt.subplot(3, 1, 2)
-                plt.plot(weekly_data['week'].astype(str), weekly_data['arppu'], label='True ARPPU')
-                plt.plot(weekly_data['week'].astype(str), weekly_data['arppu_pred'], label='Predicted ARPPU')
-                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.plot(weekly_data['week'], weekly_data['arppu'], label='True ARPPU')
+                plt.plot(weekly_data['week'], weekly_data['arppu_pred'], label='Predicted ARPPU')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
                 plt.title(f'Server {server_id} - ARPPU')
                 plt.legend()
 
                 plt.subplot(3, 1, 3)
-                plt.plot(weekly_data['week'].astype(str), weekly_data['revenue'], label='True Revenue')
-                plt.plot(weekly_data['week'].astype(str), weekly_data['revenue_pred'], label='Predicted Revenue')
-                plt.axvline(x=split_index, color='r', linestyle='--', label='Train/Test Split')
+                plt.plot(weekly_data['week'], weekly_data['revenue'], label='True Revenue')
+                plt.plot(weekly_data['week'], weekly_data['revenue_pred'], label='Predicted Revenue')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
                 plt.title(f'Server {server_id} - Revenue')
                 plt.legend()
 
                 plt.tight_layout()
                 plt.savefig(f"/src/data/20250224_week_df_{server_id}.png")
+                plt.close()
+
+                # 按月汇总
+                # weekly_data['month'] = weekly_data['week'].dt.to_timestamp().dt.to_period('M')
+
+                weekly_data['month'] = weekly_data['week'] - pd.to_timedelta(weekly_data['week'].dt.day - 1, unit='d')
+
+                monthly_data = weekly_data.groupby('month').agg({
+                    'payusers': 'sum',
+                    'arppu': 'mean',
+                    'revenue': 'sum',
+                    'payusers_pred': 'sum',
+                    'arppu_pred': 'mean',
+                    'revenue_pred': 'sum'
+                }).reset_index()
+
+                monthly_data['revenue_mape'] = np.abs(monthly_data['revenue'] - monthly_data['revenue_pred']) / monthly_data['revenue']
+
+                # 保存按月汇总的CSV
+                monthly_data.to_csv(f"/src/data/20250224_month_df_{server_id}.csv", index=False)
+
+                # 画按月汇总的图
+                plt.figure(figsize=(10, 12))
+                plt.subplot(3, 1, 1)
+                plt.plot(monthly_data['month'], monthly_data['payusers'], label='True Payusers')
+                plt.plot(monthly_data['month'], monthly_data['payusers_pred'], label='Predicted Payusers')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - Monthly Payusers')
+                plt.legend()
+
+                plt.subplot(3, 1, 2)
+                plt.plot(monthly_data['month'], monthly_data['arppu'], label='True ARPPU')
+                plt.plot(monthly_data['month'], monthly_data['arppu_pred'], label='Predicted ARPPU')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - Monthly ARPPU')
+                plt.legend()
+
+                plt.subplot(3, 1, 3)
+                plt.plot(monthly_data['month'], monthly_data['revenue'], label='True Revenue')
+                plt.plot(monthly_data['month'], monthly_data['revenue_pred'], label='Predicted Revenue')
+                plt.axvline(x=split_day, color='r', linestyle='--', label='Train/Test Split')
+                plt.title(f'Server {server_id} - Monthly Revenue')
+                plt.legend()
+
+                plt.tight_layout()
+                plt.savefig(f"/src/data/20250224_month_df_{server_id}.png")
                 plt.close()
             except Exception as e:
                 print(f"Error saving results for server {server_id}: {e}")
@@ -229,6 +324,32 @@ def mainWeek():
         }, ignore_index=True)
     results_df.to_csv("/src/data/20250224_final_results.csv", index=False)
 
+    # 输出按月汇总的最终结果
+    results_month_df = pd.DataFrame(columns=[
+        '服务器id', 'Best Payusers Model Name', 'Payusers monthly mape',
+        'Best arppu Model Name', 'arppu monthly mape', 'revenue monthly mape'
+    ])
+    for server_id, result in best_models.items():
+        try:
+            # 计算按月汇总的MAPE
+            monthly_data = pd.read_csv(f"/src/data/20250224_month_df_{server_id}.csv")
+            payusers_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['payusers'], monthly_data['payusers_pred'])
+            arppu_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['arppu'], monthly_data['arppu_pred'])
+            revenue_monthly_mape = metrics.mean_absolute_percentage_error(monthly_data['revenue'], monthly_data['revenue_pred'])
+
+            results_month_df = results_month_df.append({
+                '服务器id': server_id,
+                'Best Payusers Model Name': result['best_payusers_model'],
+                'Payusers monthly mape': payusers_monthly_mape,
+                'Best arppu Model Name': result['best_arppu_model'],
+                'arppu monthly mape': arppu_monthly_mape,
+                'revenue monthly mape': revenue_monthly_mape
+            }, ignore_index=True)
+        except Exception as e:
+            print(f"Error calculating monthly MAPE for server {server_id}: {e}")
+    results_month_df.to_csv("/src/data/20250224_final_results_month.csv", index=False)
+
 
 if __name__ == '__main__':
+    # draw1()
     mainWeek()
