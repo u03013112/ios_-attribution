@@ -64,12 +64,48 @@ def getData2():
 
     return df
 
+# 
+def getData3():
+    df = pd.read_csv('payusers_revenue_20240101_20250225_without_gm.csv')
+
+    # 将"时间"列中的字符串转换为时间类型，其中有一些类似"阶段汇总"的字符串，直接整行删除
+    df['时间'] = pd.to_datetime(df['时间'], errors='coerce')
+    df = df.dropna(subset=['时间'])
+
+    # 列改名： "时间" -> "day", "原服ID：数值格式" -> "server_id"
+    df = df.rename(columns={
+        '时间': 'day', 
+        '原服ID：数值格式': 'server_id',
+    })
+
+    # 将 服务器ID 为 空 的行删除
+    df = df.dropna(subset=['server_id'])
+    df = df[df['server_id'] != '(null)']
+
+    # 将无法转换为浮点数的字符串替换为 NaN，然后再用 0 替换 NaN
+    df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce').fillna(0)
+
+    # print(df.head())
+    # #         day  server_id  payusers  revenue
+    # # 0 2024-10-16         22      46.0  1077.90
+    # # 1 2024-10-17         22      57.0  1706.28
+    # # 2 2024-10-18         22      46.0  1062.88
+    # # 3 2024-10-19         22      59.0  1181.60
+    # # 4 2024-10-20         22      49.0   945.98
+
+    return df
+
+
+
 def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
-    df = getData2()
+    # df = getData2()
+    df = getData3()
+
     df['day'] = pd.to_datetime(df['day'])
 
     # 按服务器分组并计算ewm
     df = df.sort_values(by=['server_id', 'day'])
+    # df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=7, adjust=False).mean())
     df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=14, adjust=False).mean())
 
     # df = df[df['day'] >= '2024-10-16']
