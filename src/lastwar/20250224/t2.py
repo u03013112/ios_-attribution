@@ -70,7 +70,7 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
 
     # 按服务器分组并计算ewm
     df = df.sort_values(by=['server_id', 'day'])
-    # df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=14, adjust=False).mean())
+    df['revenue'] = df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=14, adjust=False).mean())
 
     # df = df[df['day'] >= '2024-10-16']
     df = df[df['day'] >= '2024-01-01']
@@ -113,24 +113,22 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
         test_df = server_df[server_df['ds'] >= start_date]
 
         # 训练 Prophet 模型并进行预测
-        # model = Prophet(growth='logistic', seasonality_mode='multiplicative', yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=True, interval_width=0.25)
-        # model = Prophet(growth='logistic', weekly_seasonality=True, daily_seasonality=True)
         model = Prophet()
         model.fit(train_df)
         
         train_forecast = model.predict(train_df[['ds', 'cap', 'floor']])
-        # print('train df:')
-        # print(train_df[train_df['y']<1])
-        # print(train_df[train_df['y'].isna()])
-        # print('train forecast')
-        # print(train_forecast[train_forecast['yhat'].isna()])
-
-
         test_forecast = model.predict(test_df[['ds', 'cap', 'floor']])
-        # print('test df:')
-        # print(test_df)
-        # print('test forecast')
-        # print(test_forecast)
+
+        # 合并训练集和测试集数据
+        full_df = pd.concat([train_df, test_df])
+        model = Prophet()
+        model.fit(full_df)
+
+        # 预测未来 future_periods 天的数据
+        future = model.make_future_dataframe(periods=future_periods)
+        future['cap'] = 1000
+        future['floor'] = 0
+        full_forecast = model.predict(future)
 
         # 计算train、test的MAPE
         train_df_new = train_df[['ds', 'y']].merge(train_forecast[['ds', 'yhat']], on='ds')
@@ -169,6 +167,23 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
         test_df_new_month.to_csv(f'/src/data/20250224_prophet1_test_month_{server_id}.csv', index=False)
         test_mape_month = np.mean(test_df_new_month['mape'])
 
+        # 保存结果到 CSV 文件
+        result_df = full_forecast[['ds', 'yhat']].merge(server_df[['ds', 'y']], on='ds', how='left')
+        result_df.rename(columns={'y': 'actual_revenue', 'yhat': 'predicted_revenue'}, inplace=True)
+        result_df['initial_predicted_revenue'] = result_df['predicted_revenue']
+        result_df.loc[result_df['ds'] >= start_date, 'initial_predicted_revenue'] = np.nan
+
+        # 将训练集和测试集的预测结果合并到 initial_predicted_revenue 列中
+        initial_predicted = pd.concat([train_forecast[['ds', 'yhat']], test_forecast[['ds', 'yhat']]])
+        initial_predicted.rename(columns={'yhat': 'initial_predicted_revenue'}, inplace=True)
+        result_df = result_df.merge(initial_predicted, on='ds', how='left')
+
+        result_df.rename(columns={
+            'initial_predicted_revenue_y': 'predict1',
+            'predicted_revenue': 'predict2',
+        }, inplace=True)
+        result_df = result_df[['ds', 'actual_revenue', 'predict1','predict2']]
+        result_df.to_csv(f'/src/data/20250224_prophet1_result_{server_id}.csv', index=False)
 
         print('server', server_id)
         print('train mape:', train_mape)
@@ -179,12 +194,18 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
         print('test mape month:', test_mape_month)
 
         # 画图
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(18, 6))
         plt.plot(train_df_new['ds'], train_df_new['y'], label='Actual Revenue')
         plt.plot(train_df_new['ds'], train_df_new['yhat'], label='Predicted Revenue')
 
         plt.plot(test_df_new['ds'], test_df_new['y'], label='Actual Revenue', alpha=0.6)
         plt.plot(test_df_new['ds'], test_df_new['yhat'], label='Predicted Revenue', alpha=0.6)
+
+        plt.plot(full_forecast['ds'], full_forecast['yhat'], label='Future Predicted Revenue', linestyle='--')
+
+        # 添加竖线分割训练集和测试集，以及测试集和预测集
+        plt.axvline(x=pd.to_datetime(start_date), color='r', linestyle='--', label='Train/Test Split')
+        plt.axvline(x=pd.to_datetime(test_df['ds'].max()), color='g', linestyle='--', label='Test/Future Split')
 
         plt.xlabel('Date')
         plt.ylabel('Revenue')
@@ -195,8 +216,6 @@ def prophet1FloorL(target_revenues=[10, 20], future_periods=90):
         plt.close()
 
 
-
-        
 if __name__ == '__main__':
     prophet1FloorL()
             
