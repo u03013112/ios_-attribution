@@ -147,7 +147,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20250209'
+        dayStr = '20250225'
 
     print('dayStr:', dayStr)
 
@@ -223,7 +223,7 @@ def deleteMapePartition(day,app_package,name):
         print('No partition deletion in local version')
 
 def writeMapeToMC(mape,day,app_package,name):
-    print('写入数据到MC')
+    print('写入数据到MC',day,app_package,name)
     print(mape)
     if 'o' in globals():
         table_name = 'ios_conversion_value_mape'
@@ -531,6 +531,163 @@ def lastwarMain():
     deleteMapePartition(dayStr,app_package,name)
     writeMapeToMC(mape,dayStr,app_package,name)
 
+def getLastwarVNPayDataFromMC(todayStr):
+    today = datetime.datetime.strptime(todayStr, '%Y%m%d')
+    oneMonthAgoStr = (today - datetime.timedelta(days=90)).strftime('%Y%m%d')
+    print('获得%s~%s的付费数据'%(oneMonthAgoStr,todayStr))
+
+    sql = f'''
+        select
+            install_day AS install_date,
+            game_uid as uid,
+            sum(
+                case
+                    when (event_time - install_timestamp) between 0 and 24 * 3600 then revenue_value_usd
+                    else 0
+                end
+            ) as revenue
+        from
+            dwd_overseas_revenue_allproject
+        where
+            app = 502
+            and zone = 0
+            and day between {oneMonthAgoStr} and {todayStr}
+            and app_package = 'id6736925794'
+        group by
+            install_day,
+            game_uid
+        ;
+    '''
+    print(sql)
+    df = execSql(sql)
+    return df
+
+lastwarVN20240708CvMapStr = '''
+app_id,conversion_value,event_name,min_event_counter,max_event_counter,min_event_revenue,max_event_revenue,min_time_post_install,max_time_post_install,last_config_change,postback_sequence_index,coarse_conversion_value,lock_window_type,lock_window_time
+id6736925794,0,,,,,,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,1,af_purchase_update_skan_on,0,1,0,0.82,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,2,af_purchase_update_skan_on,0,1,0.82,1.04,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,3,af_purchase_update_skan_on,0,1,1.04,2.11,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,4,af_purchase_update_skan_on,0,1,2.11,3.03,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,5,af_purchase_update_skan_on,0,1,3.03,3.69,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,6,af_purchase_update_skan_on,0,1,3.69,4.88,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,7,af_purchase_update_skan_on,0,1,4.88,6.08,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,8,af_purchase_update_skan_on,0,1,6.08,7.14,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,9,af_purchase_update_skan_on,0,1,7.14,8.43,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,10,af_purchase_update_skan_on,0,1,8.43,10.76,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,11,af_purchase_update_skan_on,0,1,10.76,12.91,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,12,af_purchase_update_skan_on,0,1,12.91,15.12,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,13,af_purchase_update_skan_on,0,1,15.12,17.83,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,14,af_purchase_update_skan_on,0,1,17.83,20.76,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,15,af_purchase_update_skan_on,0,1,20.76,23.27,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,16,af_purchase_update_skan_on,0,1,23.27,26.09,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,17,af_purchase_update_skan_on,0,1,26.09,29.18,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,18,af_purchase_update_skan_on,0,1,29.18,32.77,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,19,af_purchase_update_skan_on,0,1,32.77,35.7,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,20,af_purchase_update_skan_on,0,1,35.7,39,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,21,af_purchase_update_skan_on,0,1,39,43.27,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,22,af_purchase_update_skan_on,0,1,43.27,47.91,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,23,af_purchase_update_skan_on,0,1,47.91,53.07,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,24,af_purchase_update_skan_on,0,1,53.07,58.25,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,25,af_purchase_update_skan_on,0,1,58.25,65.01,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,26,af_purchase_update_skan_on,0,1,65.01,71.02,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,27,af_purchase_update_skan_on,0,1,71.02,77,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,28,af_purchase_update_skan_on,0,1,77,82.33,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,29,af_purchase_update_skan_on,0,1,82.33,87.44,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,30,af_purchase_update_skan_on,0,1,87.44,97.04,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,31,af_purchase_update_skan_on,0,1,97.04,104.05,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,32,af_purchase_update_skan_on,0,1,104.05,111.25,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,33,af_purchase_update_skan_on,0,1,111.25,118.46,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,34,af_purchase_update_skan_on,0,1,118.46,127.5,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,35,af_purchase_update_skan_on,0,1,127.5,142.11,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,36,af_purchase_update_skan_on,0,1,142.11,158.07,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,37,af_purchase_update_skan_on,0,1,158.07,164.73,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,38,af_purchase_update_skan_on,0,1,164.73,172.46,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,39,af_purchase_update_skan_on,0,1,172.46,182.37,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,40,af_purchase_update_skan_on,0,1,182.37,192.84,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,41,af_purchase_update_skan_on,0,1,192.84,201.2,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,42,af_purchase_update_skan_on,0,1,201.2,222.03,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,43,af_purchase_update_skan_on,0,1,222.03,236.68,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,44,af_purchase_update_skan_on,0,1,236.68,249.73,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,45,af_purchase_update_skan_on,0,1,249.73,262.64,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,46,af_purchase_update_skan_on,0,1,262.64,291.51,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,47,af_purchase_update_skan_on,0,1,291.51,316.68,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,48,af_purchase_update_skan_on,0,1,316.68,351.55,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,49,af_purchase_update_skan_on,0,1,351.55,379.26,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,50,af_purchase_update_skan_on,0,1,379.26,405.63,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,51,af_purchase_update_skan_on,0,1,405.63,449.31,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,52,af_purchase_update_skan_on,0,1,449.31,474.95,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,53,af_purchase_update_skan_on,0,1,474.95,522.95,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,54,af_purchase_update_skan_on,0,1,522.95,544.87,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,55,af_purchase_update_skan_on,0,1,544.87,594.73,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,56,af_purchase_update_skan_on,0,1,594.73,700.28,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,57,af_purchase_update_skan_on,0,1,700.28,784.51,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,58,af_purchase_update_skan_on,0,1,784.51,876.11,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,59,af_purchase_update_skan_on,0,1,876.11,994.53,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,60,af_purchase_update_skan_on,0,1,994.53,1075.91,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,61,af_purchase_update_skan_on,0,1,1075.91,1111.48,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,62,af_purchase_update_skan_on,0,1,1111.48,1443.86,0,24,2025-01-10 03:37:50,0,,,
+id6736925794,63,af_purchase_update_skan_on,0,1,1443.86,2060.08,0,24,2025-01-10 03:37:50,0,,,
+'''
+
+def lastwarVNMain():
+
+    N = 64
+
+    df = getLastwarVNPayDataFromMC(dayStr)
+    print('获得了%d条数据'%len(df))
+
+    # 将收入3000以上的用户的收入设置为3000
+    df.loc[df['revenue']>3000,'revenue'] = 3000
+
+    # 计算旧版本的Mape
+    csv_file_like_object = io.StringIO(lastwarVN20240708CvMapStr)    
+    cvMapDf = pd.read_csv(csv_file_like_object)
+    cvMapDf = cvMapDf[['conversion_value', 'min_event_revenue', 'max_event_revenue']]
+    # 将cvMapDf写入MC
+    app_package = 'id6736925794'
+    name = 'af_cv_map'
+    
+    levels = cvMapDf['max_event_revenue'].dropna().tolist()
+    cvMapDf = levelsToCvMap(levels)
+    deleteCvMapPartition(app_package, name)
+    writeCvMapToMC(cvMapDf, app_package, name)
+    
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    deleteMapePartition(dayStr,app_package,name)
+    writeMapeToMC(mape,dayStr,app_package,name)
+    
+    # 生成新的 levels
+    name = 'new_cv_map'
+    levels = makeLevels(df,usd='revenue',N=N)
+    levels = [round(x,2) for x in levels]
+    # 将新的 levels 转换为 cvMap 并写入数据库
+    newCvMapDf = levelsToCvMap(levels)
+    deleteCvMapPartition(app_package,name)
+    writeCvMapToMC(newCvMapDf,app_package,name)
+    
+    # 将mape写入MC
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    deleteMapePartition(dayStr,app_package,name)
+    writeMapeToMC(mape,dayStr,app_package,name)
+
+    # 使用 KMeans 生成新的 levels
+    name = 'new_cv_map_kmeans'
+    levels = makeLevelsByKMeans(df,usd='revenue',N=N)
+    levels = [round(x,2) for x in levels]
+    # 将新的 levels 转换为 cvMap 并写入数据库
+    cvMapDf = levelsToCvMap(levels)
+    deleteCvMapPartition(app_package,name)
+    writeCvMapToMC(cvMapDf,app_package,name)
+
+    # 将mape写入MC
+    mape = checkLevels(df,levels,usd='revenue',cv='cv')
+    deleteMapePartition(dayStr,app_package,name)
+    writeMapeToMC(mape,dayStr,app_package,name)
+
+
+
+
 def getTopwarPayDataFromMC(todayStr):
     today = datetime.datetime.strptime(todayStr, '%Y%m%d')
     oneMonthAgoStr = (today - datetime.timedelta(days=30)).strftime('%Y%m%d')
@@ -653,6 +810,8 @@ def topwarMain():
     writeMapeToMC(mape,dayStr,app_package,name)
 
 
+
+
 if __name__ == '__main__':
     init()
     createCvMapTable()
@@ -661,4 +820,5 @@ if __name__ == '__main__':
     topwarMain()
     topherosMain()
     lastwarMain()
+    lastwarVNMain()
     print('Done')
