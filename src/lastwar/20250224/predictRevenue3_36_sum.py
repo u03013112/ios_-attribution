@@ -212,9 +212,8 @@ ORDER BY
     return df
 
 def prophet1FloorL(future_periods=90):
-
-    # 获取今天的日期
-    today = date.today()
+    # 改为获取昨日数据，因为今日数据可能不完整
+    today = date.today() - pd.Timedelta(days=1)
     todayStr = today.strftime('%Y-%m-%d')
     # 从today 往前 8周，7*8 天 作为测试集
     testStartDay = today - pd.Timedelta(days=7*8)
