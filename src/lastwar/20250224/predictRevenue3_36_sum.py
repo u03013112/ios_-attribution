@@ -6,10 +6,10 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib import parse
 import json
+from datetime import date
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from prophet import Prophet
 
 import sys
@@ -100,9 +100,8 @@ def ssSql(sql):
         # 查询太慢了，多等一会再尝试
         time.sleep(10)
 
-
 def getData(endday='2025-02-25'):
-
+    #希望获得2025-01-01 到 endday 的数据，但是发现第一天的数据不完整，应该是由于时区导致的，所以从2024-12-31开始获取数据 
     sql = f'''
 WITH currency_data AS (
     SELECT
@@ -139,7 +138,7 @@ event_data AS (
         v_event_15
     WHERE
         "$part_event" = 's_pay_new'
-        AND "$part_date" BETWEEN '2024-01-01'
+        AND "$part_date" BETWEEN '2023-12-31'
         AND '{endday}'
 ),
 user_data AS (
@@ -165,7 +164,7 @@ FROM
     AND e.event_date = DATE(c.ex_date)
     LEFT JOIN user_data u ON e."#user_id" = u."#user_id"
 WHERE
-    e.event_date BETWEEN DATE '2024-01-01'
+    e.event_date BETWEEN DATE '2023-12-31'
     AND DATE '{endday}'
     AND e.lw_cross_zone IN ('APS3','APS4','APS5','APS6','APS7','APS8','APS9','APS10','APS11','APS12','APS13','APS14','APS15','APS16','APS17','APS18','APS19','APS20','APS21','APS22','APS23','APS24','APS25','APS26','APS27','APS28','APS29','APS30','APS31','APS32','APS33','APS34','APS35','APS36')
     AND u."#user_id" IS NULL
@@ -178,8 +177,8 @@ ORDER BY
 
     lines = ssSql(sql=sql)
 
-    print('lines:',len(lines))
-    print(lines[:10])
+    # print('lines:',len(lines))
+    # print(lines[:10])
 
     data = []
     for line in lines:
@@ -207,40 +206,54 @@ ORDER BY
     # 将无法转换为浮点数的字符串替换为 NaN，然后再用 0 替换 NaN
     df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce').fillna(0)
 
+    # 重新过滤一下数据，只获取2024-01-01 到 endday 的数据
+    df = df[df['day'] >= '2024-01-01']
+
     return df
 
-
-
 def prophet1FloorL(future_periods=90):
-    df = getData()
+
+    # 获取今天的日期
+    today = date.today()
+    todayStr = today.strftime('%Y-%m-%d')
+    # 从today 往前 8周，7*8 天 作为测试集
+    testStartDay = today - pd.Timedelta(days=7*8)
+    testStartDayStr = testStartDay.strftime('%Y-%m-%d') 
+    print('today:',todayStr,'testStartDay:',testStartDayStr)
+
+    df = getData(todayStr)
 
     df['day'] = pd.to_datetime(df['day'])
-    # 按服务器分组并计算ewm
+    
     df = df.sort_values(by=['server_id', 'day'])
+    df = df.groupby(['day']).agg(
+        {'revenue': 'sum'}
+    ).reset_index()
 
     for N in [1,7,14]:
         server_df = df.copy(deep=True)
         if N > 1:
-            server_df['revenue'] = server_df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=N, adjust=False).mean())
-    
-        server_df = server_df[server_df['day'] >= '2024-01-01']
+            # server_df['revenue'] = server_df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=N, adjust=False).mean())
+            server_df['revenue'] = server_df['revenue'].ewm(span=N, adjust=False).mean()
 
-        # 只计算3~36的服务器
-        server_df = server_df[(server_df['server_id'] >= 3) & (server_df['server_id'] <= 36)]
-        
-        # for test
-        # server_df = server_df[(server_df['server_id'] == 10)]
-        server_df = server_df.groupby(['day']).sum().reset_index()
-        server_df['server_id'] = 0
-
-        # 2025-01-01 作为训练集与测试集的分割
-        start_date = '2025-01-01'
+        # 作为训练集与测试集的分割
+        start_date = testStartDayStr
         
         server_df.rename(columns={'day': 'ds', 'revenue': 'y'}, inplace=True)
         server_df = server_df[['ds', 'y']]
-
+        
         train_df = server_df[server_df['ds'] < start_date]
         test_df = server_df[server_df['ds'] >= start_date]
+
+        # # for debug
+        # print('server_df:')
+        # print(server_df.head())
+
+        # print('train_df:')
+        # print(train_df.head())
+
+        # print('test_df:')
+        # print(test_df.head())
 
         # 训练 Prophet 模型并进行预测
         model = Prophet()
@@ -261,38 +274,32 @@ def prophet1FloorL(future_periods=90):
         # 计算train、test的MAPE
         train_df_new = train_df[['ds', 'y']].merge(train_forecast[['ds', 'yhat']], on='ds')
         train_df_new['mape'] = np.abs(train_df_new['y'] - train_df_new['yhat']) / train_df_new['y']
-        train_df_new.to_csv(f'/src/data/20250224_prophet1_train_{N}.csv', index=False)
         train_mape = np.mean(train_df_new['mape'])
 
         test_df_new = test_df[['ds', 'y']].merge(test_forecast[['ds', 'yhat']], on='ds')
         test_df_new['mape'] = np.abs(test_df_new['y'] - test_df_new['yhat']) / test_df_new['y']
-        test_df_new.to_csv(f'/src/data/20250224_prophet1_test_{N}.csv', index=False)
         test_mape = np.mean(test_df_new['mape'])
 
         # 按周做汇总，然后再计算train、test的MAPE
         train_df_new['week'] = train_df_new['ds'].dt.week
         train_df_new_week = train_df_new.groupby('week').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
         train_df_new_week['mape'] = np.abs(train_df_new_week['y'] - train_df_new_week['yhat']) / train_df_new_week['y']
-        train_df_new_week.to_csv(f'/src/data/20250224_prophet1_train_week_{N}.csv', index=False)
         train_mape_week = np.mean(train_df_new_week['mape'])
 
         test_df_new['week'] = test_df_new['ds'].dt.week
         test_df_new_week = test_df_new.groupby('week').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
         test_df_new_week['mape'] = np.abs(test_df_new_week['y'] - test_df_new_week['yhat']) / test_df_new_week['y']
-        test_df_new_week.to_csv(f'/src/data/20250224_prophet1_test_week_{N}.csv', index=False)
         test_mape_week = np.mean(test_df_new_week['mape'])
 
         # 按月做汇总，然后再计算train、test的MAPE
         train_df_new['month'] = train_df_new['ds'].dt.month
         train_df_new_month = train_df_new.groupby('month').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
         train_df_new_month['mape'] = np.abs(train_df_new_month['y'] - train_df_new_month['yhat']) / train_df_new_month['y']
-        train_df_new_month.to_csv(f'/src/data/20250224_prophet1_train_month_{N}.csv', index=False)
         train_mape_month = np.mean(train_df_new_month['mape'])
 
         test_df_new['month'] = test_df_new['ds'].dt.month
         test_df_new_month = test_df_new.groupby('month').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
         test_df_new_month['mape'] = np.abs(test_df_new_month['y'] - test_df_new_month['yhat']) / test_df_new_month['y']
-        test_df_new_month.to_csv(f'/src/data/20250224_prophet1_test_month_{N}.csv', index=False)
         test_mape_month = np.mean(test_df_new_month['mape'])
 
         # 保存结果到 CSV 文件
@@ -311,38 +318,16 @@ def prophet1FloorL(future_periods=90):
             'predicted_revenue': 'predict2',
         }, inplace=True)
         result_df = result_df[['ds', 'actual_revenue', 'predict1','predict2']]
-        result_df.to_csv(f'/src/data/20250224_prophet1_result_{N}.csv', index=False)
+        result_df.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv', index=False)
+        print(f'save file /src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv')
 
-        print('server', N)
+        print('ewm', N)
         print('train mape:', train_mape)
         print('test mape:', test_mape)
         print('train mape week:', train_mape_week)
         print('test mape week:', test_mape_week)
         print('train mape month:', train_mape_month)
         print('test mape month:', test_mape_month)
-
-        # 画图
-        plt.figure(figsize=(18, 6))
-        plt.plot(train_df_new['ds'], train_df_new['y'], label='Actual Revenue')
-        plt.plot(train_df_new['ds'], train_df_new['yhat'], label='Predicted Revenue')
-
-        plt.plot(test_df_new['ds'], test_df_new['y'], label='Actual Revenue', alpha=0.6)
-        plt.plot(test_df_new['ds'], test_df_new['yhat'], label='Predicted Revenue', alpha=0.6)
-
-        plt.plot(full_forecast['ds'], full_forecast['yhat'], label='Future Predicted Revenue', linestyle='--')
-
-        # 添加竖线分割训练集和测试集，以及测试集和预测集
-        plt.axvline(x=pd.to_datetime(start_date), color='r', linestyle='--', label='Train/Test Split')
-        plt.axvline(x=pd.to_datetime(test_df['ds'].max()), color='g', linestyle='--', label='Test/Future Split')
-
-        plt.xlabel('Date')
-        plt.ylabel('Revenue')
-        plt.title(f'Server {N} Revenue Forecast')
-        plt.legend()
-        plt.savefig(f'/src/data/20250224_prophet1_{N}.png')
-        print(f'save file /src/data/20250224_prophet1_{N}.png')
-        plt.close()
-
 
 if __name__ == '__main__':
     prophet1FloorL()
