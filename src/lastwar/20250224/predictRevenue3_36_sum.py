@@ -244,16 +244,6 @@ def prophet1FloorL(future_periods=90):
         train_df = server_df[server_df['ds'] < start_date]
         test_df = server_df[server_df['ds'] >= start_date]
 
-        # # for debug
-        # print('server_df:')
-        # print(server_df.head())
-
-        # print('train_df:')
-        # print(train_df.head())
-
-        # print('test_df:')
-        # print(test_df.head())
-
         # 训练 Prophet 模型并进行预测
         model = Prophet()
         model.fit(train_df)
