@@ -103,19 +103,7 @@ def ssSql(sql):
 def getData(endday='2025-02-25'):
     #希望获得2025-01-01 到 endday 的数据，但是发现第一天的数据不完整，应该是由于时区导致的，所以从2024-12-31开始获取数据 
     sql = f'''
-WITH currency_data AS (
-    SELECT
-        ex_date,
-        currency,
-        exchange,
-        map_agg(currency, exchange) OVER (PARTITION BY ex_date) AS target_map
-    FROM
-        ta_dim.ta_exchange
-    WHERE
-        ex_date BETWEEN '2023-12-25'
-        AND '{endday}'
-),
-event_data AS (
+WITH event_data AS (
     SELECT
         lw_cross_zone,
         DATE(
@@ -131,8 +119,7 @@ event_data AS (
                 "#event_time"
             )
         ) AS event_date,
-        price_local,
-        closing_currency,
+        usd,
         "#user_id"
     FROM
         v_event_15
@@ -154,14 +141,12 @@ SELECT
     e.lw_cross_zone as server_id,
     ROUND(
         SUM(
-            e.price_local / c.exchange * c.target_map ['USD']
+            e.usd
         ),
         4
     ) AS revenue
 FROM
     event_data e
-    LEFT JOIN currency_data c ON e.closing_currency = c.currency
-    AND e.event_date = DATE(c.ex_date)
     LEFT JOIN user_data u ON e."#user_id" = u."#user_id"
 WHERE
     e.event_date BETWEEN DATE '2023-12-31'
@@ -229,95 +214,110 @@ def prophet1FloorL(future_periods=90):
         {'revenue': 'sum'}
     ).reset_index()
 
-    for N in [1,7,14]:
-        server_df = df.copy(deep=True)
-        if N > 1:
-            # server_df['revenue'] = server_df.groupby('server_id')['revenue'].transform(lambda x: x.ewm(span=N, adjust=False).mean())
-            server_df['revenue'] = server_df['revenue'].ewm(span=N, adjust=False).mean()
 
-        # 作为训练集与测试集的分割
-        start_date = testStartDayStr
-        
-        server_df.rename(columns={'day': 'ds', 'revenue': 'y'}, inplace=True)
-        server_df = server_df[['ds', 'y']]
-        
-        train_df = server_df[server_df['ds'] < start_date]
-        test_df = server_df[server_df['ds'] >= start_date]
+    server_df = df.copy(deep=True)
+    server_df['revenue14'] = server_df['revenue'].ewm(span=14, adjust=False).mean()
 
-        # 训练 Prophet 模型并进行预测
-        model = Prophet()
-        model.fit(train_df)
-        
-        train_forecast = model.predict(train_df[['ds']])
-        test_forecast = model.predict(test_df[['ds']])
+    # 作为训练集与测试集的分割
+    start_date = testStartDayStr
+    
+    server_df.rename(columns={'day': 'ds', 'revenue14': 'y'}, inplace=True)
+    
+    train_df = server_df[['ds', 'y']][server_df['ds'] < start_date]
+    test_df = server_df[['ds', 'y']][server_df['ds'] >= start_date]
 
-        # 合并训练集和测试集数据
-        full_df = pd.concat([train_df, test_df])
-        model = Prophet()
-        model.fit(full_df)
+    # 训练 Prophet 模型并进行预测
+    model = Prophet()
+    model.fit(train_df)
+    
+    train_forecast = model.predict(train_df[['ds']])
+    test_forecast = model.predict(test_df[['ds']])
 
-        # 预测未来 future_periods 天的数据
-        future = model.make_future_dataframe(periods=future_periods)
-        full_forecast = model.predict(future)
+    # 合并训练集和测试集数据
+    full_df = pd.concat([train_df, test_df])
+    model = Prophet()
+    model.fit(full_df)
 
-        # 计算train、test的MAPE
-        train_df_new = train_df[['ds', 'y']].merge(train_forecast[['ds', 'yhat']], on='ds')
-        train_df_new['mape'] = np.abs(train_df_new['y'] - train_df_new['yhat']) / train_df_new['y']
-        train_mape = np.mean(train_df_new['mape'])
+    # 预测未来 future_periods 天的数据
+    future = model.make_future_dataframe(periods=future_periods)
+    full_forecast = model.predict(future)
 
-        test_df_new = test_df[['ds', 'y']].merge(test_forecast[['ds', 'yhat']], on='ds')
-        test_df_new['mape'] = np.abs(test_df_new['y'] - test_df_new['yhat']) / test_df_new['y']
-        test_mape = np.mean(test_df_new['mape'])
+    # 保存结果到 CSV 文件
+    result_df = full_forecast[['ds', 'yhat']].merge(server_df[['ds', 'revenue', 'y']], on='ds', how='left')
+    result_df.rename(columns={'y': 'revenue_ewm14', 'yhat': 'predicted_revenue'}, inplace=True)
+    result_df['initial_predicted_revenue'] = result_df['predicted_revenue']
+    result_df.loc[result_df['ds'] >= start_date, 'initial_predicted_revenue'] = np.nan
 
-        # 按周做汇总，然后再计算train、test的MAPE
-        train_df_new['week'] = train_df_new['ds'].dt.week
-        train_df_new_week = train_df_new.groupby('week').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
-        train_df_new_week['mape'] = np.abs(train_df_new_week['y'] - train_df_new_week['yhat']) / train_df_new_week['y']
-        train_mape_week = np.mean(train_df_new_week['mape'])
+    # 将训练集和测试集的预测结果合并到 initial_predicted_revenue 列中
+    initial_predicted = pd.concat([train_forecast[['ds', 'yhat']], test_forecast[['ds', 'yhat']]])
+    initial_predicted.rename(columns={'yhat': 'initial_predicted_revenue'}, inplace=True)
+    result_df = result_df.merge(initial_predicted, on='ds', how='left')
 
-        test_df_new['week'] = test_df_new['ds'].dt.week
-        test_df_new_week = test_df_new.groupby('week').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
-        test_df_new_week['mape'] = np.abs(test_df_new_week['y'] - test_df_new_week['yhat']) / test_df_new_week['y']
-        test_mape_week = np.mean(test_df_new_week['mape'])
+    result_df.rename(columns={
+        'initial_predicted_revenue_y': 'predict1',
+        'predicted_revenue': 'predict2',
+    }, inplace=True)
+    result_df = result_df[['ds', 'revenue', 'revenue_ewm14', 'predict1','predict2']]
 
-        # 按月做汇总，然后再计算train、test的MAPE
-        train_df_new['month'] = train_df_new['ds'].dt.month
-        train_df_new_month = train_df_new.groupby('month').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
-        train_df_new_month['mape'] = np.abs(train_df_new_month['y'] - train_df_new_month['yhat']) / train_df_new_month['y']
-        train_mape_month = np.mean(train_df_new_month['mape'])
+    result_df['day'] = todayStr
+    result_df.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}.csv', index=False)
+    print(f'save file /src/data/lastwarPredictRevenue3_36_sum_{todayStr}.csv')
+    
+    # 记录一下模型的性能
+    # 计算train、test的MAPE
+    train_df_new = train_df[['ds', 'y']].merge(train_forecast[['ds', 'yhat']], on='ds')
+    train_df_new = train_df_new.merge(server_df[['ds', 'revenue']], on='ds')
+    train_df_new['mape'] = np.abs(train_df_new['revenue'] - train_df_new['yhat']) / train_df_new['revenue']
+    train_df_new['mape14'] = np.abs(train_df_new['y'] - train_df_new['yhat']) / train_df_new['y']
+    train_mape = np.mean(train_df_new['mape'])
+    train_mape14 = np.mean(train_df_new['mape14'])
 
-        test_df_new['month'] = test_df_new['ds'].dt.month
-        test_df_new_month = test_df_new.groupby('month').agg({'y': 'sum', 'yhat': 'sum'}).reset_index()
-        test_df_new_month['mape'] = np.abs(test_df_new_month['y'] - test_df_new_month['yhat']) / test_df_new_month['y']
-        test_mape_month = np.mean(test_df_new_month['mape'])
+    test_df_new = test_df[['ds', 'y']].merge(test_forecast[['ds', 'yhat']], on='ds')
+    test_df_new = test_df_new.merge(server_df[['ds', 'revenue']], on='ds')
+    test_df_new['mape'] = np.abs(test_df_new['revenue'] - test_df_new['yhat']) / test_df_new['revenue']
+    test_df_new['mape14'] = np.abs(test_df_new['y'] - test_df_new['yhat']) / test_df_new['y']
+    test_mape = np.mean(test_df_new['mape'])
+    test_mape14 = np.mean(test_df_new['mape14'])
 
-        # 保存结果到 CSV 文件
-        result_df = full_forecast[['ds', 'yhat']].merge(server_df[['ds', 'y']], on='ds', how='left')
-        result_df.rename(columns={'y': 'actual_revenue', 'yhat': 'predicted_revenue'}, inplace=True)
-        result_df['initial_predicted_revenue'] = result_df['predicted_revenue']
-        result_df.loc[result_df['ds'] >= start_date, 'initial_predicted_revenue'] = np.nan
+    # 按周统计train、test的MAPE
+    train_df_new['week'] = train_df_new['ds'].dt.strftime('%W')
+    train_df_new_week = train_df_new.groupby('week').agg({'revenue': 'sum', 'y':'sum' , 'yhat': 'sum'}).reset_index()
+    train_df_new_week['mape'] = np.abs(train_df_new_week['revenue'] - train_df_new_week['yhat']) / train_df_new_week['revenue']
+    train_df_new_week['mape14'] = np.abs(train_df_new_week['y'] - train_df_new_week['yhat']) / train_df_new_week['y']
+    train_mape_week = np.mean(train_df_new_week['mape'])
+    train_mape14_week = np.mean(train_df_new_week['mape14'])
 
-        # 将训练集和测试集的预测结果合并到 initial_predicted_revenue 列中
-        initial_predicted = pd.concat([train_forecast[['ds', 'yhat']], test_forecast[['ds', 'yhat']]])
-        initial_predicted.rename(columns={'yhat': 'initial_predicted_revenue'}, inplace=True)
-        result_df = result_df.merge(initial_predicted, on='ds', how='left')
+    test_df_new['week'] = test_df_new['ds'].dt.strftime('%W')
+    test_df_new_week = test_df_new.groupby('week').agg({'revenue': 'sum', 'y':'sum' , 'yhat': 'sum'}).reset_index()
+    test_df_new_week['mape'] = np.abs(test_df_new_week['revenue'] - test_df_new_week['yhat']) / test_df_new_week['revenue']
+    test_df_new_week['mape14'] = np.abs(test_df_new_week['y'] - test_df_new_week['yhat']) / test_df_new_week['y']
+    test_mape_week = np.mean(test_df_new_week['mape'])
+    test_mape14_week = np.mean(test_df_new_week['mape14'])
 
-        result_df.rename(columns={
-            'initial_predicted_revenue_y': 'predict1',
-            'predicted_revenue': 'predict2',
-        }, inplace=True)
-        result_df = result_df[['ds', 'actual_revenue', 'predict1','predict2']]
-        result_df['day'] = todayStr
-        result_df.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv', index=False)
-        print(f'save file /src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv')
+    # 按月统计train、test的MAPE
+    train_df_new['month'] = train_df_new['ds'].dt.strftime('%Y-%m')
+    train_df_new_month = train_df_new.groupby('month').agg({'revenue': 'sum', 'y':'sum' , 'yhat': 'sum'}).reset_index()
+    train_df_new_month['mape'] = np.abs(train_df_new_month['revenue'] - train_df_new_month['yhat']) / train_df_new_month['revenue']
+    train_df_new_month['mape14'] = np.abs(train_df_new_month['y'] - train_df_new_month['yhat']) / train_df_new_month['y']
+    train_mape_month = np.mean(train_df_new_month['mape'])
+    train_mape14_month = np.mean(train_df_new_month['mape14'])
 
-        print('ewm', N)
-        print('train mape:', train_mape)
-        print('test mape:', test_mape)
-        print('train mape week:', train_mape_week)
-        print('test mape week:', test_mape_week)
-        print('train mape month:', train_mape_month)
-        print('test mape month:', test_mape_month)
+    test_df_new['month'] = test_df_new['ds'].dt.strftime('%Y-%m')
+    test_df_new_month = test_df_new.groupby('month').agg({'revenue': 'sum', 'y':'sum' , 'yhat': 'sum'}).reset_index()
+    test_df_new_month['mape'] = np.abs(test_df_new_month['revenue'] - test_df_new_month['yhat']) / test_df_new_month['revenue']
+    test_df_new_month['mape14'] = np.abs(test_df_new_month['y'] - test_df_new_month['yhat']) / test_df_new_month['y']
+    test_mape_month = np.mean(test_df_new_month['mape'])
+    test_mape14_month = np.mean(test_df_new_month['mape14'])
+
+    print('按天统计')
+    print('train_mape:',train_mape,'train_mape14:',train_mape14)
+    print('test_mape:',test_mape,'test_mape14:',test_mape14)
+    print('按周统计')
+    print('train_mape_week:',train_mape_week,'train_mape14_week:',train_mape14_week)
+    print('test_mape_week:',test_mape_week,'test_mape14_week:',test_mape14_week)
+    print('按月统计')
+    print('train_mape_month:',train_mape_month,'train_mape14_month:',train_mape14_month)
+    print('test_mape_month:',test_mape_month,'test_mape14_month:',test_mape14_month)
 
 if __name__ == '__main__':
     prophet1FloorL()
