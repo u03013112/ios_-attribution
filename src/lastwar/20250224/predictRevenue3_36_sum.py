@@ -317,6 +317,7 @@ def prophet1FloorL(future_periods=90):
             'predicted_revenue': 'predict2',
         }, inplace=True)
         result_df = result_df[['ds', 'actual_revenue', 'predict1','predict2']]
+        result_df['day'] = todayStr
         result_df.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv', index=False)
         print(f'save file /src/data/lastwarPredictRevenue3_36_sum_{todayStr}_{N}.csv')
 
