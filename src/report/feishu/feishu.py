@@ -186,7 +186,7 @@ def addText(tenantAccessToken,documentId,blockId,text,text_color = 0,bold = Fals
     else:
         raise Exception(f"Error: {response.status_code}, {response.text}")
 
-def addFile(tenantAccessToken,documentId,blockId,file_path):
+def addFile(tenantAccessToken,documentId,blockId,file_path,view_type = 2):
     # blockId 为空的时候 blockId = documentId
 
     if not blockId or blockId == '':
@@ -219,7 +219,7 @@ def addFile(tenantAccessToken,documentId,blockId,file_path):
                 'block_type': 23,
                 'file': {
                     'token': '',
-                    'view_type':2
+                    'view_type':view_type
                 }
                     
             }
@@ -290,6 +290,78 @@ def addFile(tenantAccessToken,documentId,blockId,file_path):
     response = requests.patch(url, headers=headers, json=data)
 
     return
+
+def addImage(tenantAccessToken, documentId, blockId, image_path):
+    if not blockId or blockId == '':
+        blockId = documentId
+
+    url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{documentId}/blocks/{blockId}/children'
+    headers = {
+        'Authorization': f'Bearer {tenantAccessToken}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'children': [
+            {
+                'block_type': 27,
+                'image': {}
+            }
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code != 200:
+        raise Exception(f"addFile Error: {response.status_code}, {response.text}")
+    
+    # print(response.json())
+    blockId = response.json()['data']['children'][0]['block_id']
+    
+    # 上传图片并获取 image_key
+    url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
+
+    headers = {
+        "Authorization": f"Bearer {tenantAccessToken}"
+    }
+
+    file_name = os.path.basename(image_path)
+    file_size = os.path.getsize(image_path)
+
+    form = {
+        'file_name': file_name,
+        "parent_type": "docx_image",
+        'parent_node': blockId,
+        'size': str(file_size),
+        'file': (open(image_path, 'rb'))
+    }
+    multi_form = MultipartEncoder(form)
+    headers['Content-Type'] = multi_form.content_type
+    
+    response = requests.post(url, headers=headers, data=multi_form)
+
+    if response.status_code != 200:
+        raise Exception(f"uploadFile Error: {response.status_code}, {response.text}")
+
+    # print(response.json())
+    file_token = response.json()['data']['file_token']
+
+
+    url = f"https://open.feishu.cn/open-apis/docx/v1/documents/{documentId}/blocks/{blockId}"
+
+    headers = {
+        "Authorization": f"Bearer {tenantAccessToken}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "replace_image": {
+            "token": file_token
+        }
+    }
+
+    response = requests.patch(url, headers=headers, json=data)
+    print(response.json())
+
 
 
 # 获得chatId暂时没有封装
