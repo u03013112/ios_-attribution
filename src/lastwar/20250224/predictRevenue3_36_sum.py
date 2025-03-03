@@ -19,7 +19,7 @@ import sys
 sys.path.append('/src')
 
 from src.config import ssToken
-from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -209,7 +209,7 @@ ORDER BY
 
 # # 记录一下模型的性能
 # 都写在一个函数里，太长了，特意拆出来
-def computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full_forecast):
+def computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full_forecast,reportData):
     # 计算train、test的MAPE
     train_df_new = train_df[['ds', 'y']].merge(train_forecast[['ds', 'yhat']], on='ds')
     train_df_new = train_df_new.merge(server_df[['ds', 'revenue']], on='ds')
@@ -255,15 +255,32 @@ def computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full
     test_mape_month = np.mean(test_df_new_month['mape'])
     test_mape14_month = np.mean(test_df_new_month['mape14'])
 
-    print('按天统计')
-    print('训练集平均绝对误差:',train_mape,'训练集指数加权移动平均14平均绝对误差:',train_mape14)
-    print('测试集平均绝对误差:',test_mape,'测试集指数加权移动平均14平均绝对误差:',test_mape14)
-    print('按周统计')
-    print('训练集平均绝对误差:',train_mape_week,'训练集指数加权移动平均14平均绝对误差:',train_mape14_week)
-    print('测试集平均绝对误差:',test_mape_week,'测试集指数加权移动平均14平均绝对误差:',test_mape14_week)
-    print('按月统计')
-    print('训练集平均绝对误差:',train_mape_month,'训练集指数加权移动平均14平均绝对误差:',train_mape14_month)
-    print('测试集平均绝对误差:',test_mape_month,'test_mape14_测试集指数加权移动平均14平均绝对误差month:',test_mape14_month)
+    mapeText = f'''
+按天统计
+训练集平均绝对误差:{train_mape} 训练集指数加权移动平均14平均绝对误差:{train_mape14}
+测试集平均绝对误差:{test_mape} 测试集指数加权移动平均14平均绝对误差:{test_mape14}
+按周统计
+训练集平均绝对误差:{train_mape_week} 训练集指数加权移动平均14平均绝对误差:{train_mape14_week}
+测试集平均绝对误差:{test_mape_week} 测试集指数加权移动平均14平均绝对误差:{test_mape14_week}
+按月统计
+训练集平均绝对误差:{train_mape_month} 训练集指数加权移动平均14平均绝对误差:{train_mape14_month}
+测试集平均绝对误差:{test_mape_month} 测试集指数加权移动平均14平均绝对误差:{test_mape14_month}
+    '''
+    print(mapeText)
+
+    reportData['mapeText'] = mapeText
+
+    # print('按天统计')
+    # print('训练集平均绝对误差:',train_mape,'训练集指数加权移动平均14平均绝对误差:',train_mape14)
+    # print('测试集平均绝对误差:',test_mape,'测试集指数加权移动平均14平均绝对误差:',test_mape14)
+    # print('按周统计')
+    # print('训练集平均绝对误差:',train_mape_week,'训练集指数加权移动平均14平均绝对误差:',train_mape14_week)
+    # print('测试集平均绝对误差:',test_mape_week,'测试集指数加权移动平均14平均绝对误差:',test_mape14_week)
+    # print('按月统计')
+    # print('训练集平均绝对误差:',train_mape_month,'训练集指数加权移动平均14平均绝对误差:',train_mape14_month)
+    # print('测试集平均绝对误差:',test_mape_month,'test_mape14_测试集指数加权移动平均14平均绝对误差month:',test_mape14_month)
+
+
 
     # 画图
     plt.figure(figsize=(18, 6))
@@ -287,9 +304,11 @@ def computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full
     print(f'save file /src/data/lastwarPredict3To36RevenueSum.png')
     plt.close()
 
+    reportData['lastwarPredict3To36RevenueSum.png'] = '/src/data/lastwarPredict3To36RevenueSum.png'
+
     return train_mape,train_mape14,test_mape,test_mape14,train_mape_week,train_mape14_week,test_mape_week,test_mape14_week,train_mape_month,train_mape14_month,test_mape_month,test_mape14_month
 
-def computeRevenueRateMin(df):
+def computeRevenueRateMin(df,reportData):
     # 获取最近3个自然月的数据，其中目前今天所在的月份不完整，不计入在内
     today = date.today()
     # startDay 是本月不算，3个自然月的第一天；endDay 是上个月的最后一天
@@ -321,7 +340,9 @@ def computeRevenueRateMin(df):
     minRevenueRateMonth = last3MonthDf.loc[minRevenueRateIdx, 'month']
     minRevenueRateServerId = last3MonthDf.loc[minRevenueRateIdx, 'server_id']
     
-    print(f'最低收入占比: {minRevenueRate*100:.2f}%, 月份: {minRevenueRateMonth}, 服务器: {minRevenueRateServerId}')
+    minRevenueText = f'最低收入占比: {minRevenueRate*100:.2f}%, 月份: {minRevenueRateMonth}, 服务器: {minRevenueRateServerId}'
+    reportData['minRevenueText'] = minRevenueText
+    print(minRevenueText)
     
     return minRevenueRate, minRevenueRateMonth, minRevenueRateServerId
     
@@ -369,7 +390,7 @@ def computeRevenueRateMean(df):
 
 
 # 获得置信区间宽度
-def getWidth(df,result_df):
+def getWidth(df,result_df,reportData):
     # 获取最近3个自然月的数据，其中目前今天所在的月份不完整，不计入在内
     today = date.today()
     # startDay 是本月不算，3个自然月的第一天；endDay 是上个月的最后一天
@@ -385,8 +406,12 @@ def getWidth(df,result_df):
     last3MonthDf['month'] = last3MonthDf['day'].dt.strftime('%Y-%m')
     last3MonthDf = last3MonthDf.groupby(['server_id', 'month']).sum().reset_index()
 
-    minRevenueRate, minRevenueRateMonth, minRevenueRateServerId = computeRevenueRateMin(df)
+    minRevenueRate, minRevenueRateMonth, minRevenueRateServerId = computeRevenueRateMin(df,reportData)
     # minRevenueRate, minRevenueRateMonth, minRevenueRateServerId = computeRevenueRateMean(df)
+
+    reportData['minRevenueRate'] = minRevenueRate
+    reportData['minRevenueRateMonth'] = minRevenueRateMonth
+    reportData['minRevenueRateServerId'] = minRevenueRateServerId
 
     # 用minRevenueRate * 预测值作为对 minRevenueRateServerId 的预测
     # 然后按月汇总，计算每个月的预测值和实际值的误差比例
@@ -441,6 +466,7 @@ def getWidth(df,result_df):
     print('minRevenueRateServerDf:')
     print(minRevenueRateServerDf)
     minRevenueRateServerDf.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.csv', index=False)
+    reportData['lastwarPredictRevenue3_36_sum_min.csv'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.csv'
 
     minRevenueRateServerDf['month'] = pd.to_datetime(minRevenueRateServerDf['month'])
 
@@ -465,11 +491,16 @@ def getWidth(df,result_df):
     plt.savefig(f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.png')
     print(f'save file /src/data/lastwarPredictRevenue3_36_sum_min_{today}.png')
 
+    reportData['lastwarPredictRevenue3_36_sum_min.png'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.png'
 
+    reportData['width'] = width
 
     return width, minRevenueRateServerDf
 
 def prophet1FloorL(future_periods=90):
+    # 将所有报告需要用到的数据都保存在这个字典中，最后返回出去，交给report函数生成飞书报告
+    reportData = {}
+
     # 改为获取昨日数据，因为今日数据可能不完整
     today = date.today()
     todayStr = today.strftime('%Y-%m-%d')
@@ -485,9 +516,22 @@ def prophet1FloorL(future_periods=90):
     futureDayStr = futureDay.strftime('%Y-%m-%d')
 
     print('预测开始日期:', yesterdayStr, '测试集开始日期:', testStartDayStr, '预测结束日期:', futureDayStr)
+
+    reportData['todayStr'] = todayStr
+    reportData['yesterdayStr'] = yesterdayStr
+    reportData['testStartDayStr'] = testStartDayStr
+    reportData['futureDayStr'] = futureDayStr
     
+    # 最近3个月
+    # last3Month = [yesterday - pd.offsets.MonthBegin(0), yesterday - pd.offsets.MonthBegin(1), yesterday - pd.offsets.MonthBegin(2)]
+    last3Month = [(yesterday - pd.DateOffset(months=i)).strftime('%Y-%m') for i in range(4, 1, -1)]
+    # yyyy-mm格式,逗号分隔
+    reportData['last3MonthStr'] = f'{last3Month[0]}，{last3Month[1]}和{last3Month[2]}'
+    print('最近3个月:', reportData['last3MonthStr'])
 
     df = getData(yesterdayStr)
+    reportData['lastwarPredictRevenue3_36_sum_data'] = f'/src/data/lastwarPredictRevenue3_36_sum_data_{yesterdayStr}.csv'
+
     df0 = df.copy(deep=True)
 
     df['day'] = pd.to_datetime(df['day'])
@@ -545,10 +589,11 @@ def prophet1FloorL(future_periods=90):
     result_df['day'] = todayStr
     result_df.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}.csv', index=False)
     print(f'save file /src/data/lastwarPredictRevenue3_36_sum_{todayStr}.csv')
+    reportData['lastwarPredictRevenue3_36_sum.csv'] = f'/src/data/lastwarPredictRevenue3_36_sum_{todayStr}.csv'
 
-    computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full_forecast)
+    computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full_forecast,reportData)
 
-    _, minRevenueRateServerDf = getWidth(df0,result_df)
+    _, minRevenueRateServerDf = getWidth(df0,result_df,reportData)
 
     # 找到minRevenueRateServerDf中，低于threshold10和threshold20的最早月份
     minRevenueRateServerDf['danger10'] = minRevenueRateServerDf['revenue'] < minRevenueRateServerDf['threshold10']
@@ -558,36 +603,117 @@ def prophet1FloorL(future_periods=90):
     danger10 = minRevenueRateServerDf[minRevenueRateServerDf['danger10'] == True]
     danger20 = minRevenueRateServerDf[minRevenueRateServerDf['danger20'] == True]
 
+    waringText = ''
     if len(danger10) > 0:
         print('低于10美元的月份:', danger10['month'].min())
-    
+        waringText += f'低于10美元的月份:{danger10["month"].min()}'
     if len(danger20) > 0:
         print('低于20美元的月份:', danger20['month'].min())
+        waringText += f'低于20美元的月份:{danger20["month"].min()}'
 
     if len(danger10) == 0 and len(danger20) == 0:
         print('暂时没有预测到低于10美元或20美元的情况')
+        waringText += '暂时没有预测到低于10美元或20美元的情况'
         
     minRevenueRateServerDf['predict2_lower_per_day'] = minRevenueRateServerDf['predict2_lower'] / minRevenueRateServerDf['days']
     minP2 = minRevenueRateServerDf['predict2_lower_per_day'].min()
+    waringText += f'预测期间月平均最低日收入可能达到{minP2:.2f}美元'
     print(f'预测期间月平均最低日收入可能达到{minP2:.2f}美元')
-    
-    return
+
+    reportData['waringText'] = waringText
+    reportData['minP2'] = f'{minP2:.2f}'
+
+    return reportData
 
 
-def report():
+def report(reportData):
     # 获取飞书的token
     tenantAccessToken = getTenantAccessToken()
 
-    docId = createDoc(tenantAccessToken, 'lastwar预测服务器收入3~36服','OKcPfXlcalm39DdLT54cuuM5nqh')
+    docId = createDoc(tenantAccessToken, f"lastwar预测服务器收入3~36服 {reportData['todayStr']}",'OKcPfXlcalm39DdLT54cuuM5nqh')
+    print('docId:', docId)
 
+    addText(tenantAccessToken, docId, '','本报告每周一自动生成',text_color=1,bold = True)
     addHead1(tenantAccessToken, docId,'', '结论前置')
-    addFile(tenantAccessToken, docId, '','/src/data/lastwarPredictRevenue3_36_sum_min_2025-02-28.csv',view_type = 1)
-    addImage(tenantAccessToken, docId, '','/src/data/lastwarPredictRevenue3_36_sum_min_2025-02-28.png')
+    
+    addText(tenantAccessToken, docId, '',f"预测时间为{reportData['yesterdayStr']}~{reportData['futureDayStr']}。最近3个月（{reportData['last3MonthStr']}）收入占比最低（收入金额最低）的是第{reportData['minRevenueRateServerId']}服务器。",bold = True)
 
+    if len(reportData['waringText']) > 0:
+        addText(tenantAccessToken, docId, '',reportData['waringText'],bold = True)
+
+    addHead1(tenantAccessToken, docId,'', '方案阐述与中间步骤结果')
+    addHead2(tenantAccessToken, docId,'', '步骤')
+    addText(tenantAccessToken, docId, '', f"1、数数获得2024-01-01至{reportData['yesterdayStr']}，3~36服收入数据")
+    addText(tenantAccessToken, docId, '', f'数数数据筛选条件：')
+    addImage(tenantAccessToken, docId, '','pic1.png')
+    addFile(tenantAccessToken, docId, '',reportData['lastwarPredictRevenue3_36_sum_data'],view_type = 1)
+    
+    addText(tenantAccessToken, docId, '', f'2、预测1，将8周作为测试集，预测3~36服整体收入，此预测用最近的历史数据验证此方案稳定性，并不真的预测未来。得到结果误差：')
+    addText(tenantAccessToken, docId, '', f"误差细节，其中训练集为2024-01-01~{reportData['testStartDayStr']}，测试集为{reportData['testStartDayStr']}~{reportData['yesterdayStr']}。平均绝对误差指真实收入与预测收入误差，指数加权移动平均14平均绝对误差指14日移动平均后的收入与预测收入误差：")
+    
+    addCode(tenantAccessToken, docId, '',reportData['mapeText'])
+
+    addText(tenantAccessToken, docId, '', f'3、预测2，将所有历史数据均放入模型，预测之后90天总体收入金额。得到结果：')
+    addText(tenantAccessToken, docId, '', '''
+预测结果csv文件，列解释：
+ds是数据日期，
+revenue是真实收入金额，
+revenue_ewm14是真实收入金额14日加权移动平均结果的结果，
+predict1：步骤2（预测1）中的预测结果
+predict2：步骤3（预测2）中的预测结果
+    ''')
+
+    addFile(tenantAccessToken, docId, '',reportData['lastwarPredictRevenue3_36_sum.csv'],view_type = 1)
+    addText(tenantAccessToken, docId, '', f'曲线图：')
+
+    addImage(tenantAccessToken, docId, '',reportData['lastwarPredict3To36RevenueSum.png'])
+
+    addText(tenantAccessToken, docId, '', f'4、获得最近3个月，3~36服中，收入占比（收入金额）的服务器。')
+    addCode(tenantAccessToken, docId, '', reportData['minRevenueText'])
+    addText(tenantAccessToken, docId, '', f'5、使用步骤3中的结果，与步骤4中的占比，估测3~36服中 收入占比（收入金额）最低服务器未来收入。')
+    addText(tenantAccessToken, docId, '', f'曲线图：')
+    addImage(tenantAccessToken, docId, '',reportData['lastwarPredictRevenue3_36_sum_min.png'])
+
+    addText(tenantAccessToken, docId, '', '''
+上图中灰色部分为预测可能误差范围，称作置信区间。
+置信区间宽度计算方式：
+步骤2中的预测结果（预测1，因为这个预测中不包含最近真实数据，更能真实反应预测误差）的预测月收入 乘以 步骤4中的结果中的 “最低收入占比” 作为预测值。
+与 步骤4中的结果中的 最低收入服务器 最近3个自然月（不包括本月）的真实月收入 作为真实值。
+按月计算 预测值与真实值的 误差，共3个月，产生3个误差结果（绝对值（预测收入 - 真实收入）/真实收入）。
+取最大误差作为置信区宽度。
+    ''')
+    addText(tenantAccessToken, docId, '', f'宽度：{reportData["width"]:.4f}',bold=True)
+
+    addHead2(tenantAccessToken, docId,'', '结果判定')
+    addText(tenantAccessToken, docId, '', '''
+按照步骤3（预测2）中的结果，乘以步骤4的结果中的 “最低收入占比” 作为最低收入服务器收入预测值。
+最低收入服务器收入预测值 乘以 （1-宽度）作为预测结果的最坏可能。
+当预测结果最坏可能的日均收入 低于 每日 10美元 或者 20美元 时，判定为出现危险情况，予以警告。
+    ''')
+
+    addText(tenantAccessToken, docId, '', '具体结果：')
+    addFile(tenantAccessToken, docId, '',reportData['lastwarPredictRevenue3_36_sum_min.csv'],view_type = 1)
+
+    addText(tenantAccessToken, docId, '', reportData['waringText'],bold=True)
+
+    addHead1(tenantAccessToken, docId,'', '备注')
+    addHead2(tenantAccessToken, docId,'', '平均绝对百分比误差（MAPE）解释')
+    addText(tenantAccessToken, docId, '', '''
+平均绝对百分比误差（MAPE）是一种常用的衡量预测模型准确性的指标，它表示预测值与实际值之间的相对误差的平均值。MAPE 的公式如下：
+MAPE = (1/n) * Σ (|A_t - F_t| / A_t) * 100%
+其中，n 是数据点的数量，At 是时间点 t 的实际值，Ft 是时间点 t 的预测值。MAPE 通过计算每个时间点的绝对百分比误差，并取其平均值，来评估预测模型的整体表现。MAPE 的值越小，表示预测模型的准确性越高。
+    ''')
+
+    addHead2(tenantAccessToken, docId,'', '指数加权移动平均（EWMA）解释')
+    addText(tenantAccessToken, docId, '', '''
+指数加权移动平均是一种更复杂的移动平均方法，它对较新的数据点赋予更大的权重，从而更敏感于最新的数据变化。EWMA 的公式如下：
+EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
+其中，EWMA_t 是时间点 t 的指数加权移动平均值，α 是平滑系数，取值范围在 0 到 1 之间，P_t 是时间点 t 的数据值，EWMA_(t-1) 是时间点 t-1 的指数加权移动平均值。
+    ''')
 
 if __name__ == '__main__':
-    prophet1FloorL()
-    report()
+    reportData = prophet1FloorL()
+    report(reportData)
 
 
 

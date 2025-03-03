@@ -143,6 +143,7 @@ def addHead2(tenantAccessToken,documentId,blockId,title):
     else:
         raise Exception(f"Error: {response.status_code}, {response.text}")
 
+# text_color 1：红色 ,2：橙色 ,3：黄色 ,4：绿色 ,5：蓝色 ,6：紫色 ,7：灰色
 def addText(tenantAccessToken,documentId,blockId,text,text_color = 0,bold = False):
     # blockId 为空的时候 blockId = documentId
 
@@ -185,6 +186,130 @@ def addText(tenantAccessToken,documentId,blockId,text,text_color = 0,bold = Fals
         return response.json()
     else:
         raise Exception(f"Error: {response.status_code}, {response.text}")
+
+# https://open.feishu.cn/document/server-docs/docs/docs/docx-v1/document-block/create
+def addCode(tenantAccessToken, documentId, blockId, code, language='Python', wrap=True):
+    # 如果 blockId 为空，则将其设置为 documentId
+    if not blockId or blockId == '':
+        blockId = documentId
+
+    # 构造请求 URL
+    url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{documentId}/blocks/{blockId}/children'
+
+    # 请求头
+    headers = {
+        'Authorization': f'Bearer {tenantAccessToken}',
+        'Content-Type': 'application/json'
+    }
+
+    languageMap = {
+        'PlainText':1,
+        'ABAP':2,
+        'Ada':3,
+        'Apache':4,
+        'Apex':5,
+        'Assembly Language':6,
+        'Bash':7,
+        'CSharp':8,
+        'C++':9,
+        'C':10,
+        'COBOL':11,
+        'CSS':12,
+        'CoffeeScript':13,
+        'D':14,
+        'Dart':15,
+        'Delphi':16,
+        'Django':17,
+        'Dockerfile':18,
+        'Erlang':19,
+        'Fortran':20,
+        'FoxPro':21,
+        'Go':22,
+        'Groovy':23,
+        'HTML':24,
+        'HTMLBars':25,
+        'HTTP':26,
+        'Haskell':27,
+        'JSON':28,
+        'Java':29,
+        'JavaScript':30,
+        'Julia':31,
+        'Kotlin':32,
+        'LateX':33,
+        'Lisp':34,
+        'Logo':35,
+        'Lua':36,
+        'MATLAB':37,
+        'Makefile':38,
+        'Markdown':39,
+        'Nginx':40,
+        'Objective-C':41,
+        'OpenEdgeABL':42,
+        'PHP':43,
+        'Perl':44,
+        'PostScript':45,
+        'Power Shell':46,
+        'Prolog':47,
+        'ProtoBuf':48,
+        'Python':49,
+        'R':50,
+        'RPG':51,
+        'Ruby':52,
+        'Rust':53,
+        'SAS':54,
+        'SCSS':55,
+        'SQL':56,
+        'Scala':57,
+        'Scheme':58,
+        'Scratch':59,
+        'Shell':60,
+        'Swift':61,
+        'Thrift':62,
+        'TypeScript':63,
+        'VBScript':64,
+        'Visual Basic':65,
+        'XML':66,
+        'YAML':67,
+        'CMake':68,
+        'Diff':69,
+        'Gherkin':70,
+        'GraphQL':71,
+        'OpenGL Shading Language':72,
+        'Properties':73,
+        'Solidity':74,
+        'TOML':75,
+    }
+
+    languageEnum = languageMap[language]
+
+    # 请求体
+    payload = {
+        "children": [
+            {
+                "block_type": 14,  # 修正为代码块的数字枚举值
+                "code": {
+                    "language": languageEnum,  # 代码语言
+                    "wrap": wrap,  # 是否自动换行
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": code  # 代码内容
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    # 发送请求
+    response = requests.post(url, headers=headers, json=payload)
+
+    # 输出结果
+    if response.status_code == 200:
+        print("代码块添加成功")
+    else:
+        print("添加失败:", response.status_code, response.text)
 
 def addFile(tenantAccessToken,documentId,blockId,file_path,view_type = 2):
     # blockId 为空的时候 blockId = documentId
@@ -360,7 +485,15 @@ def addImage(tenantAccessToken, documentId, blockId, image_path):
     }
 
     response = requests.patch(url, headers=headers, json=data)
-    print(response.json())
+    # print(response.json())
+
+    if response.json()['code'] != 0:
+        print("addImage 失败")
+        print(response)
+    else:
+        print("addImage 成功")
+    
+    return
 
 
 
