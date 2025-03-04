@@ -390,9 +390,11 @@ def computeRevenueRateMean(df):
 
 
 # 获得置信区间宽度
-def getWidth(df,result_df,reportData):
+def getWidth(df,result_df,reportData,today = None):
     # 获取最近3个自然月的数据，其中目前今天所在的月份不完整，不计入在内
-    today = date.today()
+    if today is None:
+        today = date.today()
+    todayStr = today.strftime('%Y-%m-%d')
     # startDay 是本月不算，3个自然月的第一天；endDay 是上个月的最后一天
     startDay = today.replace(day=1) - pd.Timedelta(days=1)
     endDay = startDay
@@ -419,12 +421,24 @@ def getWidth(df,result_df,reportData):
     minRevenueRateServerDf = last3MonthDf[last3MonthDf['server_id'] == minRevenueRateServerId].copy(deep=True)
 
     result_df_copy = result_df.copy(deep=True)
-    result_df_copy = result_df_copy[(result_df_copy['ds']>startDayStr) & (result_df_copy['ds']<=endDayStr)]
     result_df_copy['month'] = result_df_copy['ds'].dt.strftime('%Y-%m')
+    # 获取日期，只有dd部分
+    result_df_copy['dd'] = result_df_copy['ds'].dt.strftime('%d') 
+    
+    result_df_copy_for_dd = result_df_copy.copy(deep=True)
+    result_df_copy_for_dd = result_df_copy_for_dd[['month','dd']]
+    result_df_copy_for_dd = result_df_copy_for_dd.groupby(['month']).agg({'dd' : 'max'}).reset_index()
+    print('result_df_copy_for_dd:')
+    print(result_df_copy_for_dd)
+
+    result_df_copy = result_df_copy[(result_df_copy['ds']>startDayStr) & (result_df_copy['ds']<=endDayStr)]
     # 只用predict1来做，因为predict2的数据中包含了后3个月的数据
     # 其实predict1中野包含了部分后3个月的数据，暂时忽略
     result_df_copy = result_df_copy.groupby(['month']).agg(
-        {'predict1' : 'sum'}
+        {
+            'predict1' : 'sum',
+            'dd' : 'max'
+        }
     ).reset_index()
     
     result_df_copy['predict'] = result_df_copy['predict1'] * minRevenueRate
@@ -459,14 +473,25 @@ def getWidth(df,result_df,reportData):
     # 计算阈值警戒线
     # 目前阈值是两个：每日收入低于10美元 和 每日收入低于20美元，根据month对应的天数，算出月警戒线
     minRevenueRateServerDf['day'] = pd.to_datetime(minRevenueRateServerDf['month'] + '-01')
-    minRevenueRateServerDf['days'] = minRevenueRateServerDf['day'].dt.daysinmonth
+    
+    # minRevenueRateServerDf['days'] = minRevenueRateServerDf['day'].dt.daysinmonth
+    minRevenueRateServerDf = minRevenueRateServerDf.merge(result_df_copy_for_dd[['month','dd']], on='month')
+    minRevenueRateServerDf.rename(columns={'dd':'days'}, inplace=True)
+    minRevenueRateServerDf['days'] = pd.to_numeric(minRevenueRateServerDf['days'])
+
     minRevenueRateServerDf['threshold10'] = 10 * minRevenueRateServerDf['days']
     minRevenueRateServerDf['threshold20'] = 20 * minRevenueRateServerDf['days']
 
+    minRevenueRateServerDf['ds'] = minRevenueRateServerDf['day']
+    minRevenueRateServerDf['day'] = todayStr
+
+    minRevenueRateServerDf['predict2_lower_per_day'] = minRevenueRateServerDf['predict2_lower'] / minRevenueRateServerDf['days']
+    
+
     print('minRevenueRateServerDf:')
     print(minRevenueRateServerDf)
-    minRevenueRateServerDf.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.csv', index=False)
-    reportData['lastwarPredictRevenue3_36_sum_min.csv'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.csv'
+    minRevenueRateServerDf.to_csv(f'/src/data/lastwarPredictRevenue3_36_sum_min_{todayStr}.csv', index=False)
+    reportData['lastwarPredictRevenue3_36_sum_min.csv'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{todayStr}.csv'
 
     minRevenueRateServerDf['month'] = pd.to_datetime(minRevenueRateServerDf['month'])
 
@@ -488,10 +513,10 @@ def getWidth(df,result_df,reportData):
     plt.ylabel('Revenue')
     plt.title(f'Server {minRevenueRateServerId} Revenue Forecast')
     plt.legend()
-    plt.savefig(f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.png')
-    print(f'save file /src/data/lastwarPredictRevenue3_36_sum_min_{today}.png')
+    plt.savefig(f'/src/data/lastwarPredictRevenue3_36_sum_min_{todayStr}.png')
+    print(f'save file /src/data/lastwarPredictRevenue3_36_sum_min_{todayStr}.png')
 
-    reportData['lastwarPredictRevenue3_36_sum_min.png'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{today}.png'
+    reportData['lastwarPredictRevenue3_36_sum_min.png'] = f'/src/data/lastwarPredictRevenue3_36_sum_min_{todayStr}.png'
 
     reportData['width'] = width
 
@@ -598,7 +623,7 @@ def prophet1FloorL(today = None,future_periods=90):
 
     computeMape(train_df, train_forecast, test_df, test_forecast, server_df,full_forecast,reportData)
 
-    _, minRevenueRateServerDf = getWidth(df0,result_df,reportData)
+    _, minRevenueRateServerDf = getWidth(df0,result_df,reportData,today)
 
     # 找到minRevenueRateServerDf中，低于threshold10和threshold20的最早月份
     minRevenueRateServerDf['danger10'] = minRevenueRateServerDf['revenue'] < minRevenueRateServerDf['threshold10']
@@ -729,27 +754,28 @@ EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
 
     webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/0a71b38a-68cc-4600-b50f-60432dfec0ce'
 
-    # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
-    sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
+    sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
+    # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
 
 if __name__ == '__main__':
+    reportData = prophet1FloorL()
+    report(reportData)
 
-    # reportData = prophet1FloorL()
-    # report(reportData)
-
-    # for debug
-    mondayList = [
-        '2024-12-30',
-        '2025-01-06',
-        '2025-01-13',
-        '2025-01-20',
-        '2025-01-27',
-        '2025-02-03',
-        '2025-02-10',
-        '2025-02-17',
-    ]
-    for monday in mondayList:
-        reportData = prophet1FloorL(pd.to_datetime(monday))
+    # # for debug
+    # mondayList = [
+    #     '2024-12-30',
+    #     '2025-01-06',
+    #     '2025-01-13',
+    #     '2025-01-20',
+    #     '2025-01-27',
+    #     '2025-02-03',
+    #     '2025-02-10',
+    #     '2025-02-17',
+    #     '2025-02-24',
+    #     '2025-03-03',
+    # ]
+    # for monday in mondayList:
+    #     reportData = prophet1FloorL(pd.to_datetime(monday))
         
 
 
