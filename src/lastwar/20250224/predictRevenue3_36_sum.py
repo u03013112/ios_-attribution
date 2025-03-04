@@ -497,12 +497,13 @@ def getWidth(df,result_df,reportData):
 
     return width, minRevenueRateServerDf
 
-def prophet1FloorL(future_periods=90):
+def prophet1FloorL(today = None,future_periods=90):
     # 将所有报告需要用到的数据都保存在这个字典中，最后返回出去，交给report函数生成飞书报告
     reportData = {}
 
     # 改为获取昨日数据，因为今日数据可能不完整
-    today = date.today()
+    if today is None:
+        today = date.today()
     # # for debug，设置今天是2025-03-03
     # today = pd.to_datetime('2025-02-24')
 
@@ -732,8 +733,24 @@ EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
     sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
 
 if __name__ == '__main__':
-    reportData = prophet1FloorL()
-    report(reportData)
+
+    # reportData = prophet1FloorL()
+    # report(reportData)
+
+    # for debug
+    mondayList = [
+        '2024-12-30',
+        '2025-01-06',
+        '2025-01-13',
+        '2025-01-20',
+        '2025-01-27',
+        '2025-02-03',
+        '2025-02-10',
+        '2025-02-17',
+    ]
+    for monday in mondayList:
+        reportData = prophet1FloorL(pd.to_datetime(monday))
+        
 
 
 

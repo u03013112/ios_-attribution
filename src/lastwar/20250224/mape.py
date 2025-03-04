@@ -210,12 +210,14 @@ ORDER BY
 
 # 获得误差，哪找days的间隔，比如days=7，就是每周的误差
 # 注意，需要保证尽量周一进行，并且预测也是周一进行
-def getTotalMape(days = 7):
-    # for debug，设置今天是2025-03-03
-    today = pd.to_datetime('2025-03-03')
-
+def getTotalMape(today = None,days = 7):
+    
     # 改为获取昨日数据，因为今日数据可能不完整
-    # today = date.today()
+    if today is None:
+        # today = date.today()
+
+        # for debug，设置今天是2025-03-03
+        today = pd.to_datetime('2025-03-03')
     todayStr = today.strftime('%Y-%m-%d')
     
     yesterday = today - pd.Timedelta(days=1)
@@ -258,6 +260,7 @@ def getTotalMape(days = 7):
     predictDf['deltaDays//days'] = predictDf['deltaDays'] // days
     print('predictDf:')
     print(predictDf)
+    predictDf.to_csv('/src/data/lastwar_getTotalMape_predictDf1.csv',index=False)
 
     predictDf = predictDf[['ds','predict2','day','deltaDays//days']]
     if predictDf.empty or realDataTotalDf.empty:
@@ -270,19 +273,131 @@ def getTotalMape(days = 7):
     predictDf = predictDf.dropna(subset=['revenue'])
     print('predictDf:')
     print(predictDf)
-    
+    predictDf.to_csv('/src/data/lastwar_getTotalMape_predictDf2.csv',index=False)
+
     # 按照预测日和间隔天数分组，计算预测值和真实值的和
     predictDf = predictDf.groupby(['day','deltaDays//days']).agg({'revenue':'sum','predict2':'sum'}).reset_index()
     # 计算mape
     predictDf['mape'] = abs(predictDf['revenue'] - predictDf['predict2']) / predictDf['revenue']
     print('predictDf:')
     print(predictDf)
+    predictDf.to_csv('/src/data/lastwar_getTotalMape_predictDf3.csv',index=False)
+
+    mapeDf = predictDf.groupby('deltaDays//days').agg({'mape':'mean'}).reset_index()
+    print('mapeDf:')
+    print(mapeDf)
+
+def getMinMape(today = None,days = 7):
+    # 改为获取昨日数据，因为今日数据可能不完整
+    if today is None:
+        # today = date.today()
+
+        # for debug，设置今天是2025-03-03
+        today = pd.to_datetime('2025-03-03')
+    todayStr = today.strftime('%Y-%m-%d')
+    
+    yesterday = today - pd.Timedelta(days=1)
+    yesterdayStr = yesterday.strftime('%Y-%m-%d')
+
+    realDataDf = getData(yesterdayStr)
+    
+    realDataTotalDf = realDataDf.copy()
+    realDataTotalDf.rename(columns={'day':'ds'},inplace=True)
+    realDataTotalDf['ds'] = pd.to_datetime(realDataTotalDf['ds'], errors='coerce')
+    realDataTotalDf2 = realDataTotalDf.copy()
+    print('realDataTotalDf:')
+    print(realDataTotalDf)
+
+    # 找到所有预测数据
+    # 在 '/src/data/' 中 找到所有类似lastwarPredictRevenue3_36_sum_{yyyy-mm-dd}.csv的文件
+    files = os.listdir('/src/data/')
+    predictFiles = []
+    # 定义正则表达式模式来匹配日期格式
+    pattern = re.compile(r'^lastwarPredictRevenue3_36_sum_\d{4}-\d{2}-\d{2}\.csv$')
+
+    # 遍历文件列表，筛选符合条件的文件
+    for file in files:
+        if pattern.match(file):
+            predictFiles.append(file)
+
+    # 输出符合条件的文件列表
+    print(predictFiles)
+
+    predictDf = pd.DataFrame()
+    for file in predictFiles:
+        df = pd.read_csv(f'/src/data/{file}')
+        # 只保留预测数据，即revenue为空的数据
+        df = df[df['revenue'].isna()]
+        predictDf = predictDf.append(df)
+    
+    predictDf = predictDf.sort_values(['day','ds']).reset_index(drop=True)
+    predictDf['ds'] = pd.to_datetime(predictDf['ds'], errors='coerce')
+    predictDf['day'] = pd.to_datetime(predictDf['day'], errors='coerce')
+    # 间隔days = day - ds 的天数
+    predictDf['deltaDays'] = (predictDf['ds'] - predictDf['day']).dt.days
+    predictDf['deltaDays//days'] = predictDf['deltaDays'] // days
+    print('predictDf:')
+    print(predictDf)
+    predictDf.to_csv('/src/data/lastwar_getMinMape_predictDf1.csv',index=False)
+
+    # last3monthBegin & last3monthEnd 是列 day 的向前3个自然月，不包括day所在月，比如day是2025-03-03，那么last3monthBegin是2024-12-01，last3monthEnd是2025-02-28
+    predictDf['last3monthEnd'] = predictDf['day'].apply(lambda x: x.replace(day=1) - pd.Timedelta(days=1))
+    predictDf['last3monthBegin'] = predictDf['last3monthEnd'].apply(lambda x: x.replace(day=1) - pd.DateOffset(months=2))
+    
+    predictDf.to_csv('/src/data/lastwar_getMinMape_predictDf2.csv',index=False)
+
+    realDataTotalDf['month'] = realDataTotalDf['ds'].apply(lambda x: x.replace(day=1))
+    realDataTotalDf = realDataTotalDf.groupby(['month','server_id']).agg({'revenue':'sum'}).reset_index()
+
+    # 计算每月的收入总和和最小收入
+    summaryDf = realDataTotalDf.groupby('month').agg(
+        revenue_sum=('revenue', 'sum'),
+        revenue_min=('revenue', 'min')
+    ).reset_index()
+
+    # 获取每月最小收入对应的 server_id
+    min_server_ids = realDataTotalDf.loc[
+        realDataTotalDf.groupby('month')['revenue'].idxmin(), ['month', 'server_id']
+    ].rename(columns={'server_id': 'revenue_min_server_id'})
+
+    # 合并结果
+    summaryDf = summaryDf.merge(min_server_ids, on='month')
+    summaryDf['min/sum'] = summaryDf['revenue_min'] / summaryDf['revenue_sum']
+    summaryDf.to_csv('/src/data/lastwar_getMinMape_predictDf3.csv',index=False)
+
+    def find_min_ratio(row):
+        mask = (summaryDf['month'] >= row['last3monthBegin']) & (summaryDf['month'] <= row['last3monthEnd'])
+        filtered_summary = summaryDf[mask]
+        if not filtered_summary.empty:
+            min_row = filtered_summary.loc[filtered_summary['min/sum'].idxmin()]
+            return pd.Series([min_row['revenue_min_server_id'], min_row['min/sum']])
+        else:
+            return pd.Series([None, None])
+
+    predictDf[['revenue_min_server_id', 'min/sum']] = predictDf.apply(find_min_ratio, axis=1)
+    predictDf['predict2*(min/sum)'] = predictDf['predict2'] * predictDf['min/sum']
+
+    predictDf = predictDf[[
+        'ds','day','deltaDays//days','last3monthBegin','last3monthEnd','revenue_min_server_id','min/sum','predict2*(min/sum)'
+    ]].merge(realDataTotalDf2[['ds','server_id','revenue']], left_on=['ds', 'revenue_min_server_id'], right_on=['ds', 'server_id'], how='left')
+    
+    predictDf = predictDf.dropna(subset=['revenue'])
+    predictDf.to_csv('/src/data/lastwar_getMinMape_predictDf4.csv',index=False)
+
+    predictDf = predictDf.groupby('deltaDays//days').agg({'revenue':'sum','predict2*(min/sum)':'sum'}).reset_index()
+    predictDf['mape'] = abs(predictDf['revenue'] - predictDf['predict2*(min/sum)']) / predictDf['revenue']
+    print('predictDf:')
+    print(predictDf)
+    predictDf.to_csv('/src/data/lastwar_getMinMape_predictDf5.csv',index=False)
 
     mapeDf = predictDf.groupby('deltaDays//days').agg({'mape':'mean'}).reset_index()
     print('mapeDf:')
     print(mapeDf)
 
 
-
 if __name__ == "__main__":
-    getTotalMape()
+    getTotalMape(days = 7)
+    getTotalMape(days = 28)
+
+    getMinMape(days = 7)
+    getMinMape(days = 28)
