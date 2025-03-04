@@ -19,7 +19,7 @@ import sys
 sys.path.append('/src')
 
 from src.config import ssToken
-from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -503,8 +503,12 @@ def prophet1FloorL(future_periods=90):
 
     # 改为获取昨日数据，因为今日数据可能不完整
     today = date.today()
+    # # for debug，设置今天是2025-03-03
+    # today = pd.to_datetime('2025-02-24')
+
     todayStr = today.strftime('%Y-%m-%d')
-    
+
+
     yesterday = today - pd.Timedelta(days=1)
     yesterdayStr = yesterday.strftime('%Y-%m-%d')
 
@@ -606,19 +610,19 @@ def prophet1FloorL(future_periods=90):
     waringText = ''
     if len(danger10) > 0:
         print('低于10美元的月份:', danger10['month'].min())
-        waringText += f'低于10美元的月份:{danger10["month"].min()}'
+        waringText += f'低于10美元的月份:{danger10["month"].min()}。'
     if len(danger20) > 0:
         print('低于20美元的月份:', danger20['month'].min())
-        waringText += f'低于20美元的月份:{danger20["month"].min()}'
+        waringText += f'低于20美元的月份:{danger20["month"].min()}。'
 
     if len(danger10) == 0 and len(danger20) == 0:
         print('暂时没有预测到低于10美元或20美元的情况')
-        waringText += '暂时没有预测到低于10美元或20美元的情况'
+        waringText += '暂时没有预测到低于10美元或20美元的情况。'
         
     minRevenueRateServerDf['predict2_lower_per_day'] = minRevenueRateServerDf['predict2_lower'] / minRevenueRateServerDf['days']
     minP2 = minRevenueRateServerDf['predict2_lower_per_day'].min()
     waringText += f'预测期间月平均最低日收入可能达到{minP2:.2f}美元'
-    print(f'预测期间月平均最低日收入可能达到{minP2:.2f}美元')
+    print(f'\n预测期间月平均最低日收入可能达到{minP2:.2f}美元')
 
     reportData['waringText'] = waringText
     reportData['minP2'] = f'{minP2:.2f}'
@@ -645,7 +649,7 @@ def report(reportData):
     addHead2(tenantAccessToken, docId,'', '步骤')
     addText(tenantAccessToken, docId, '', f"1、数数获得2024-01-01至{reportData['yesterdayStr']}，3~36服收入数据")
     addText(tenantAccessToken, docId, '', f'数数数据筛选条件：')
-    addImage(tenantAccessToken, docId, '','pic1.png')
+    addImage(tenantAccessToken, docId, '','/src/src/lastwar/20250224/pic1.png')
     addFile(tenantAccessToken, docId, '',reportData['lastwarPredictRevenue3_36_sum_data'],view_type = 1)
     
     addText(tenantAccessToken, docId, '', f'2、预测1，将8周作为测试集，预测3~36服整体收入，此预测用最近的历史数据验证此方案稳定性，并不真的预测未来。得到结果误差：')
@@ -710,6 +714,22 @@ MAPE = (1/n) * Σ (|A_t - F_t| / A_t) * 100%
 EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
 其中，EWMA_t 是时间点 t 的指数加权移动平均值，α 是平滑系数，取值范围在 0 到 1 之间，P_t 是时间点 t 的数据值，EWMA_(t-1) 是时间点 t-1 的指数加权移动平均值。
     ''')
+
+
+    message = reportData['waringText']
+
+    docUrl = 'https://rivergame.feishu.cn/docx/'+docId
+
+    # message += f"\n[详细报告]({docUrl})"
+
+    # sendMessageToWebhook(message,'https://open.feishu.cn/open-apis/bot/v2/hook/571e5617-d93c-4b96-81db-f288fbefba32')
+
+    testWebhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/acceb43c-5da3-47a2-987f-fc7228449a9c'
+
+    webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/0a71b38a-68cc-4600-b50f-60432dfec0ce'
+
+    # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
+    sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
 
 if __name__ == '__main__':
     reportData = prophet1FloorL()

@@ -549,6 +549,80 @@ def sendMessageDebug2(message):
     token = getTenantAccessToken()
     sendMessage(token,message,'oc_80121e99102b659ba2f565e0dce5d4c2')
 
+
+def sendMessageToWebhook(message,webhook):
+    """
+        参考文档：https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot?lang=zh-CN
+
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{"msg_type":"text","content":{"text":"request example"}}' \
+        https://open.feishu.cn/open-apis/bot/v2/hook/****
+    """
+
+    # https://open.feishu.cn/open-apis/bot/v2/hook/571e5617-d93c-4b96-81db-f288fbefba32
+
+    url = webhook
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'msg_type':'text',
+        'content':{
+            'text':message
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code != 200:
+        raise Exception(f"sendMessageToWebhook Error: {response.status_code}, {response.text}")
+    
+    return
+
+
+def sendMessageToWebhook2(title,text,aText,aUrl,webhook):
+    """
+        参考文档：https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot?lang=zh-CN
+
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{"msg_type":"text","content":{"text":"request example"}}' \
+        https://open.feishu.cn/open-apis/bot/v2/hook/****
+    """
+
+    # https://open.feishu.cn/open-apis/bot/v2/hook/571e5617-d93c-4b96-81db-f288fbefba32
+
+    url = webhook
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    data = {
+        "msg_type": "post",
+        "content": {
+            "post": {
+                "zh_cn": {
+                    "title": title,
+                    "content": [
+                        [{
+                            "tag": "text",
+                            "text": text
+                        }, {
+                            "tag": "a",
+                            "text": aText,
+                            "href": aUrl
+                        }]
+                    ]
+                }
+            }
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code != 200:
+        raise Exception(f"sendMessageToWebhook Error: {response.status_code}, {response.text}")
+    
+    return
+
 if __name__ == '__main__':
     # print(getTenantAccessToken())
     # print(createDoc(getTenantAccessToken(),'一篇新的文档'))
@@ -559,4 +633,12 @@ if __name__ == '__main__':
     # sendMessage(token,'debug','oc_1e418dff75881d2b0d85a5f701262cb8')
 
     print(getAllChatId(token))
+
+#     sendMessageDebug('''
+# lastwar预测服务器收入3~36服 2025-03-03 报告已生成
+# 暂时没有预测到低于10美元或20美元的情况预测期间月平均最低日收入可能达到69.38美元
+# 详细报告https://rivergame.feishu.cn/docx/UvhEdswzMo4FcZxOoA0cXFj1nOd
+#     ''')
+
+    sendMessageToWebhook2('hello','world','click me','https://www.baidu.com','https://open.feishu.cn/open-apis/bot/v2/hook/571e5617-d93c-4b96-81db-f288fbefba32')
 
