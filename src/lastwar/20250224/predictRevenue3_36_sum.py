@@ -754,8 +754,8 @@ EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
 
     webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/0a71b38a-68cc-4600-b50f-60432dfec0ce'
 
-    sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
-    # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
+    # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
+    sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
 
 if __name__ == '__main__':
     reportData = prophet1FloorL()
