@@ -21,6 +21,8 @@ sys.path.append('/src')
 from src.config import ssToken
 from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
 
+from src.report.aws.aws_s3 import S3Manager
+
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
     Call in a loop to create terminal progress bar
@@ -757,9 +759,34 @@ EWMA_t = α * P_t + (1 - α) * EWMA_(t-1)
     # sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,testWebhookUrl)
     sendMessageToWebhook2(f"lastwar预测服务器收入3~36服 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
 
+def uploadFileToAwsS3(reportData):
+    s3_manager = S3Manager()
+    bucket_name = "lastwardata"
+
+    directory_name = "datascience/szj/lastwarPredictServer3To36SumRevenue20250227/"
+    
+    lastwarPredictRevenue3_36_sumDirectory = directory_name + 'lastwarPredictRevenue3_36_sum/'
+    lastwarPredictRevenue3_36_sum_minDirectory = directory_name + 'lastwarPredictRevenue3_36_sum_min/'
+
+    # 检查目录是否存在，如果不存在则创建
+    if not s3_manager.check_directory(bucket_name, lastwarPredictRevenue3_36_sumDirectory):
+        print(f"目录 {directory_name} 不存在，正在创建...")
+        s3_manager.create_directory(bucket_name, directory_name)
+
+    if not s3_manager.check_directory(bucket_name, lastwarPredictRevenue3_36_sum_minDirectory):
+        print(f"目录 {directory_name} 不存在，正在创建...")
+        s3_manager.create_directory(bucket_name, directory_name)
+    
+
+    # 上传文件到指定目录
+    s3_manager.upload_file_to_s3(reportData['lastwarPredictRevenue3_36_sum.csv'], bucket_name, lastwarPredictRevenue3_36_sumDirectory)
+    s3_manager.upload_file_to_s3(reportData['lastwarPredictRevenue3_36_sum_min.csv'], bucket_name, lastwarPredictRevenue3_36_sum_minDirectory)
+
+
 if __name__ == '__main__':
     reportData = prophet1FloorL()
     report(reportData)
+    uploadFileToAwsS3(reportData)
 
     # # for debug
     # mondayList = [
@@ -776,6 +803,8 @@ if __name__ == '__main__':
     # ]
     # for monday in mondayList:
     #     reportData = prophet1FloorL(pd.to_datetime(monday))
+    #     # report(reportData)
+    #     uploadFileToAwsS3(reportData)
         
 
 
