@@ -557,7 +557,8 @@ def report(reportData):
 
 if __name__ == "__main__":
     reportData = {}
-    today = pd.to_datetime('2025-03-03')
+    # today = pd.to_datetime('2025-03-03')
+    today = None
     getTotalMape(reportData,today = today,days = 7)
     getSumMinMape(reportData,today = today)
 
