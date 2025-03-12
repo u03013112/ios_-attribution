@@ -232,24 +232,30 @@ def main(today = None):
     minRevenue = sumDf['revenue'].min()
     sumDf2 = sumDf[sumDf['revenue'] <= minRevenue * 5]
 
-    # Convert serverIds to int
+    sumDf2 = sumDf2.sort_values(by='revenue',ascending=True)
     serverIds = sumDf2['server_id'].astype(int).values
+    revenues = sumDf2['revenue'].values
 
+
+    waringText = '低收入服务器监测周报（每周一生成）\n' 
+    waringText += f'{before30daysStr}到{yesterdayStr}(共30天)，收入小于最小收入服务器5倍的服务器共有{len(sumDf2)}个：\n'
+    for i in range(len(serverIds)):
+        waringText += f'\t第{serverIds[i]}服，收入：{revenues[i]:.2f}\n'
+        
     # 如果有server_id大于36，就报警
-    if any(serverIds > 36):
-        waringText = f'{before30daysStr}到{yesterdayStr}，收入最低的服务器前{len(sumDf2)}名，分别是{",".join([str(x) for x in serverIds])}\n'
+    if any(serverIds > 36):    
         waringText += "警告：存在 server_id 大于 36 的服务器！"
-        print(waringText)
     else:
-        waringText = f'{before30daysStr}到{yesterdayStr}，收入最低的服务器前{len(sumDf2)}名，分别是{",".join([str(x) for x in serverIds])}\n'
-        print(waringText)
+        waringText += "没有 server_id 大于 36 的服务器！"
+    
+    print(waringText)
 
 
     testWebhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/acceb43c-5da3-47a2-987f-fc7228449a9c'
 
     webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/0a71b38a-68cc-4600-b50f-60432dfec0ce'
 
-    sendMessageToWebhook(waringText,testWebhookUrl)
+    sendMessageToWebhook(waringText,webhookUrl)
 
 
 if __name__ == '__main__':
