@@ -1025,11 +1025,11 @@ if __name__ == "__main__":
 
     # test()
 
-    debug3()
+    # debug3()
     # debug3_1()
 
     # test2()
 
-    # test3()
+    test3()
     
     
