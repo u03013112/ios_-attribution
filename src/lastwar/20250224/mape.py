@@ -17,7 +17,8 @@ import numpy as np
 import sys
 sys.path.append('/src')
 
-from src.config import ssToken
+# from src.config import ssToken
+from src.config import ssUrlPrefixLastwar,ssTokenLastwar
 from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
 
 
@@ -44,9 +45,11 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
 
 # 异步执行数数的查询
 def ssSql(sql):
-    url = 'http://123.56.188.109/open/submit-sql'
-    url += '?token='+ssToken
-
+    # url = 'http://123.56.188.109/open/submit-sql'
+    # url += '?token='+ssToken
+    url = ssUrlPrefixLastwar + 'open/submit-sql'
+    url += '?token='+ssTokenLastwar
+    
     headers = {'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'}
     # 通过字典方式定义请求body
     formData = {"sql": sql, "format": 'json','pageSize':'100000'}
@@ -68,8 +71,10 @@ def ssSql(sql):
     printProgressBar(0, 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
     for _ in range(60):
         time.sleep(10)
-        url2 = 'http://123.56.188.109/open/sql-task-info'
-        url2 += '?token='+ssToken+'&taskId='+taskId
+        # url2 = 'http://123.56.188.109/open/sql-task-info'
+        # url2 += '?token='+ssToken+'&taskId='+taskId
+        url2 = ssUrlPrefixLastwar + 'open/sql-task-info'
+        url2 += '?token='+ssTokenLastwar+'&taskId='+taskId
         s = requests.Session()
         s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
         s.mount('https://',HTTPAdapter(max_retries=3))
@@ -84,8 +89,11 @@ def ssSql(sql):
                 # print(j)
                 lines = []
                 for p in range(pageCount):
-                    url3 = 'http://123.56.188.109/open/sql-result-page'
-                    url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    # url3 = 'http://123.56.188.109/open/sql-result-page'
+                    # url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    url3 = ssUrlPrefixLastwar + 'open/sql-result-page'
+                    url3 += '?token='+ssTokenLastwar+'&taskId='+taskId+'&pageId=%d'%p
+
                     s = requests.Session()
                     s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
                     s.mount('https://',HTTPAdapter(max_retries=3))
@@ -131,7 +139,7 @@ WITH event_data AS (
         usd,
         "#user_id"
     FROM
-        v_event_15
+        v_event_3
     WHERE
         "$part_event" = 's_pay_new'
         AND "$part_date" BETWEEN '2023-12-31'
@@ -141,7 +149,7 @@ user_data AS (
     SELECT
         "#user_id"
     FROM
-        v_user_15
+        v_user_3
     WHERE
         "lwu_is_gm" IS NOT NULL
 )

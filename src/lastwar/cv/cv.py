@@ -12,13 +12,17 @@ import pandas as pd
 import sys
 sys.path.append('/src')
 
-from src.config import ssToken2 as ssToken
+# from src.config import ssToken2 as ssToken
+from src.config import ssUrlPrefixLastwar,ssTokenLastwar
 from src.tools import printProgressBar
-# 异步分页
-def ssSql2(sql):
-    url = 'http://123.56.188.109/open/submit-sql'
-    url += '?token='+ssToken
 
+# 异步执行数数的查询
+def ssSql(sql):
+    # url = 'http://123.56.188.109/open/submit-sql'
+    # url += '?token='+ssToken
+    url = ssUrlPrefixLastwar + 'open/submit-sql'
+    url += '?token='+ssTokenLastwar
+    
     headers = {'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'}
     # 通过字典方式定义请求body
     formData = {"sql": sql, "format": 'json','pageSize':'100000'}
@@ -34,14 +38,16 @@ def ssSql2(sql):
         taskId = j['data']['taskId']
         print('taskId:',taskId)
     except Exception:
-        print('error1')
         print(r.text)
         return
+    # 通过taskId查询任务状态
     printProgressBar(0, 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
     for _ in range(60):
         time.sleep(10)
-        url2 = 'http://123.56.188.109/open/sql-task-info'
-        url2 += '?token='+ssToken+'&taskId='+taskId
+        # url2 = 'http://123.56.188.109/open/sql-task-info'
+        # url2 += '?token='+ssToken+'&taskId='+taskId
+        url2 = ssUrlPrefixLastwar + 'open/sql-task-info'
+        url2 += '?token='+ssTokenLastwar+'&taskId='+taskId
         s = requests.Session()
         s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
         s.mount('https://',HTTPAdapter(max_retries=3))
@@ -56,30 +62,34 @@ def ssSql2(sql):
                 # print(j)
                 lines = []
                 for p in range(pageCount):
-                    url3 = 'http://123.56.188.109/open/sql-result-page'
-                    url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    # url3 = 'http://123.56.188.109/open/sql-result-page'
+                    # url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    url3 = ssUrlPrefixLastwar + 'open/sql-result-page'
+                    url3 += '?token='+ssTokenLastwar+'&taskId='+taskId+'&pageId=%d'%p
+
                     s = requests.Session()
                     s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
                     s.mount('https://',HTTPAdapter(max_retries=3))
                     r = s.get(url=url3)
-                    lines += r.text.split('\n')
+                    lines += r.text.split('\r\n')
                     # print('page:%d/%d'%(p,pageCount),'lines:',len(lines))
-                    printProgressBar(p, pageCount, prefix = 'Progress:', suffix = 'page', length = 50)
+                    printProgressBar(p+1, pageCount, prefix = 'Progress:', suffix = 'page', length = 50)
                 return lines
             else:
                 # print('progress:',j['data']['progress'])
                 printProgressBar(j['data']['progress'], 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
         except Exception as e:
-            print('error2:',e)
-            print(r.text)
+            # print('e:',e)
+            # print(r.text)
             continue
         # 查询太慢了，多等一会再尝试
         time.sleep(10)
 
+
 def getData1(sql,filename):
     # sql = '''select * from (select *,count(data_map_0) over () group_num_0 from (select group_0,map_agg("$__Date_Time", amount_0) filter (where amount_0 is not null and is_finite(amount_0) ) data_map_0,sum(amount_0) filter (where is_finite(amount_0) ) total_amount from (select *, internal_amount_0 amount_0 from (select group_0,"$__Date_Time",cast(coalesce(SUM(ta_ev."usd"), 0) as double) internal_amount_0 from (SELECT *, TIMESTAMP '1981-01-01' "$__Date_Time" from (select *, if("#zone_offset" is not null and "#zone_offset">=-12 and "#zone_offset"<=14, date_add('second', cast((8-"#zone_offset")*3600 as integer), "#event_time"), "#event_time") "@vpc_tz_#event_time" from (select *, try_cast(try(date_diff('second', "#install_time", "#event_time")) as double) "#vp@life_time_second" from (select "#event_name","#event_time","usd","#zone_offset","#user_id","#install_time","$part_date","$part_event" from v_event_15)))) ta_ev inner join (select *, "#account_id" group_0 from (select * from (select "#account_id","#update_time","#event_date","#user_id" from v_user_15) where "#event_date" > 20230913)) ta_u on ta_ev."#user_id" = ta_u."#user_id" where (( ( "$part_event" IN ( 's_pay' ) ) )) and ((("$part_date" between '2023-09-19' and '2023-10-20') and ("@vpc_tz_#event_time" >= timestamp '2023-09-20' and "@vpc_tz_#event_time" < date_add('day', 1, TIMESTAMP '2023-10-19'))) and (ta_ev."#vp@life_time_second" <= 8.64E+4)) group by group_0,"$__Date_Time")) group by group_0)) ORDER BY total_amount DESC limit 10'''
 
-    lines = ssSql2(sql)
+    lines = ssSql(sql)
     # print('lines:',len(lines))
     # print('lines[0]:',lines[0])
 

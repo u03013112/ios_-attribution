@@ -10,7 +10,8 @@ import pandas as pd
 import sys
 sys.path.append('/src')
 
-from src.config import ssToken
+# from src.config import ssToken
+from src.config import ssTokenLastwar,ssUrlPrefixLastwar
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -33,13 +34,13 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total: 
         print()
 
-
-
 # 异步执行数数的查询
 def ssSql(sql):
-    url = 'http://123.56.188.109/open/submit-sql'
-    url += '?token='+ssToken
-
+    # url = 'http://123.56.188.109/open/submit-sql'
+    # url += '?token='+ssToken
+    url = ssUrlPrefixLastwar + 'open/submit-sql'
+    url += '?token='+ssTokenLastwar
+    
     headers = {'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'}
     # 通过字典方式定义请求body
     formData = {"sql": sql, "format": 'json','pageSize':'100000'}
@@ -61,8 +62,10 @@ def ssSql(sql):
     printProgressBar(0, 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
     for _ in range(60):
         time.sleep(10)
-        url2 = 'http://123.56.188.109/open/sql-task-info'
-        url2 += '?token='+ssToken+'&taskId='+taskId
+        # url2 = 'http://123.56.188.109/open/sql-task-info'
+        # url2 += '?token='+ssToken+'&taskId='+taskId
+        url2 = ssUrlPrefixLastwar + 'open/sql-task-info'
+        url2 += '?token='+ssTokenLastwar+'&taskId='+taskId
         s = requests.Session()
         s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
         s.mount('https://',HTTPAdapter(max_retries=3))
@@ -77,8 +80,11 @@ def ssSql(sql):
                 # print(j)
                 lines = []
                 for p in range(pageCount):
-                    url3 = 'http://123.56.188.109/open/sql-result-page'
-                    url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    # url3 = 'http://123.56.188.109/open/sql-result-page'
+                    # url3 += '?token='+ssToken+'&taskId='+taskId+'&pageId=%d'%p
+                    url3 = ssUrlPrefixLastwar + 'open/sql-result-page'
+                    url3 += '?token='+ssTokenLastwar+'&taskId='+taskId+'&pageId=%d'%p
+
                     s = requests.Session()
                     s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
                     s.mount('https://',HTTPAdapter(max_retries=3))
@@ -97,15 +103,13 @@ def ssSql(sql):
         # 查询太慢了，多等一会再尝试
         time.sleep(10)
 
-
-
 def getAddScoreData(startDayStr='2024-11-25',endDayStr='2024-11-30'):
     sql = f'''
 SELECT 
 "#account_id",
 date_trunc('week', "#event_time") wk,
 sum(add_score) as add_score_sum
-from ta.v_event_15 
+from ta.v_event_3 
 WHERE 
 ("$part_event" = 's_desertStorm_point') AND  "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
 AND add_score>0
@@ -143,7 +147,7 @@ WITH ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         sum(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
     GROUP BY "#account_id", date_trunc('week', "#event_time")
@@ -188,7 +192,7 @@ WITH base_data AS (
         date_trunc('week', "#event_time") AS wk,  -- 保持周一
         date_trunc('week', "#event_time") + INTERVAL '3' DAY AS thursday,  -- 计算周四
         "#event_time"
-    FROM v_event_15 
+    FROM v_event_3 
     WHERE "$part_event" = 's_login' AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
 )
 SELECT 
@@ -236,7 +240,7 @@ WITH wk_account AS (
         date_trunc('week', "#event_time") AS wk,
         key AS "#account_id",
         strength
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -247,7 +251,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
@@ -261,7 +265,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
@@ -297,7 +301,7 @@ base_data AS (
             WHEN EXTRACT(DOW FROM "#event_time") = 0 THEN
                 date_trunc('week', "#event_time") + INTERVAL '10' DAY
         END AS thursday
-    FROM v_event_15 
+    FROM v_event_3 
     WHERE "$part_event" = 's_login' 
         AND "$part_date" BETWEEN '{startDayStr}' AND '{endDayStr}'
 ),
@@ -374,7 +378,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN teamagroup
             WHEN alliance_id = teamballianceid THEN teambgroup
         END AS alliance_group
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -385,7 +389,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -399,7 +403,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -530,7 +534,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -546,7 +550,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -667,7 +671,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN servera
             WHEN alliance_id = teamballianceid THEN serverb
         END AS server_id
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -678,7 +682,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -692,7 +696,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -825,7 +829,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -841,7 +845,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -961,7 +965,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN teamagroup
             WHEN alliance_id = teamballianceid THEN teambgroup
         END AS alliance_group
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -972,7 +976,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -986,7 +990,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1060,7 +1064,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -1076,7 +1080,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1196,7 +1200,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN servera
             WHEN alliance_id = teamballianceid THEN serverb
         END AS server_id
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -1207,7 +1211,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1221,7 +1225,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1297,7 +1301,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -1313,7 +1317,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1431,7 +1435,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN teamagroup
             WHEN alliance_id = teamballianceid THEN teambgroup
         END AS alliance_group
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -1442,7 +1446,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1456,7 +1460,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1531,7 +1535,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -1547,7 +1551,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1661,7 +1665,7 @@ WITH wk_account AS (
             WHEN alliance_id = teamaallianceid THEN teamagroup
             WHEN alliance_id = teamballianceid THEN teambgroup
         END AS alliance_group
-    FROM ta.v_event_15,
+    FROM ta.v_event_3,
         UNNEST(CAST(json_parse(strengthinfo) AS MAP<VARCHAR, VARCHAR>)) AS t (key, value)
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
@@ -1672,7 +1676,7 @@ add_score_data AS (
         "#account_id",
         date_trunc('week', "#event_time") AS wk,
         SUM(add_score) AS add_score_sum
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_desertStorm_point'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1686,7 +1690,7 @@ ranked_data AS (
         date_trunc('week', "#event_time") AS wk,
         SUM(individual_score_total) AS individual_score_total,
         ROW_NUMBER() OVER (PARTITION BY "#account_id" ORDER BY date_trunc('week', "#event_time")) AS rn
-    FROM ta.v_event_15 
+    FROM ta.v_event_3 
     WHERE 
         "$part_event" = 's_dragon_battle_user_score' 
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
@@ -1761,7 +1765,7 @@ battle_data AS (
         score,
         ROUND(MINUTE("#event_time") / 5, 1) * 5 AS min_id
     FROM
-        hive.ta.v_event_15
+        hive.ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_data'
         AND ROUND(MINUTE("#event_time") / 5, 1) * 5 IN (15)
@@ -1777,7 +1781,7 @@ alliance_data AS (
         END AS alliance_group,
         strength AS strength_old
     FROM
-        ta.v_event_15
+        ta.v_event_3
     WHERE
         "$part_event" = 'alliance_dragon_battle_match'
         AND "$part_date" BETWEEN '2024-11-25' AND '2025-02-05'
