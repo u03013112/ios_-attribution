@@ -287,6 +287,8 @@ def main():
     df1200['p1_percentile'] = df1200.groupby(['wk','server_id'])['p1'].rank(pct=True)
 
     retrainDf = df1200[df1200['predicted_activity'] == 0]
+    print('total users:', len(df1200))
+    print('retrain users:', len(retrainDf))
 
     x = retrainDf[[
         '3day_pay_usd', '7day_pay_usd',
@@ -302,10 +304,16 @@ def main():
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
     # 参数范围
-    max_depth_range = [2, 4, 6, 8, 10]
-    min_samples_split_range = [2, 5, 10]
-    min_samples_leaf_range = [1, 5, 10]
-    criterion_options = ['gini', 'entropy']
+    # max_depth_range = [2, 4, 6, 8, 10]
+    # min_samples_split_range = [2, 5, 10]
+    # min_samples_leaf_range = [1, 5, 10]
+    # criterion_options = ['gini', 'entropy']
+
+    # 暂时最优参数
+    max_depth_range = [8,]
+    min_samples_split_range = [10]
+    min_samples_leaf_range = [1,]
+    criterion_options = ['entropy']
 
     results = []
 
@@ -398,11 +406,169 @@ def main():
     plt.grid(True)
     plt.savefig('/src/data/20250318dt_best.png')
 
-    plt.figure(figsize=(20, 20))
-    plot_tree(best_clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'])
+    # plt.figure(figsize=(20, 20))
+    plt.figure(figsize=(300, 20))
+    plot_tree(best_clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'], fontsize=10)
     plt.title('Best Decision Tree Visualization')
     plt.savefig('/src/data/20250318dt_tree_best.png')
 
+# 尝试更多的特征
+def main2():
+    df = pd.read_csv('/src/data/smfb_getData1_2025-02-16_2025-03-17.csv')
+    # df1200 = df[df['server_id'] >= 1300].copy()
+    df1200 = df[df['server_id'] >= 1365].copy()
+
+    # 简单计算一个战斗力
+    df1200['power'] = df1200['p2_1'] + df1200['p2_2']
+
+    df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['3day_pay_usd'].rank(pct=True)
+    df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['7day_pay_usd'].rank(pct=True)
+    df1200['3day_login_count_percentile'] = df1200.groupby(['wk','server_id'])['3day_login_count'].rank(pct=True)
+    df1200['7day_login_count_percentile'] = df1200.groupby(['wk','server_id'])['7day_login_count'].rank(pct=True)
+    df1200['p1_percentile'] = df1200.groupby(['wk','server_id'])['p1'].rank(pct=True)
+    df1200['p2_1_percentile'] = df1200.groupby(['wk','server_id'])['p2_1'].rank(pct=True)
+    df1200['p2_2_percentile'] = df1200.groupby(['wk','server_id'])['p2_2'].rank(pct=True)
+    df1200['power_percentile'] = df1200.groupby(['wk','server_id'])['power'].rank(pct=True)
+
+    retrainDf = df1200[df1200['predicted_activity'] == 0]
+    print('total users:', len(df1200))
+    print('retrain users:', len(retrainDf))
+
+    x = retrainDf[[
+        '3day_pay_usd', '7day_pay_usd',
+        '3day_pay_usd_percentile', '7day_pay_usd_percentile', 
+        '3day_login_count', '7day_login_count', 
+        '3day_login_count_percentile', '7day_login_count_percentile',
+        'p1_percentile',
+        'p2_1_percentile', 'p2_2_percentile', 
+        'power_percentile',
+        'power',
+        'p1', 'p2_1', 'p2_2', 'p2_3', 'p3', 'p4', 'p5', 
+    ]]
+    y = retrainDf['actual_activity']
+
+    # 特征 与 y 相关性
+    corr = x.corrwith(y)
+    print('特征 与 y 相关性:')
+    print(corr)
+    # return
+
+
+    x = x.fillna(0)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+    # 参数范围
+    max_depth_range = [4, 6, 8, 10]
+    min_samples_split_range = [2, 5, 10]
+    min_samples_leaf_range = [1, 5, 10]
+    criterion_options = ['gini', 'entropy']
+
+    # # 暂时最优参数
+    # max_depth_range = [8,]
+    # min_samples_split_range = [10]
+    # min_samples_leaf_range = [1,]
+    # criterion_options = ['entropy']
+
+    results = []
+
+    for max_depth in max_depth_range:
+        for min_samples_split in min_samples_split_range:
+            for min_samples_leaf in min_samples_leaf_range:
+                for criterion in criterion_options:
+                    # print(f"Training Decision Tree with max_depth={max_depth}, min_samples_split={min_samples_split}, min_samples_leaf={min_samples_leaf}, criterion={criterion}")
+                    clf = DecisionTreeClassifier(
+                        random_state=0,
+                        max_depth=max_depth,
+                        min_samples_split=min_samples_split,
+                        min_samples_leaf=min_samples_leaf,
+                        criterion=criterion
+                    )
+                    clf.fit(x_train, y_train)
+                    y_pred = clf.predict(x_test)
+
+                    accuracy = accuracy_score(y_test, y_pred)
+                    precision = precision_score(y_test, y_pred, zero_division=0)
+                    recall = recall_score(y_test, y_pred, zero_division=0)
+                    f1 = f1_score(y_test, y_pred, zero_division=0)
+
+                    # print(f"Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1 Score: {f1}")
+                    # print('----------------------------------------')
+                    results.append({
+                        'max_depth': max_depth,
+                        'min_samples_split': min_samples_split,
+                        'min_samples_leaf': min_samples_leaf,
+                        'criterion': criterion,
+                        'accuracy': accuracy,
+                        'precision': precision,
+                        'recall': recall,
+                        'f1': f1
+                    })
+
+    # 保存结果到CSV
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('/src/data/decision_tree_results.csv', index=False)
+
+    # 找到F1分数最高的参数组合
+    best_result = results_df.loc[results_df['f1'].idxmax()]
+    print("Best Parameters:")
+    print(best_result)
+
+    # 使用最佳参数重新训练模型并绘图
+    best_clf = DecisionTreeClassifier(
+        random_state=0,
+        max_depth=best_result['max_depth'],
+        min_samples_split=best_result['min_samples_split'],
+        min_samples_leaf=best_result['min_samples_leaf'],
+        criterion=best_result['criterion']
+    )
+    best_clf.fit(x_train, y_train)
+    y_pred = best_clf.predict(x_test)
+
+    x_test = x_test.copy()
+    x_test['y_true'] = y_test
+    x_test['y_pred'] = y_pred
+
+    x_test['p1'] = pd.cut(x_test['p1_percentile'], bins=np.arange(0, 1.05, 0.05), include_lowest=True)
+    grouped = x_test.groupby('p1')
+
+    accuracy_by_group = grouped.apply(lambda g: accuracy_score(g['y_true'], g['y_pred']))
+    precision_by_group = grouped.apply(lambda g: precision_score(g['y_true'], g['y_pred'], zero_division=0))
+    recall_by_group = grouped.apply(lambda g: recall_score(g['y_true'], g['y_pred'], zero_division=0))
+    f1_by_group = grouped.apply(lambda g: f1_score(g['y_true'], g['y_pred'], zero_division=0))
+
+    x0 = [interval.mid for interval in accuracy_by_group.index]
+    y_accuracy = accuracy_by_group.values
+    y_precision = precision_by_group.values
+    y_recall = recall_by_group.values
+    y_f1 = f1_by_group.values
+
+    plt.figure(figsize=(15, 6))
+    plt.plot(x0, y_accuracy, marker='o', linestyle='-', color='b', label='Accuracy')
+    plt.plot(x0, y_precision, marker='o', linestyle='-', color='g', label='Precision')
+    plt.plot(x0, y_recall, marker='o', linestyle='-', color='r', label='Recall')
+    plt.plot(x0, y_f1, marker='o', linestyle='-', color='c', label='F1 Score')
+
+    plt.scatter(x0, y_accuracy, color='b')
+    plt.scatter(x0, y_precision, color='g')
+    plt.scatter(x0, y_recall, color='r')
+    plt.scatter(x0, y_f1, color='c')
+
+    plt.xlabel('Strength Percentile')
+    plt.ylabel('Score')
+    plt.title('Model Performance by Strength Percentile')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('/src/data/20250318dt_best.png')
+
+    # plt.figure(figsize=(20, 20))
+    plt.figure(figsize=(300, 20))
+    plot_tree(best_clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'], fontsize=10)
+    plt.title('Best Decision Tree Visualization')
+    plt.savefig('/src/data/20250318dt_tree_best.png')
+
+
 if __name__ == '__main__':
     # getData1(startDayStr='2025-02-16', endDayStr='2025-03-17')
-    main()
+    # main()
+
+    main2()
