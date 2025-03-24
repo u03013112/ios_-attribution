@@ -57,15 +57,15 @@ def ssSql(sql):
         return
     # 通过taskId查询任务状态
     printProgressBar(0, 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
-    for _ in range(60):
+    for _ in range(120):
         time.sleep(10)
         # url2 = 'http://123.56.188.109/open/sql-task-info'
         # url2 += '?token='+ssToken+'&taskId='+taskId
         url2 = ssUrlPrefixLastwar + 'open/sql-task-info'
         url2 += '?token='+ssTokenLastwar+'&taskId='+taskId
         s = requests.Session()
-        s.mount('http://',HTTPAdapter(max_retries=3))#设置重试次数为3次
-        s.mount('https://',HTTPAdapter(max_retries=3))
+        s.mount('http://',HTTPAdapter(max_retries=5))#设置重试次数为5次
+        s.mount('https://',HTTPAdapter(max_retries=5))
         r = s.get(url=url2)
         try:
             j = json.loads(r.text)
@@ -94,8 +94,8 @@ def ssSql(sql):
                 # print('progress:',j['data']['progress'])
                 printProgressBar(j['data']['progress'], 100, prefix = 'Progress:', suffix = 'Complete', length = 50)
         except Exception as e:
-            # print('e:',e)
-            # print(r.text)
+            print('e:',e)
+            print(r.text)
             continue
         # 查询太慢了，多等一会再尝试
         time.sleep(10)
