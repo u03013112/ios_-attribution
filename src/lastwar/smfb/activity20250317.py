@@ -278,7 +278,7 @@ ON p.wk = pusd.wk AND p."#account_id" = pusd."#account_id"
 
 def main():
     df = pd.read_csv('/src/data/smfb_getData1_2025-02-16_2025-03-17.csv')
-    df1200 = df[df['server_id'] >= 1300].copy()
+    df1200 = df[df['server_id'] >= 1365].copy()
 
     df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['3day_pay_usd'].rank(pct=True)
     df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['7day_pay_usd'].rank(pct=True)
@@ -303,17 +303,23 @@ def main():
     x = x.fillna(0)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
-    # 参数范围
-    # max_depth_range = [2, 4, 6, 8, 10]
-    # min_samples_split_range = [2, 5, 10]
-    # min_samples_leaf_range = [1, 5, 10]
-    # criterion_options = ['gini', 'entropy']
+    # # y_test中的0和1的数量
+    # print('y_test:', y_test)
+    # print('y_test 0:', len(y_test[y_test == 0]))
+    # print('y_test 1:', len(y_test[y_test == 1]))
+    # return
 
-    # 暂时最优参数
-    max_depth_range = [8,]
-    min_samples_split_range = [10]
-    min_samples_leaf_range = [1,]
-    criterion_options = ['entropy']
+    # 参数范围
+    max_depth_range = [2, 4, 6, 8, 10]
+    min_samples_split_range = [2, 5, 10]
+    min_samples_leaf_range = [1, 5, 10]
+    criterion_options = ['gini', 'entropy']
+
+    # # 暂时最优参数
+    # max_depth_range = [8,]
+    # min_samples_split_range = [10]
+    # min_samples_leaf_range = [1,]
+    # criterion_options = ['entropy']
 
     results = []
 
@@ -407,28 +413,52 @@ def main():
     plt.savefig('/src/data/20250318dt_best.png')
 
     # plt.figure(figsize=(20, 20))
-    plt.figure(figsize=(300, 20))
+    plt.figure(figsize=(20, 10))
     plot_tree(best_clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'], fontsize=10)
     plt.title('Best Decision Tree Visualization')
     plt.savefig('/src/data/20250318dt_tree_best.png')
 
-# 尝试更多的特征
+def prune_tree(clf):
+    tree = clf.tree_
+    children_left = tree.children_left
+    children_right = tree.children_right
+    value = tree.value
+
+    def prune_node(node_id):
+        # 如果当前节点是叶子节点，返回
+        if children_left[node_id] == children_right[node_id]:
+            return True, np.argmax(value[node_id])
+
+        # 递归检查子节点
+        left_is_leaf, left_class = prune_node(children_left[node_id])
+        right_is_leaf, right_class = prune_node(children_right[node_id])
+
+        # 如果两个子节点都是叶子节点且类别相同，则剪枝
+        if left_is_leaf and right_is_leaf and left_class == right_class:
+            tree.children_left[node_id] = tree.children_right[node_id] = -1
+            # value[node_id] = value[children_left[node_id]] + value[children_right[node_id]]
+            return True, left_class
+
+        return False, None
+
+    prune_node(0)
+
+import joblib
+
 def main2():
     df = pd.read_csv('/src/data/smfb_getData1_2025-02-16_2025-03-17.csv')
-    # df1200 = df[df['server_id'] >= 1300].copy()
     df1200 = df[df['server_id'] >= 1365].copy()
 
-    # 简单计算一个战斗力
     df1200['power'] = df1200['p2_1'] + df1200['p2_2']
 
-    df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['3day_pay_usd'].rank(pct=True)
-    df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk','server_id'])['7day_pay_usd'].rank(pct=True)
-    df1200['3day_login_count_percentile'] = df1200.groupby(['wk','server_id'])['3day_login_count'].rank(pct=True)
-    df1200['7day_login_count_percentile'] = df1200.groupby(['wk','server_id'])['7day_login_count'].rank(pct=True)
-    df1200['p1_percentile'] = df1200.groupby(['wk','server_id'])['p1'].rank(pct=True)
-    df1200['p2_1_percentile'] = df1200.groupby(['wk','server_id'])['p2_1'].rank(pct=True)
-    df1200['p2_2_percentile'] = df1200.groupby(['wk','server_id'])['p2_2'].rank(pct=True)
-    df1200['power_percentile'] = df1200.groupby(['wk','server_id'])['power'].rank(pct=True)
+    df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_pay_usd'].rank(pct=True)
+    df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_pay_usd'].rank(pct=True)
+    df1200['3day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_login_count'].rank(pct=True)
+    df1200['7day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_login_count'].rank(pct=True)
+    df1200['p1_percentile'] = df1200.groupby(['wk', 'server_id'])['p1'].rank(pct=True)
+    df1200['p2_1_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_1'].rank(pct=True)
+    df1200['p2_2_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_2'].rank(pct=True)
+    df1200['power_percentile'] = df1200.groupby(['wk', 'server_id'])['power'].rank(pct=True)
 
     retrainDf = df1200[df1200['predicted_activity'] == 0]
     print('total users:', len(df1200))
@@ -447,13 +477,6 @@ def main2():
     ]]
     y = retrainDf['actual_activity']
 
-    # 特征 与 y 相关性
-    corr = x.corrwith(y)
-    print('特征 与 y 相关性:')
-    print(corr)
-    # return
-
-
     x = x.fillna(0)
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
@@ -463,19 +486,12 @@ def main2():
     min_samples_leaf_range = [1, 5, 10]
     criterion_options = ['gini', 'entropy']
 
-    # # 暂时最优参数
-    # max_depth_range = [8,]
-    # min_samples_split_range = [10]
-    # min_samples_leaf_range = [1,]
-    # criterion_options = ['entropy']
-
     results = []
 
     for max_depth in max_depth_range:
         for min_samples_split in min_samples_split_range:
             for min_samples_leaf in min_samples_leaf_range:
                 for criterion in criterion_options:
-                    # print(f"Training Decision Tree with max_depth={max_depth}, min_samples_split={min_samples_split}, min_samples_leaf={min_samples_leaf}, criterion={criterion}")
                     clf = DecisionTreeClassifier(
                         random_state=0,
                         max_depth=max_depth,
@@ -491,8 +507,6 @@ def main2():
                     recall = recall_score(y_test, y_pred, zero_division=0)
                     f1 = f1_score(y_test, y_pred, zero_division=0)
 
-                    # print(f"Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1 Score: {f1}")
-                    # print('----------------------------------------')
                     results.append({
                         'max_depth': max_depth,
                         'min_samples_split': min_samples_split,
@@ -513,7 +527,7 @@ def main2():
     print("Best Parameters:")
     print(best_result)
 
-    # 使用最佳参数重新训练模型并绘图
+    # 使用最佳参数重新训练模型
     best_clf = DecisionTreeClassifier(
         random_state=0,
         max_depth=best_result['max_depth'],
@@ -522,10 +536,144 @@ def main2():
         criterion=best_result['criterion']
     )
     best_clf.fit(x_train, y_train)
-    y_pred = best_clf.predict(x_test)
 
-    x_test = x_test.copy()
-    x_test['y_true'] = y_test
+    # 获取有效的 ccp_alpha 值
+    path = best_clf.cost_complexity_pruning_path(x_train, y_train)
+    ccp_alphas = path.ccp_alphas
+
+    print("CCP Alphas:(len)", len(ccp_alphas))
+    print(ccp_alphas)
+
+
+    ccp_alpha = ccp_alphas[len(ccp_alphas) // 2]
+    # ccp_alpha = ccp_alphas[35]
+
+
+    # 使用 ccp_alpha 进行裁剪
+    pruned_clf = DecisionTreeClassifier(
+        random_state=0,
+        max_depth=best_result['max_depth'],
+        min_samples_split=best_result['min_samples_split'],
+        min_samples_leaf=best_result['min_samples_leaf'],
+        criterion=best_result['criterion'],
+        ccp_alpha=ccp_alpha
+    )
+    pruned_clf.fit(x_train, y_train)
+
+    # 保存模型到文件
+    joblib.dump(pruned_clf, '/src/data/decision_tree_model.pkl')
+
+    # # 自定义后剪枝
+    # prune_tree(pruned_clf)
+
+    y_pred_pruned = pruned_clf.predict(x_test)
+
+    # 重新计算测试集的结果
+    accuracy_pruned = accuracy_score(y_test, y_pred_pruned)
+    precision_pruned = precision_score(y_test, y_pred_pruned, zero_division=0)
+    recall_pruned = recall_score(y_test, y_pred_pruned, zero_division=0)
+    f1_pruned = f1_score(y_test, y_pred_pruned, zero_division=0)
+
+    print("Pruned Model Performance:")
+    print(f"Accuracy: {accuracy_pruned}, Precision: {precision_pruned}, Recall: {recall_pruned}, F1 Score: {f1_pruned}")
+
+    # prune_tree(pruned_clf)
+
+    # 绘制裁剪后的决策树
+    plt.figure(figsize=(60, 30))
+    plot_tree(
+        pruned_clf, 
+        filled=True, 
+        feature_names=x.columns, 
+        class_names=['Class 0', 'Class 1'],
+        fontsize=12
+    )
+    plt.title('Pruned Decision Tree Visualization')
+    plt.savefig('/src/data/20250318dt_tree_pruned.png')
+
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+
+def main3():
+    df = pd.read_csv('/src/data/smfb_getData1_2025-02-16_2025-03-17.csv')
+    df1200 = df[df['server_id'] >= 1365].copy()
+
+    df1200['power'] = df1200['p2_1'] + df1200['p2_2']
+
+    df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_pay_usd'].rank(pct=True)
+    df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_pay_usd'].rank(pct=True)
+    df1200['3day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_login_count'].rank(pct=True)
+    df1200['7day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_login_count'].rank(pct=True)
+    df1200['p1_percentile'] = df1200.groupby(['wk', 'server_id'])['p1'].rank(pct=True)
+    df1200['p2_1_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_1'].rank(pct=True)
+    df1200['p2_2_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_2'].rank(pct=True)
+    df1200['power_percentile'] = df1200.groupby(['wk', 'server_id'])['power'].rank(pct=True)
+
+    retrainDf = df1200[df1200['predicted_activity'] == 0]
+    print('total users:', len(df1200))
+    print('retrain users:', len(retrainDf))
+
+    x = retrainDf[[
+        '3day_pay_usd', '7day_pay_usd',
+        '3day_pay_usd_percentile', '7day_pay_usd_percentile', 
+        '3day_login_count', '7day_login_count', 
+        '3day_login_count_percentile', '7day_login_count_percentile',
+        'p1_percentile',
+        'p2_1_percentile', 'p2_2_percentile', 
+        'power_percentile',
+        'power',
+        'p1', 'p2_1', 'p2_2', 'p2_3', 'p3', 'p4', 'p5', 
+    ]]
+    y = retrainDf['actual_activity']
+
+    x = x.fillna(0)
+
+    # 标准化特征
+    scaler = StandardScaler()
+    x_scaled = scaler.fit_transform(x)
+
+    x_train, x_test, y_train, y_test = train_test_split(x_scaled, y, test_size=0.2, random_state=42)
+
+    # print(y_test)
+    # return
+
+    # 构建DNN模型
+    model = Sequential([
+        Dense(64, activation='relu', input_shape=(x_train.shape[1],)),
+        Dense(32, activation='relu'),
+        Dense(32, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(optimizer='RMSprop', loss='binary_crossentropy', metrics=['accuracy'])
+
+    # 早停法
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+    # 训练模型
+    model.fit(x_train, y_train, validation_split=0.2, epochs=100, callbacks=[early_stopping], batch_size=32)
+
+    # 预测
+    y_pred = (model.predict(x_test) > 0.5).astype("int32")
+
+    # 评估模型
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
+
+    print("DNN Model Performance:")
+    print(f"Accuracy: {accuracy}, Precision: {precision}, Recall: {recall}, F1 Score: {f1}")
+
+    # # 保存模型
+    # model.save('/src/data/dnn_model.h5')
+    # joblib.dump(scaler, '/src/data/scaler.pkl')
+
+    # x_test = x_test.copy()
+    x_test = pd.DataFrame(x_test, columns=x.columns)
+    x_test['y_true'] = y_test.values
     x_test['y_pred'] = y_pred
 
     x_test['p1'] = pd.cut(x_test['p1_percentile'], bins=np.arange(0, 1.05, 0.05), include_lowest=True)
@@ -560,15 +708,57 @@ def main2():
     plt.grid(True)
     plt.savefig('/src/data/20250318dt_best.png')
 
-    # plt.figure(figsize=(20, 20))
-    plt.figure(figsize=(300, 20))
-    plot_tree(best_clf, filled=True, feature_names=x.columns, class_names=['Class 0', 'Class 1'], fontsize=10)
-    plt.title('Best Decision Tree Visualization')
-    plt.savefig('/src/data/20250318dt_tree_best.png')
 
+from sklearn.tree import export_text
+def debug():
+    # 从文件读取模型
+    loaded_clf = joblib.load('/src/data/decision_tree_model.pkl')
 
+    prune_tree(loaded_clf)
+
+    feature_names = [
+        '3day_pay_usd', '7day_pay_usd',
+        '3day_pay_usd_percentile', '7day_pay_usd_percentile', 
+        '3day_login_count', '7day_login_count', 
+        '3day_login_count_percentile', '7day_login_count_percentile',
+        'p1_percentile',
+        'p2_1_percentile', 'p2_2_percentile', 
+        'power_percentile',
+        'power',
+        'p1', 'p2_1', 'p2_2', 'p2_3', 'p3', 'p4', 'p5', 
+    ]
+
+    r = export_text(loaded_clf, feature_names=feature_names)
+    print(r)
+
+    tree = loaded_clf.tree_
+
+    n_nodes = tree.node_count
+    children_left = tree.children_left
+    children_right = tree.children_right
+    feature = tree.feature
+    threshold = tree.threshold
+    value = tree.value
+
+    def print_node_info(node_id):
+        if children_left[node_id] == children_right[node_id]:  # 叶子节点
+            print(f"Node {node_id} is a leaf node.")
+            # print(f"Class distribution: {value[node_id]}")
+            print(f"Predicted class: {np.argmax(value[node_id])}")
+        else:  # 非叶子节点
+            print(f"Node {node_id} splits on feature '{feature_names[feature[node_id]]}' with threshold {threshold[node_id]}.")
+            print(f"Left child: {children_left[node_id]}, Right child: {children_right[node_id]}")
+
+    for node_id in range(n_nodes):
+        print_node_info(node_id)
+
+        
 if __name__ == '__main__':
     # getData1(startDayStr='2025-02-16', endDayStr='2025-03-17')
-    # main()
+    main()
 
-    main2()
+    # main2()
+
+    # debug()
+
+    # main3()

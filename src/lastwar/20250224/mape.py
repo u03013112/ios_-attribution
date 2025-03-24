@@ -486,7 +486,7 @@ def getSumMinMape(reportData,today = None):
     predictDf['danger'] = predictDf['revenue'] < predictDf['predict2_lower']
 
     # 本月数据不完整，将month属于本月的数据删除
-    currentMonth = today.replace(day=1)
+    currentMonth = pd.to_datetime(today.replace(day=1))
     predictDf = predictDf[predictDf['month'] < currentMonth]
 
     print('mape predictDf:')
