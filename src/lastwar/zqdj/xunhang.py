@@ -159,7 +159,7 @@ soldier_data2 AS (
         "resource_item_id",
         remain_num,
         ROW_NUMBER() OVER (
-            PARTITION BY a."uid", "resource_item_id"
+            PARTITION BY a."uid", b."$part_date", "resource_item_id"
             ORDER BY "#event_time" DESC
         ) AS rn
 	FROM
@@ -239,6 +239,23 @@ def debug():
     df = pd.read_csv('/src/data/zqdj_xunhang_data_2025-01-01_2025-03-23.csv')
     print(df[df['uid'] == 1287950332000084])
 
+def data():
+    
+    df2024Q4 = pd.read_csv('/src/data/zqdj_xunhang_data_2024-10-01_2024-12-31.csv')
+    df2025Q1 = pd.read_csv('/src/data/zqdj_xunhang_data_2025-01-01_2025-03-31.csv')
+
+    df = pd.concat([df2024Q4, df2025Q1])
+
+    df = df.sort_values(by=['uid', 'part_date'])
+
+    # columns=['uid', 'part_date', 'battle_time_min', 'battle_time_max', 'battle_count', 'heal_time_min', 'heal_time_max', 'heal_count', 'healed_soldiers', 'initial_soldiers2']
+    # 找到uid含有至少3条记录的uid
+    df = df.groupby('uid').filter(lambda x: len(x) >= 3)
+    print(df)
+
 if __name__ == '__main__':
-    getData(startDayStr='2025-01-01', endDayStr='2025-03-23')
-    debug()
+    getData(startDayStr='2024-10-01', endDayStr='2024-12-31')
+    getData(startDayStr='2025-01-01', endDayStr='2025-03-31')
+    # debug()
+
+    df = data()
