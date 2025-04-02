@@ -3,13 +3,13 @@ import sys
 sys.path.append('/src')
 
 from src.maxCompute import execSql
-from src.tools.cvTools import makeLevels,makeLevelsByJenkspy,makeLevelsByKMeans,checkLevels
+from src.tools.cvTools import makeLevels,makeLevelsByJenkspy,makeLevelsByKMeans
 
 import datetime
 import pandas as pd
 
 def getPayDataFromMC():
-    todayStr = datetime.datetime.now().strftime('%Y%m%d')
+    todayStr = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y%m%d')
     oneMonthAgoStr = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y%m%d')
     print('获得%s~%s的付费数据'%(oneMonthAgoStr,todayStr))
 
@@ -131,8 +131,15 @@ def checkCv(userDf,cvMapDf,usd='r1usd',cv='cv'):
 
     df = df.groupby(['install_date']).agg({usd:'sum','avg':'sum'}).reset_index()
     df['mape'] = abs(df[usd] - df['avg']) / df[usd]
-    print('mape:',df['mape'].mean())
-    return df['mape'].mean()
+    df = df.dropna()
+    # print('mape:',df['mape'].mean())
+    return df['mape'].mean(),df[['install_date','mape']]
+
+def checkLevels(df,levels,usd='payUsd',cv='cv'):
+    cvMapDf = makeCvMap(levels)
+
+    return checkCv(df,cvMapDf,usd=usd,cv=cv)
+
 
 from src.report.feishu.feishu import sendMessageDebug
 def main():
@@ -140,33 +147,40 @@ def main():
     df.to_csv('/src/data/payData.csv',index=False)
     df = pd.read_csv('/src/data/payData.csv')
 
-    message = 'Lastwar CV档位自动测试\n\n'
 
-    levels = makeLevels(df,usd='revenue',N=64)
-    levels = [round(x,2) for x in levels]
+    for N in (16,32,64):
+        message = f'N={N}\n\n'
+        levels = makeLevels(df,usd='revenue',N=N)
+        levels = [round(x,2) for x in levels]
 
-    cvMapDf = makeCvMap(levels)
-    cvMapDf.to_csv('/src/data/cvMapDf.csv',index=False)
+        cvMapDf = makeCvMap(levels)
+        cvMapDf.to_csv(f'/src/data/cvMapDf{N}_1.csv',index=False)
 
-    mape = checkLevels(df,levels,usd='revenue',cv='cv')
-    message += 'makeLevels\n'
-    message += f'{levels}\n'
-    message += f'{mape*100:.2f}%\n\n'
+        mape,mapeDf = checkLevels(df,levels,usd='revenue',cv='cv')
+        mapeDf.to_csv(f'/src/data/mapeDf{N}_1.csv',index=False)
+        message += 'makeLevels\n'
+        message += f'{levels}\n'
+        message += f'{mape*100:.2f}%\n\n'
 
-    levels = makeLevelsByKMeans(df,usd='revenue',N=64)
-    levels = [round(x,2) for x in levels]
-    mape = checkLevels(df,levels,usd='revenue',cv='cv')
-    message += 'makeLevelsByKMeans\n'
-    message += f'{levels}\n'
-    message += f'{mape*100:.2f}%\n\n'
-    
-    print(message)
-    sendMessageDebug(message)
+        levels = makeLevelsByKMeans(df,usd='revenue',N=N)
+        levels = [round(x,2) for x in levels]
+
+        cvMapDf = makeCvMap(levels)
+        cvMapDf.to_csv(f'/src/data/cvMapDf{N}_2.csv',index=False)
+
+        mape,mapeDf = checkLevels(df,levels,usd='revenue',cv='cv')
+        mapeDf.to_csv(f'/src/data/mapeDf{N}_2.csv',index=False)
+        message += 'makeLevelsByKMeans\n'
+        message += f'{levels}\n'
+        message += f'{mape*100:.2f}%\n\n'
+        
+        print(message)
+    # sendMessageDebug(message)
 
 if __name__ == '__main__':
-    # main()
+    main()
 
-    levels = [1.01, 2.09, 3.05, 3.96, 5.98, 8.09, 10.68, 13.1, 15.74, 17.94, 20.82, 23.5, 27.28, 31.79, 35.59, 39.57, 45.29, 51.6, 57.91, 64.04, 70.56, 77.54, 85.34, 93.78, 102.85, 110.55, 120.56, 133.16, 146.3, 159.41, 175.59, 190.67, 207.42, 221.2, 235.69, 251.68, 267.3, 286.39, 314.37, 343.45, 372.85, 401.52, 427.41, 456.57, 500.49, 544.45, 576.01, 615.13, 658.09, 698.14, 726.09, 794.38, 851.99, 896.61, 938.36, 1007.96, 1080.38, 1201.19, 1260.38, 1491.48, 1601.03, 2155.46, 7698.85]
-    cvMapDf = makeCvMap(levels)
-    cvMapDf.to_csv('/src/data/cvMapDf.csv',index=False)
+    # levels = [1.01, 2.09, 3.05, 3.96, 5.98, 8.09, 10.68, 13.1, 15.74, 17.94, 20.82, 23.5, 27.28, 31.79, 35.59, 39.57, 45.29, 51.6, 57.91, 64.04, 70.56, 77.54, 85.34, 93.78, 102.85, 110.55, 120.56, 133.16, 146.3, 159.41, 175.59, 190.67, 207.42, 221.2, 235.69, 251.68, 267.3, 286.39, 314.37, 343.45, 372.85, 401.52, 427.41, 456.57, 500.49, 544.45, 576.01, 615.13, 658.09, 698.14, 726.09, 794.38, 851.99, 896.61, 938.36, 1007.96, 1080.38, 1201.19, 1260.38, 1491.48, 1601.03, 2155.46, 7698.85]
+    # cvMapDf = makeCvMap(levels)
+    # cvMapDf.to_csv('/src/data/cvMapDf.csv',index=False)
     

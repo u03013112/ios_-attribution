@@ -658,7 +658,7 @@ def prophet1FloorL(today = None,future_periods=90):
         
     minRevenueRateServerDf['predict2_lower_per_day'] = minRevenueRateServerDf['predict2_lower'] / minRevenueRateServerDf['days']
     minP2 = minRevenueRateServerDf['predict2_lower_per_day'].min()
-    waringText += f'预测期间月平均最低日收入可能达到{minP2:.2f}美元'
+    waringText += f'预测期间月平均最低日收入是第{reportData["minRevenueRateServerId"]}服务器，可能达到{minP2:.2f}美元'
     print(f'\n预测期间月平均最低日收入可能达到{minP2:.2f}美元')
 
     reportData['waringText'] = waringText

@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
@@ -752,13 +752,94 @@ def debug():
     for node_id in range(n_nodes):
         print_node_info(node_id)
 
+from xgboost import XGBClassifier
+def mainXgboost():
+    df = pd.read_csv('/src/data/smfb_getData1_2025-02-16_2025-03-17.csv')
+    df1200 = df[df['server_id'] >= 1365].copy()
+
+    df1200['power'] = df1200['p2_1'] + df1200['p2_2']
+
+    df1200['3day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_pay_usd'].rank(pct=True)
+    df1200['7day_pay_usd_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_pay_usd'].rank(pct=True)
+    df1200['3day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['3day_login_count'].rank(pct=True)
+    df1200['7day_login_count_percentile'] = df1200.groupby(['wk', 'server_id'])['7day_login_count'].rank(pct=True)
+    df1200['p1_percentile'] = df1200.groupby(['wk', 'server_id'])['p1'].rank(pct=True)
+    df1200['p2_1_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_1'].rank(pct=True)
+    df1200['p2_2_percentile'] = df1200.groupby(['wk', 'server_id'])['p2_2'].rank(pct=True)
+    df1200['power_percentile'] = df1200.groupby(['wk', 'server_id'])['power'].rank(pct=True)
+
+    retrainDf = df1200[df1200['predicted_activity'] == 0]
+    print('total users:', len(df1200))
+    print('retrain users:', len(retrainDf))
+
+    x = retrainDf[[
+        '3day_pay_usd', '7day_pay_usd',
+        '3day_pay_usd_percentile', '7day_pay_usd_percentile', 
+        '3day_login_count', '7day_login_count', 
+        '3day_login_count_percentile', '7day_login_count_percentile',
+        'p1_percentile',
+        'p2_1_percentile', 'p2_2_percentile', 
+        'power_percentile',
+        'power',
+        'p1', 'p2_1', 'p2_2', 'p2_3', 'p3', 'p4', 'p5', 
+    ]]
+    y = retrainDf['actual_activity']
+
+    x = x.fillna(0)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+    # 将训练集拆分为训练集和验证集
+    x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.2, random_state=42)
+
+    # 定义参数网格
+    param_grid = {
+        'n_estimators': [50, 100, 150],
+        'max_depth': [3, 6, 9],
+        'learning_rate': [0.01, 0.1, 0.3],
+        'subsample': [0.8, 1],
+        'colsample_bytree': [0.8, 1]
+    }
+
+    # 使用GridSearchCV进行交叉验证
+    xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+    grid_search = GridSearchCV(estimator=xgb_model, param_grid=param_grid, cv=3, scoring='f1', verbose=1)
+    grid_search.fit(x_train, y_train)
+
+    # 输出最佳参数
+    print("Best parameters found: ", grid_search.best_params_)
+
+    # 使用最佳参数在验证集上进行预测
+    best_model = grid_search.best_estimator_
+    y_val_pred = best_model.predict(x_val)
+
+    # 评估验证集上的模型性能
+    val_accuracy = accuracy_score(y_val, y_val_pred)
+    val_precision = precision_score(y_val, y_val_pred, zero_division=0)
+    val_recall = recall_score(y_val, y_val_pred, zero_division=0)
+    val_f1 = f1_score(y_val, y_val_pred, zero_division=0)
+
+    print("Validation Performance:")
+    print(f"Accuracy: {val_accuracy}, Precision: {val_precision}, Recall: {val_recall}, F1 Score: {val_f1}")
+
+    # 使用最佳参数在测试集上进行预测
+    y_test_pred = best_model.predict(x_test)
+
+    # 评估测试集上的模型性能
+    test_accuracy = accuracy_score(y_test, y_test_pred)
+    test_precision = precision_score(y_test, y_test_pred, zero_division=0)
+    test_recall = recall_score(y_test, y_test_pred, zero_division=0)
+    test_f1 = f1_score(y_test, y_test_pred, zero_division=0)
+
+    print("Test Performance:")
+    print(f"Accuracy: {test_accuracy}, Precision: {test_precision}, Recall: {test_recall}, F1 Score: {test_f1}")
+
         
 if __name__ == '__main__':
     # getData1(startDayStr='2025-02-16', endDayStr='2025-03-17')
-    main()
-
+    # main()
     # main2()
-
+    # main3()
     # debug()
 
-    # main3()
+    mainXgboost()
+    

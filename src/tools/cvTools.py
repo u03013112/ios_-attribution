@@ -191,6 +191,8 @@ def checkCv(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='insta
     df = df.groupby(['install_date']).agg({'sumUsd':'sum','sumAvg':'sum'}).reset_index()
     df['mape'] = abs(df['sumUsd'] - df['sumAvg']) / df['sumUsd']
     # print('mape:',df['mape'].mean())
+    print('误差：')
+    print(df[['install_date','mape']])
     return df['mape'].mean()
 
 
