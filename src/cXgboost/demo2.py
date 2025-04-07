@@ -17,10 +17,10 @@ def generate_data(num_samples=1000):
     X = np.random.normal(0, 1, num_samples)
     T = np.random.binomial(1, p=0.5, size=num_samples)
     # Increase the effect of X and T on Y
-    Y = 5 * X + 8 * T + np.random.normal(0, 1, num_samples)
+    Y = 15 * X + 18 * T + np.random.normal(0, 1, num_samples)
     potential_Y = np.zeros((num_samples, 2))
-    potential_Y[:, 0] = 5 * X + np.random.normal(0, 1, num_samples)  # Y0
-    potential_Y[:, 1] = 5 * X + 8 + np.random.normal(0, 1, num_samples)  # Y1
+    potential_Y[:, 0] = 15 * X + np.random.normal(0, 1, num_samples)  # Y0
+    potential_Y[:, 1] = 15 * X + 18 + np.random.normal(0, 1, num_samples)  # Y1
     return X, T, Y, potential_Y
 
 # Generate training and testing data
