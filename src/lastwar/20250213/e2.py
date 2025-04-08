@@ -58,7 +58,7 @@ def func1():
     changepoint_prior_scales = [0.1, 0.5, 0.8, 1.0]
     seasonality_prior_scales = [0.1, 0.5, 0.8, 1.0]
     best_params_global = None
-    best_coverage_global = float('inf')
+    best_mape_global = float('inf')
     best_model_global = None
 
     for cps in changepoint_prior_scales:
@@ -82,23 +82,25 @@ def func1():
             )
             df_p = performance_metrics(df_cv)
             # print(df_p)
+            # input("按任意键继续...")
             
-            coverage = df_p['coverage'].mean()
+            mape = df_p['mape'].mean()
 
-            if coverage < best_coverage_global:
-                best_coverage_global = coverage
+            if mape < best_mape_global:
+                best_mape_global = mape
                 best_params_global = (cps, sps)
                 best_model_global = model
 
-    print(f"Global best params: {best_params_global}, coverage: {best_coverage_global}")
+    print(f"Global best params: {best_params_global}, mape: {best_mape_global}")
     # 保存全局最优参数到CSV
     global_params_df = pd.DataFrame([{
         'type': 'global',
         'changepoint_prior_scale': best_params_global[0],
         'seasonality_prior_scale': best_params_global[1],
-        'coverage': best_coverage_global
+        'mape': best_mape_global
     }])
     global_params_df.to_csv('/src/data/20250220_e2_global_best_params.csv', index=False)
+    # input("按任意键继续...")
     future = best_model_global.make_future_dataframe(periods=0)
     future['cap'] = 1e5
     future['floor'] = 0
@@ -128,7 +130,7 @@ def func1():
 
         # 优化单独服务器模型参数并训练模型
         best_params_server = None
-        best_coverage_server = float('inf')
+        best_mape_server = float('inf')
         best_model_server = None
 
         changepoint_prior_scales2 = [0.03, 0.05, 0.08, 0.1]
@@ -153,20 +155,20 @@ def func1():
                     parallel="processes"
                 )
                 df_p = performance_metrics(df_cv)
-                coverage = df_p['coverage'].mean()
+                mape = df_p['mape'].mean()
 
-                if coverage < best_coverage_server:
-                    best_coverage_server = coverage
+                if mape < best_mape_server:
+                    best_mape_server = mape
                     best_params_server = (cps, sps)
                     best_model_server = model
 
-        print(f"Server {server_id} best params: {best_params_server}, coverage: {best_coverage_server}")
+        print(f"Server {server_id} best params: {best_params_server}, mape: {best_mape_server}")
         # 保存服务器最优参数到CSV
         server_params_df = pd.DataFrame([{
             'type': f'server_{server_id}',
             'changepoint_prior_scale': best_params_server[0],
             'seasonality_prior_scale': best_params_server[1],
-            'coverage': best_coverage_server
+            'mape': best_mape_server
         }])
         server_params_df.to_csv(f'/src/data/20250220_e2_server_{server_id}_best_params.csv', index=False)
         future = best_model_server.make_future_dataframe(periods=60)
@@ -196,7 +198,6 @@ def func1():
 
 results = func1()
 print("func1() done.")
-input("按任意键继续...")
 print("results:")
 print(results)
 
@@ -208,16 +209,20 @@ for result in results:
     forecast = result['forecast']
     forecast_trend = result['forecast_trend']
     
-    plt.figure(figsize=(10, 6))
-    plt.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
-    plt.plot(forecast['ds'], forecast['yhat'], label='Forecasted Revenue', linestyle='--')
-    plt.plot(forecast_trend['ds'], forecast_trend['trend'], label='Forecasted Trend (Seasonality Removed)', linestyle='--')
-    plt.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
-    plt.axhline(y=0, color='r', linestyle='--')
-    plt.title(f'Trend and Actual Revenue for Server {server_id}')
-    plt.xlabel('Date')
-    plt.ylabel('Revenue')
-    plt.legend()
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    ax2 = ax1.twinx()
+    ax1.plot(actual['ds'], actual['y'], label='Actual Revenue', alpha=0.6)
+    ax1.plot(forecast['ds'], forecast['yhat'], label='Forecasted Revenue', linestyle='--')
+    ax2.plot(forecast_trend['ds'], forecast_trend['trend'], label='Forecasted Trend (Seasonality Removed)', linestyle='--', color='purple')
+
+    ax1.axvline(x=actual['ds'].max(), color='g', linestyle='--', label='Prediction Start')
+    ax1.axhline(y=0, color='r', linestyle='--')
+    ax1.set_title(f'Trend and Actual Revenue for Server {server_id}')
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Revenue')
+    ax2.set_ylabel('Trend')
+    fig.legend(loc="upper left", bbox_to_anchor=(0.1,0.9))
     plt.savefig(f"/src/data/20250220_trend_actual_{server_id}.png")
     print(f"Trend and Actual Revenue for Server {server_id} saved.")
     plt.close()
