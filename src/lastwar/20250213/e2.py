@@ -8,39 +8,147 @@ from prophet import Prophet
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, r2_score
 from prophet.diagnostics import cross_validation, performance_metrics
 
-def getData():
-    df = pd.read_csv('lastwar_分服流水每天_20240101_20250217.csv')
+import os
+import json
 
-    df['时间'] = pd.to_datetime(df['时间'], errors='coerce')
-    df = df.dropna(subset=['时间'])
 
-    df = df.rename(columns={
-        '时间': 'day', 
-        '服务器ID': 'server_id', 
-        'S新支付.美元付费金额 - USD(每日汇率)总和': 'revenue'
-    })
+import sys
+sys.path.append('/src')
 
-    df = df.dropna(subset=['server_id'])
-    df = df[df['server_id'] != '(null)']
+from src.lastwar.ss.ss import ssSql
 
-    def convert_server_id(server_id):
-        try:
-            return int(server_id[3:])
-        except:
-            return np.nan
+def getData(endday='2025-02-25'):
+    filename = f'/src/data/e2_data_{endday}.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+        print(f'load file {filename}')
+    else:
+        sql = f'''
+WITH event_data AS (
+    SELECT
+        lw_cross_zone,
+        DATE(
+            IF(
+                "#zone_offset" IS NOT NULL
+                AND "#zone_offset" BETWEEN -30
+                AND 30,
+                DATE_ADD(
+                    'second',
+                    CAST((0 - "#zone_offset") * 3600 AS INTEGER),
+                    "#event_time"
+                ),
+                "#event_time"
+            )
+        ) AS event_date,
+        usd,
+        "#user_id"
+    FROM
+        v_event_3
+    WHERE
+        "$part_event" = 's_pay_new'
+        AND "$part_date" BETWEEN '2024-10-01'
+        AND '{endday}'
+),
+user_data AS (
+    SELECT
+        "#user_id"
+    FROM
+        v_user_3
+    WHERE
+        "lwu_is_gm" IS NOT NULL
+)
+SELECT
+    e.event_date as day,
+    e.lw_cross_zone as server_id,
+    ROUND(
+        SUM(
+            e.usd
+        ),
+        4
+    ) AS revenue
+FROM
+    event_data e
+    LEFT JOIN user_data u ON e."#user_id" = u."#user_id"
+WHERE
+    e.event_date BETWEEN DATE '2024-10-01'
+    AND DATE '{endday}'
+    AND e.lw_cross_zone IN ('APS3','APS4','APS5','APS6','APS7','APS8','APS9','APS10','APS11','APS12','APS13','APS14','APS15','APS16','APS17','APS18','APS19','APS20','APS21','APS22','APS23','APS24','APS25','APS26','APS27','APS28','APS29','APS30','APS31','APS32','APS33','APS34','APS35','APS36')
+    AND u."#user_id" IS NULL
+GROUP BY
+    e.lw_cross_zone,
+    e.event_date
+ORDER BY
+    revenue DESC;
+        '''
 
-    df['server_id_int'] = df['server_id'].apply(convert_server_id)
-    df = df.dropna(subset=['server_id_int'])
-    df['server_id_int'] = df['server_id_int'].astype(int)
+        lines = ssSql(sql=sql)
 
-    df = df[df['server_id_int'] <= 1188]
+        # print('lines:',len(lines))
+        # print(lines[:10])
 
-    df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce').fillna(0)
-    
+        data = []
+        for line in lines:
+            if line == '':
+                continue
+            j = json.loads(line)
+            data.append(j)
+        df = pd.DataFrame(data,columns=["day","server_id","revenue"])
+
+        # 将"时间"列中的字符串转换为时间类型，其中有一些类似"阶段汇总"的字符串，直接整行删除
+        df['day'] = pd.to_datetime(df['day'], errors='coerce')
+        df = df.dropna(subset=['day'])
+
+        # 将server_id转换为整数
+        def convert_server_id(server_id):
+            try:
+                return int(server_id[3:])
+            except:
+                return np.nan
+
+        df = df[df['server_id'] != '(null)']        
+        df['server_id_int'] = df['server_id'].apply(convert_server_id)
+        df = df.dropna(subset=['server_id_int'])
+
+        # 将无法转换为浮点数的字符串替换为 NaN，然后再用 0 替换 NaN
+        df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce').fillna(0)
+
+        df.to_csv(filename, index=False)
+
     return df
 
+# def getData():
+#     df = pd.read_csv('lastwar_分服流水每天_20240101_20250217.csv')
+
+#     df['时间'] = pd.to_datetime(df['时间'], errors='coerce')
+#     df = df.dropna(subset=['时间'])
+
+#     df = df.rename(columns={
+#         '时间': 'day', 
+#         '服务器ID': 'server_id', 
+#         'S新支付.美元付费金额 - USD(每日汇率)总和': 'revenue'
+#     })
+
+#     df = df.dropna(subset=['server_id'])
+#     df = df[df['server_id'] != '(null)']
+
+#     def convert_server_id(server_id):
+#         try:
+#             return int(server_id[3:])
+#         except:
+#             return np.nan
+
+#     df['server_id_int'] = df['server_id'].apply(convert_server_id)
+#     df = df.dropna(subset=['server_id_int'])
+#     df['server_id_int'] = df['server_id_int'].astype(int)
+
+#     df = df[df['server_id_int'] <= 1188]
+
+#     df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce').fillna(0)
+    
+#     return df
+
 def func1():
-    df = getData()
+    df = getData('2025-04-08')
     df = df[df['day'] >= '2024-10-16']
 
     df0 = df[(df['server_id_int'] >= 3) & (df['server_id_int'] <= 36)]
@@ -55,8 +163,8 @@ def func1():
     aggregated_data['floor'] = 0
 
     # 优化全局模型参数并训练模型
-    changepoint_prior_scales = [0.1, 0.5, 0.8, 1.0]
-    seasonality_prior_scales = [0.1, 0.5, 0.8, 1.0]
+    changepoint_prior_scales = [0.05, 0.1, 0.5, 0.8, 1.0]
+    seasonality_prior_scales = [0.05, 0.1, 0.5, 0.8, 1.0]
     best_params_global = None
     best_mape_global = float('inf')
     best_model_global = None
@@ -75,7 +183,7 @@ def func1():
 
             df_cv = cross_validation(
                 model,
-                initial='60 days',
+                initial='90 days',
                 period='30 days',
                 horizon='60 days',
                 parallel="processes"
@@ -114,9 +222,9 @@ def func1():
     results = []
 
     for server_id in range(3, 37):
-        # for test
-        if server_id != 10:
-            continue
+        # # for test
+        # if server_id != 10:
+        #     continue
 
         server_data = df0[df0['server_id'] == server_id].sort_values('ds').reset_index(drop=True)
         
@@ -133,8 +241,8 @@ def func1():
         best_mape_server = float('inf')
         best_model_server = None
 
-        changepoint_prior_scales2 = [0.03, 0.05, 0.08, 0.1]
-        seasonality_prior_scales2 = [0.03, 0.05, 0.08, 0.1]
+        changepoint_prior_scales2 = [0.05, 0.075, 0.1, 0.125]
+        seasonality_prior_scales2 = [0.05, 0.075, 0.1, 0.125]
         for cps in changepoint_prior_scales2:
             for sps in seasonality_prior_scales2:
                 model = Prophet(
@@ -149,7 +257,7 @@ def func1():
 
                 df_cv = cross_validation(
                     model,
-                    initial='60 days',
+                    initial='90 days',
                     period='30 days',
                     horizon='60 days',
                     parallel="processes"
