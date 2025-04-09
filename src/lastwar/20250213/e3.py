@@ -196,7 +196,7 @@ for cps in changepoint_prior_scales:
             best_model_agg = model
 
 # 用最优参数重新训练模型
-best_model_agg = Prophet(
+best_model_agg2 = Prophet(
     growth='logistic',
     daily_seasonality=True, 
     weekly_seasonality=True, 
@@ -204,10 +204,10 @@ best_model_agg = Prophet(
     changepoint_prior_scale=best_params_agg['changepoint_prior_scale'],
     seasonality_prior_scale=best_params_agg['seasonality_prior_scale']
 )
-best_model_agg.fit(agg_valid_data)
+best_model_agg2.fit(agg_valid_data)
 
 # 预测测试集
-forecast_test = best_model_agg.predict(agg_test_data)
+forecast_test = best_model_agg2.predict(agg_test_data)
 mape_test = mean_absolute_percentage_error(agg_test_data['y'], forecast_test['yhat'])
 
 # 保存最佳参数和测试集MAPE到CSV
