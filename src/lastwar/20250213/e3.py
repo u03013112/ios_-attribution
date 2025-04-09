@@ -168,8 +168,8 @@ agg_test_data = aggregated_data[
 ]
 
 # 优化全局模型参数并训练模型
-changepoint_prior_scales = [0.05, 0.1]
-seasonality_prior_scales = [0.5, 1.0, 2.0, 4.0]
+changepoint_prior_scales = [0.1, 0.5, 1.0]
+seasonality_prior_scales = [0.01, 0.03, 0.1, 0.5]
 best_params_agg = None
 best_mape_agg = float('inf')
 best_model_agg = None
@@ -216,13 +216,49 @@ results = pd.DataFrame([{
     'best_seasonality_prior_scale': best_params_agg['seasonality_prior_scale'],
     'mape_test': mape_test
 }])
-results.to_csv('/src/data/e2_agg.csv', index=False)
+results.to_csv('/src/data/e3_agg.csv', index=False)
 print(f'Best parameters: {best_params_agg}')
 print(f'Test MAPE: {mape_test}')
 
 
 # 画图，一张大图中上下两张小图
 # 上面图，使用best_model_agg预测训练集和验证集
+agg_train_valid_data = pd.concat([agg_train_data, agg_valid_data])
+agg_train_valid_data = agg_train_valid_data.sort_values(by='ds')
+forecast_train_valid = best_model_agg.predict(agg_train_valid_data)
+
+plt.figure(figsize=(14, 10))
+
+plt.subplot(2, 1, 1)
+agg_train_valid_data['ds'] = pd.to_datetime(agg_train_valid_data['ds'])
+plt.plot(agg_train_valid_data['ds'], agg_train_valid_data['y'], label='Actual')
+plt.plot(agg_train_valid_data['ds'], forecast_train_valid['yhat'], label='Predicted')
+plt.fill_between(agg_train_valid_data['ds'], forecast_train_valid['yhat_lower'], forecast_train_valid['yhat_upper'], color='gray', alpha=0.2)
+plt.axvline(x=valid_start, color='gray', linestyle='--')
+plt.title('Training + Validation Set')
+plt.xlabel('Date')
+plt.ylabel('Revenue')
+plt.legend()
+
+# 下面图，使用best_model_agg2预测验证集与测试集
+agg_valid_test_data = pd.concat([agg_valid_data, agg_test_data])
+agg_valid_test_data = agg_valid_test_data.sort_values(by='ds')
+forecast_valid_test = best_model_agg2.predict(agg_valid_test_data)
+
+plt.subplot(2, 1, 2)
+agg_train_valid_data = agg_train_valid_data.sort_values(by='ds')
+plt.plot(agg_valid_test_data['ds'], agg_valid_test_data['y'], label='Actual')
+plt.plot(agg_valid_test_data['ds'], forecast_valid_test['yhat'], label='Predicted')
+plt.fill_between(agg_valid_test_data['ds'], forecast_valid_test['yhat_lower'], forecast_valid_test['yhat_upper'], color='gray', alpha=0.2)
+plt.axvline(x=test_start, color='gray', linestyle='--')
+plt.title('Validation + Test Set')
+plt.xlabel('Date')
+plt.ylabel('Revenue')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig('/src/data/e3_agg.png')
+plt.show()
 # x是ds，y是 y 和 yhat
 # yhat_lower 和 yhat_upper 中间填充灰色
 # 训练集与测试集中间画一条竖着的虚线，用于区分训练集和测试集
