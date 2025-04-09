@@ -183,7 +183,7 @@ def func1():
 
             df_cv = cross_validation(
                 model,
-                initial='90 days',
+                initial='60 days',
                 period='30 days',
                 horizon='60 days',
                 parallel="processes"
@@ -257,7 +257,7 @@ def func1():
 
                 df_cv = cross_validation(
                     model,
-                    initial='90 days',
+                    initial='60 days',
                     period='30 days',
                     horizon='60 days',
                     parallel="processes"
