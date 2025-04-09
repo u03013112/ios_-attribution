@@ -170,9 +170,9 @@ agg_test_data = aggregated_data[
 # 优化全局模型参数并训练模型
 changepoint_prior_scales = [0.05, 0.1]
 seasonality_prior_scales = [0.5, 1.0, 2.0, 4.0]
-best_params_global = None
-best_mape_global = float('inf')
-best_model_global = None
+best_params_agg = None
+best_mape_agg = float('inf')
+best_model_agg = None
 
 for cps in changepoint_prior_scales:
     for sps in seasonality_prior_scales:
@@ -190,55 +190,44 @@ for cps in changepoint_prior_scales:
         forecast_valid = model.predict(agg_valid_data)
         mape_valid = mean_absolute_percentage_error(agg_valid_data['y'], forecast_valid['yhat'])
 
-        if mape_valid < best_mape_global:
-            best_mape_global = mape_valid
-            best_params_global = {'changepoint_prior_scale': cps, 'seasonality_prior_scale': sps}
-            best_model_global = model
-
-# 使用训练集+验证集找到最优参数
-agg_train_valid_data = pd.concat([agg_train_data, agg_valid_data])
-for cps in changepoint_prior_scales:
-    for sps in seasonality_prior_scales:
-        model = Prophet(
-            growth='logistic',
-            daily_seasonality=True, 
-            weekly_seasonality=True, 
-            yearly_seasonality=True,
-            changepoint_prior_scale=cps,
-            seasonality_prior_scale=sps
-        )
-        model.fit(agg_train_valid_data)
-        
-        # 验证模型
-        forecast_valid = model.predict(agg_valid_data)
-        mape_valid = mean_absolute_percentage_error(agg_valid_data['y'], forecast_valid['yhat'])
-
-        if mape_valid < best_mape_global:
-            best_mape_global = mape_valid
-            best_params_global = {'changepoint_prior_scale': cps, 'seasonality_prior_scale': sps}
-            best_model_global = model
+        if mape_valid < best_mape_agg:
+            best_mape_agg = mape_valid
+            best_params_agg = {'changepoint_prior_scale': cps, 'seasonality_prior_scale': sps}
+            best_model_agg = model
 
 # 用最优参数重新训练模型
-best_model_global = Prophet(
+best_model_agg = Prophet(
     growth='logistic',
     daily_seasonality=True, 
     weekly_seasonality=True, 
     yearly_seasonality=True,
-    changepoint_prior_scale=best_params_global['changepoint_prior_scale'],
-    seasonality_prior_scale=best_params_global['seasonality_prior_scale']
+    changepoint_prior_scale=best_params_agg['changepoint_prior_scale'],
+    seasonality_prior_scale=best_params_agg['seasonality_prior_scale']
 )
-best_model_global.fit(agg_train_valid_data)
+best_model_agg.fit(agg_valid_data)
 
 # 预测测试集
-forecast_test = best_model_global.predict(agg_test_data)
+forecast_test = best_model_agg.predict(agg_test_data)
 mape_test = mean_absolute_percentage_error(agg_test_data['y'], forecast_test['yhat'])
 
 # 保存最佳参数和测试集MAPE到CSV
 results = pd.DataFrame([{
-    'best_changepoint_prior_scale': best_params_global['changepoint_prior_scale'],
-    'best_seasonality_prior_scale': best_params_global['seasonality_prior_scale'],
+    'best_changepoint_prior_scale': best_params_agg['changepoint_prior_scale'],
+    'best_seasonality_prior_scale': best_params_agg['seasonality_prior_scale'],
     'mape_test': mape_test
 }])
-results.to_csv('/src/data/best_model_results.csv', index=False)
-print(f'Best parameters: {best_params_global}')
+results.to_csv('/src/data/e2_agg.csv', index=False)
+print(f'Best parameters: {best_params_agg}')
 print(f'Test MAPE: {mape_test}')
+
+
+# 画图，一张大图中上下两张小图
+# 上面图，使用best_model_agg预测训练集和验证集
+# x是ds，y是 y 和 yhat
+# yhat_lower 和 yhat_upper 中间填充灰色
+# 训练集与测试集中间画一条竖着的虚线，用于区分训练集和测试集
+
+# 下面图，使用best_model_agg2预测验证集与测试集
+# x是ds，y是 y 和 yhat
+# yhat_lower 和 yhat_upper 中间填充灰色
+# 测验证集与测试集中间画一条竖着的虚线，用于区分训练集和测试集
