@@ -61,7 +61,6 @@ def findColorTag3s(filename):
     
     return result_df
 
-
 def checkColor(color_ranges):
     import numpy as np
     import matplotlib.pyplot as plt
@@ -83,7 +82,12 @@ def test():
     result_df = findColorTag3s(filename)
     print(result_df)
 
+# 将videoInfoDf中，每个视频使用findColorTag3s函数
+# 最终输出一个dataframe，列名为：videoInfoDf 元有列 + '赤ratio','赤2ratio','橙ratio','黄ratio','绿ratio','蓝ratio','紫ratio','黑ratio','白ratio','灰ratio','otherratio'
+def videoInfoAddColorTag():
+    
+
 if __name__ == "__main__":
     test()
 
-    checkColor(color_ranges)
+    # checkColor(color_ranges)
