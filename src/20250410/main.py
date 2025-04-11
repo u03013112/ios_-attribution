@@ -84,10 +84,99 @@ def test():
 
 # 将videoInfoDf中，每个视频使用findColorTag3s函数
 # 最终输出一个dataframe，列名为：videoInfoDf 元有列 + '赤ratio','赤2ratio','橙ratio','黄ratio','绿ratio','蓝ratio','紫ratio','黑ratio','白ratio','灰ratio','otherratio'
-def videoInfoAddColorTag():
+def videoInfoAddColorTag(videoInfoDf):
+
+    colorTagDf = pd.DataFrame()
+    for filename in videoInfoDf['filename']:
+        colorTagDf0 = findColorTag3s(filename)
+        # 将colorTagDf0 pivot成列,filename,'赤ratio','赤2ratio' 等
+        colorTagDf0 = colorTagDf0.pivot(index='filename', columns='color', values='ratio').reset_index()
+        colorTagDf = pd.concat([colorTagDf, colorTagDf0], ignore_index=True)
+
+    videoInfoDf = pd.merge(videoInfoDf, colorTagDf, on='filename', how='left')
+
+    return videoInfoDf
+
+from econml.dml import LinearDML
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+
+def econml_example():
+    # 读取数据
+    data = pd.read_csv('videoWithColorTag.csv')
+    
+    # 提取颜色比例特征
+    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
+    T = data[color_features]  # 处理变量
     
 
-if __name__ == "__main__":
-    test()
 
-    # checkColor(color_ranges)
+    # 提取目标变量
+    y_cost = data['cost']
+    
+    # 使用双重机器学习模型进行因果推断
+    model_y = RandomForestRegressor()  # 用于预测目标变量
+    model_t = LinearRegression()       # 用于预测处理变量
+    
+    # 初始化 DML 模型
+    dml_cost = LinearDML(model_y=model_y, model_t=model_t)
+    
+    # 拟合模型
+    dml_cost.fit(Y=y_cost, T=T, X=None)
+    
+    # 计算 ATE
+    ate_cost = dml_cost.ate(X=None)
+
+    print("ATE for cost:")
+    print(ate_cost)
+    
+    # # 输出结果
+    # print("ATE for cost:")
+    # for feature, ate in zip(color_features, ate_cost):
+    #     print(f"{feature}: {ate}")
+
+
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.metrics import mean_absolute_percentage_error
+
+def fit_predict_cost_with_decision_tree():
+    
+    data = pd.read_csv('videoWithColorTag.csv')
+    # 提取颜色比例特征
+    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
+    X = data[color_features]  # 输入特征
+    
+    # 提取目标变量
+    y = data['cost']  # 输出变量
+    
+    # 初始化决策树回归模型
+    model = DecisionTreeRegressor()
+    
+    # 拟合模型
+    model.fit(X, y)
+    
+    # 预测 cost
+    data['predicted_cost'] = model.predict(X)
+    
+    # 计算每行的 MAPE
+    data['mape'] = mean_absolute_percentage_error(data['cost'], data['predicted_cost'])
+    
+    # 计算最终的 MAPE 的 mean
+    mean_mape = data['mape'].mean()
+    
+    return data, mean_mape
+
+if __name__ == "__main__":
+
+    # # checkColor(color_ranges)
+    # videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
+    # print(videoInfoWithColorTagDf)
+    # videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
+
+    # econml_example()
+
+    data, mean_mape = fit_predict_cost_with_decision_tree()
+
+    data.to_csv('fit_predict_cost_with_decision_tree.csv', index=False)
+    print(data)
+    print(f"Mean MAPE: {mean_mape}")

@@ -114,7 +114,7 @@ where
 
 
 def p1():
-    df = getSKANDataFromMC('20250407', 7)
+    df = getSKANDataFromMC('20250411', 14)
     # 按照day，cv排序
     # 画图，day为x轴，cnt为y轴，每个cv一张图
     # 保存到文件 /src/data/20250407_cv{cv}.png
