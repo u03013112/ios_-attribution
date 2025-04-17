@@ -2,7 +2,6 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 # 国家分布于付费率
 def step1():
@@ -56,7 +55,10 @@ def step1():
         # 画图,x轴是user_rate，y轴是pay_rate
         countryDf = df[df['countryGroup'] == countryGroup]
         plt.figure(figsize=(10, 6))
-        
+
+
+        # 保存图像 /src/data/20250416_step1_{countryGroup}.png
+
 
         
 
