@@ -63,6 +63,7 @@ def getSKANDataFromMC(dayStr, days):
     sql = f'''
         SELECT
             skad_conversion_value as cv,
+            media_source,
             count(*) as cnt,
             day
         FROM 
@@ -76,6 +77,7 @@ def getSKANDataFromMC(dayStr, days):
             )
         GROUP BY
             skad_conversion_value,
+            media_source,
             day
         ;
     '''
@@ -128,8 +130,17 @@ def p1():
         plt.close()
 
 
+def af20250415():
+    df = getSKANDataFromMC('20250415', 20)
+
+    df = df.sort_values(by=['day', 'media_source','cv'])
+
+    df.to_csv('/src/data/20250407_af20250415.csv', index=False)
+
+
 if __name__ == "__main__":
     # main()
     # forHaitao()
     # forHaitao2()
-    p1()
+    # p1()
+    af20250415()

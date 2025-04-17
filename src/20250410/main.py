@@ -6,15 +6,54 @@
 # 消耗时间：2025-03-01~2025-03-31
 # 消耗金额前10名
 import pandas as pd
+import numpy as np
 import os
 import cv2
 import json
 
-videoInfoDf = pd.read_csv('video.csv')
+videoInfoDf = pd.read_csv('video2.csv')
 
 def getVideoInfoDfFromJson(jsonStr):
     # 解析JSON字符串
-    data = json.loads(jsonStr)
+    jsonObj = json.loads(jsonStr)
+    dataList = jsonObj['data']['first_level']['list']
+
+    videoInfoDf = pd.DataFrame()
+
+    for i in range(len(dataList)):
+        index = i + 1
+        filename = f'{index}.mp4'
+        name = dataList[i]['material_name']
+        cost = dataList[i]['cost_value_usd']
+        cost_rate = dataList[i]['cost_rate']
+
+        video_url = dataList[i]['video_url']
+        # 下载视频到本地 videos目录下
+        video_dir = 'videos'
+        if not os.path.exists(video_dir):
+            os.makedirs(video_dir)
+
+        video_path = os.path.join(video_dir, filename)
+        if not os.path.exists(video_path):
+            # 下载视频
+            os.system(f'curl -o {video_path} {video_url}')
+
+        # 创建一个新的 DataFrame行
+        new_row = pd.DataFrame([{
+            'filename': filename,
+            'name': name,
+            'cost': cost,
+            'cost_rate': cost_rate
+        }])
+
+        # 使用 pd.concat() 将新行添加到现有 DataFrame
+        videoInfoDf = pd.concat([videoInfoDf, new_row], ignore_index=True)
+
+
+    return videoInfoDf
+
+    
+
 
     
 # 定义颜色范围
@@ -149,14 +188,20 @@ def fit_predict_cost_with_decision_tree():
     
     data = pd.read_csv('videoWithColorTag.csv')
     # 提取颜色比例特征
-    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
+    color_features = data.columns[4:-1]  # 颜色比例特征列名
     X = data[color_features]  # 输入特征
     
     # 提取目标变量
     y = data['cost']  # 输出变量
     
     # 初始化决策树回归模型
-    model = DecisionTreeRegressor()
+    model = DecisionTreeRegressor(
+        # max_depth=5,              # 限制树的最大深度
+        # min_samples_split=10,     # 内部节点再分裂所需的最小样本数
+        # min_samples_leaf=5,       # 叶子节点所需的最小样本数
+        # max_features='sqrt',      # 每次分裂时考虑的最大特征数
+        max_leaf_nodes=20         # 限制叶子节点的最大数量
+    )
     
     # 拟合模型
     model.fit(X, y)
@@ -165,7 +210,7 @@ def fit_predict_cost_with_decision_tree():
     data['predicted_cost'] = model.predict(X)
     
     # 计算每行的 MAPE
-    data['mape'] = mean_absolute_percentage_error(data['cost'], data['predicted_cost'])
+    data['mape'] = np.abs(data['cost'] - data['predicted_cost']) / data['cost']
     
     # 计算最终的 MAPE 的 mean
     mean_mape = data['mape'].mean()
@@ -178,7 +223,7 @@ def visualize_tree(model, feature_names):
     plt.rcParams['font.sans-serif'] = ['FZQiTi-S14S'] 
     plot_tree(model, feature_names=feature_names, filled=True, rounded=True)
     plt.savefig("decision_tree.png")  # 保存为 decision_tree.png
-    plt.show()
+    # plt.show()
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -221,23 +266,29 @@ def fit_predict_cost_with_dnn():
     return model, data, mean_mape
 
 def main():
-    jsonFilename = '20250411.json'
+    # jsonFilename = '20250411.json'
 
-    # 读取json文件
-    with open(jsonFilename, 'r', encoding='utf-8') as f:
-        jsonStr = f.read()
+    # # 读取json文件
+    # with open(jsonFilename, 'r', encoding='utf-8') as f:
+    #     jsonStr = f.read()
     
-    videoInfoDf = getVideoInfoDfFromJson(jsonStr)
+    # videoInfoDf = getVideoInfoDfFromJson(jsonStr)
+    # videoInfoDf.to_csv('video2.csv', index=False)
 
-    # # 使用决策树进行拟合和预测
-    # model, data_with_predictions, mean_mape = fit_predict_cost_with_decision_tree()
+    # checkColor(color_ranges)
+
+    # videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
+    # videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
+
+    # 使用决策树进行拟合和预测
+    model, data_with_predictions, mean_mape = fit_predict_cost_with_decision_tree()
     
-    # # 输出结果
-    # print(data_with_predictions[['filename', 'cost', 'predicted_cost', 'mape']])
-    # print(f"Mean MAPE: {mean_mape}")
+    # 输出结果
+    print(data_with_predictions[['filename', 'cost', 'predicted_cost', 'mape']])
+    print(f"Mean MAPE: {mean_mape}")
     
-    # # 可视化决策树
-    # visualize_tree(model, ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑'])
+    # 可视化决策树
+    visualize_tree(model, ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑'])
 
     # model, data, mean_mape = fit_predict_cost_with_dnn()
     # data.to_csv('videoWithColorTag_dnn.csv', index=False)
@@ -245,12 +296,6 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # checkColor(color_ranges)
-    # videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
-    # print(videoInfoWithColorTagDf)
-    # videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
-
     # econml_example()
 
     main()

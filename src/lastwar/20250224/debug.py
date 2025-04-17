@@ -4,6 +4,8 @@ import pandas as pd
 import sys
 sys.path.append('/src')
 
+from src.lastwar.ss.ss import ssSql
+
 def getData():
     filename = f'/src/data/lastwarPredictRevenue3_36_sum_data_2025-03-02.csv'
     df = pd.read_csv(filename)
@@ -37,7 +39,26 @@ def main():
 
     resultDf.to_csv('/src/data/20250303_result.csv',index=False)
 
+def debug20250416():
+    sql = """
+SELECT 
+    "lw_zone@id" AS b_server_id_str,
+    "lw_zone@region_type" AS region_type,
+    "lw_zone@start_time" AS start_time,
+    LEAD("lw_zone@start_time") OVER (ORDER BY "lw_zone@start_time" ASC) AS next_start_time
+FROM 
+    ta_dim.dim_3_0_47843
+WHERE 
+    "lw_zone@region_type" IN ('日服')
+ORDER BY 
+    "lw_zone@start_time" ASC
+limit 100    
+;
+    """
+    lines = ssSql(sql)
+    print(lines)
 
 if __name__ == "__main__":
-    main()
+    # main()
+    debug20250416()
 
