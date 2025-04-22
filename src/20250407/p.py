@@ -116,7 +116,10 @@ where
 
 
 def p1():
-    df = getSKANDataFromMC('20250411', 14)
+    df = getSKANDataFromMC('20250421', 14)
+
+    df = df.groupby(['day', 'cv']).agg({'cnt': 'sum'}).reset_index()
+
     # 按照day，cv排序
     # 画图，day为x轴，cnt为y轴，每个cv一张图
     # 保存到文件 /src/data/20250407_cv{cv}.png
@@ -125,8 +128,9 @@ def p1():
         df2 = df[df['cv'] == cv]
         df2 = df2.sort_values(by=['day'])
         df2['day'] = pd.to_datetime(df2['day'], format='%Y%m%d')
+        df2.to_csv(f'/src/data/20250421_cv{cv}.csv', index=False)
         df2.plot(x='day', y='cnt', title=f'cv={cv}', kind='line')
-        plt.savefig(f'/src/data/20250407_cv{cv}.png')
+        plt.savefig(f'/src/data/20250421_cv{cv}.png')
         plt.close()
 
 
@@ -142,5 +146,5 @@ if __name__ == "__main__":
     # main()
     # forHaitao()
     # forHaitao2()
-    # p1()
-    af20250415()
+    p1()
+    # af20250415()

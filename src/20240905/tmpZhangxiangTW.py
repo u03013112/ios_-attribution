@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib import font_manager
 
 def getData():
     df = pd.read_csv('tw_20241101_20250413.csv')
@@ -57,6 +60,36 @@ def f1():
     df.to_csv('/src/data/tw_20241101_20250413.csv', index=False)
     print('新支付次数 与 支付金额（档位） 相关系数:',df.corr()['新支付次数（和）']['支付金额（档位）'])
     print("新支付次数（和）/原有支付次数（和）:", df['新支付次数（和）'].sum()/df['原有支付次数（和）'].sum())
+
+    # 重排序索引，按照“支付金额（档位）” 升序
+    # 画图，x轴 是索引
+    # 双y轴，左边是 “支付金额（档位）”，右边是 “新支付次数”
+    # 保存图片 “/src/data/tw_20241101_20250413.png”
+    # plt.rcParams['font.sans-serif'] = ['FZQiTi-S14S'] 
+    font = font_manager.FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    plt.rcParams['font.family'] = font.get_name()
+
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax2 = ax1.twinx()
+    df = df.sort_values(by='支付金额（档位）').reset_index()
+    df['index'] = df.index
+    df.set_index('index', inplace=True)
+    ax1.plot(df.index, df['支付金额（档位）'], 'g-')
+    ax2.plot(df.index, df['新支付次数'], 'b-')
+
+    ax1.set_xlabel('index')
+    ax1.set_ylabel('支付金额（档位）', color='g')
+    ax2.set_ylabel('新支付次数', color='b')
+
+    ax1.xaxis.set_major_locator(mdates.MonthLocator())
+    
+    fig.autofmt_xdate()
+    plt.title('支付金额（档位）与新支付次数')
+    plt.savefig('/src/data/tw_20241101_20250413.png')
+    plt.close()
+
+    
+
 
 
 if __name__ == '__main__':

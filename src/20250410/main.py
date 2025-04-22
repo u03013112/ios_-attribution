@@ -220,7 +220,7 @@ def fit_predict_cost_with_decision_tree():
 import matplotlib.pyplot as plt
 def visualize_tree(model, feature_names):
     plt.figure(figsize=(40, 40))
-    plt.rcParams['font.sans-serif'] = ['FZQiTi-S14S'] 
+    plt.rcParams['font.sans-serif'] = ['Hiragino Sans GB'] 
     plot_tree(model, feature_names=feature_names, filled=True, rounded=True)
     plt.savefig("decision_tree.png")  # 保存为 decision_tree.png
     # plt.show()
@@ -228,6 +228,8 @@ def visualize_tree(model, feature_names):
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
+from sklearn.preprocessing import StandardScaler
+
 def fit_predict_cost_with_dnn():
     # 读取数据
     data = pd.read_csv('videoWithColorTag.csv')
@@ -238,7 +240,10 @@ def fit_predict_cost_with_dnn():
     
     # 提取目标变量
     y = data['cost'].values  # 输出变量
-    
+    # 标准化输入特征
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
     # 初始化 DNN 模型
     model = Sequential([
         Dense(64, activation='relu', input_shape=(X.shape[1],)),
@@ -252,18 +257,123 @@ def fit_predict_cost_with_dnn():
     # model.compile(optimizer='RMSprop', loss='mean_absolute_percentage_error', metrics=['mean_absolute_percentage_error'])
     
     # 拟合模型
-    model.fit(X, y, epochs=1000, batch_size=4, verbose=1)
+    model.fit(
+        X_scaled, y, epochs=10000, batch_size=8,
+        validation_split=0.2,  # 20% 的数据用于验证
+        verbose=1
+    )
     
     # 预测 cost
-    data['predicted_cost'] = model.predict(X).flatten()
+    data['predicted_cost'] = model.predict(X_scaled).flatten()
     
     # 计算每行的 MAPE
-    data['mape'] = mean_absolute_percentage_error(data['cost'], data['predicted_cost'])
+    # data['mape'] = mean_absolute_percentage_error(data['cost'], data['predicted_cost'])
+    data['mape'] = np.abs(data['cost'] - data['predicted_cost']) / data['cost']
     
     # 计算最终的 MAPE 的 mean
     mean_mape = data['mape'].mean()
     
+    
     return model, data, mean_mape
+
+from sklearn.metrics import precision_score, recall_score, r2_score
+def fit_predict_cost_with_dnn2():
+    # 读取数据
+    data = pd.read_csv('videoWithColorTag.csv')
+    
+    # 提取颜色比例特征
+    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
+    X = data[color_features].values  # 输入特征
+    
+    # 提取目标变量
+    # 将 cost 前10名标记为畅销素材
+    top_10_indices = data['cost'].nlargest(10).index
+    y = np.zeros(data.shape[0])
+    y[top_10_indices] = 1
+    
+    # 标准化输入特征
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # 初始化 DNN 模型
+    model = Sequential([
+        Dense(64, activation='relu', input_shape=(X_scaled.shape[1],)),
+        Dense(32, activation='relu'),
+        Dense(32, activation='relu'),
+        Dense(1, activation='sigmoid')  # 使用 sigmoid 激活函数进行二分类
+    ])
+    
+    # 编译模型
+    model.compile(optimizer='RMSprop', loss='binary_crossentropy', metrics=['accuracy'])
+    
+    # 拟合模型
+    model.fit(
+        X_scaled, y, epochs=10000, batch_size=8,
+        validation_split=0.2,  # 20% 的数据用于验证
+        verbose=1
+    )
+    
+    # 预测畅销素材
+    data['predicted_value'] = model.predict(X_scaled).flatten()
+    data['predicted_class'] = (model.predict(X_scaled).flatten() > 0.5).astype(int)
+    
+    # 计算查准率和查全率
+    precision = precision_score(y, data['predicted_class'])
+    recall = recall_score(y, data['predicted_class'])
+    
+    # 计算 R2
+    r2 = r2_score(y, data['predicted_class'])
+    
+    # print(f"Precision: {precision}")
+    # print(f"Recall: {recall}")
+    # print(f"R2: {r2}")
+    
+    return model, data, precision, recall, r2
+
+from sklearn.tree import DecisionTreeClassifier
+def fit_predict_cost_with_decision_tree2():
+    # 读取数据
+    data = pd.read_csv('videoWithColorTag.csv')
+    
+    # 提取颜色比例特征
+    color_features = data.columns[4:-1]  # 颜色比例特征列名
+    print('color_features:')
+    print(color_features)
+
+    X = data[color_features]  # 输入特征
+    
+    # 提取目标变量
+    # 将 cost 前10名标记为畅销素材
+    top_10_indices = data['cost'].nlargest(10).index
+    y = np.zeros(data.shape[0])
+    y[top_10_indices] = 1
+    
+    # 初始化决策树分类模型
+    model = DecisionTreeClassifier(
+        max_depth=2,
+        # max_leaf_nodes=20  # 限制叶子节点的最大数量
+    )
+    
+    # 拟合模型
+    model.fit(X, y)
+    
+    # 预测畅销素材
+    data['predicted_class'] = model.predict(X)
+    
+    # 计算查准率和查全率
+    precision = precision_score(y, data['predicted_class'])
+    recall = recall_score(y, data['predicted_class'])
+    
+    # 计算 R2
+    r2 = r2_score(y, data['predicted_class'])
+    
+    # print(f"Precision: {precision}")
+    # print(f"Recall: {recall}")
+    # print(f"R2: {r2}")
+
+    visualize_tree(model, color_features)
+    
+    return model, data, precision, recall, r2
 
 def main():
     # jsonFilename = '20250411.json'
@@ -298,4 +408,20 @@ def main():
 if __name__ == "__main__":
     # econml_example()
 
-    main()
+    # main()
+
+    # model, data, mean_mape = fit_predict_cost_with_dnn()
+    # data.to_csv('fit_predict_cost_with_dnn.csv', index=False)
+    # print(f"Mean MAPE: {mean_mape}")
+
+    # model, data, precision, recall, r2 = fit_predict_cost_with_dnn2()
+    # data.to_csv('fit_predict_cost_with_dnn2.csv', index=False)
+    # print(f"Precision: {precision}")
+    # print(f"Recall: {recall}")
+    # print(f"R2: {r2}")
+
+    model, data, precision, recall, r2 = fit_predict_cost_with_decision_tree2()
+    data.to_csv('fit_predict_cost_with_decision_tree2.csv', index=False)
+    print(f"Precision: {precision}")
+    print(f"Recall: {recall}")
+    print(f"R2: {r2}")
