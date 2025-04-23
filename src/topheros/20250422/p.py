@@ -15,7 +15,7 @@ def getDataFromMC(startDayStr, endDayStr):
     else:
         sql = f'''
 select
-    SUBSTRING(install_day, 1, 6) AS month,
+    install_day AS day,
     app_package as appid,
     sum(cost_value_usd) as cost,
     sum(revenue_d1) as r1usd,
@@ -37,7 +37,7 @@ where
     and facebook_segment in ('country', 'N/A')
     and install_day between '{startDayStr}' and '{endDayStr}'
 group by
-    SUBSTRING(install_day, 1, 6),
+    install_day,
     app_package
 ;
         '''
@@ -49,7 +49,72 @@ group by
     return df
 
 def main():
-    df = getDataFromMC('20240701', '20250422')
+    startDayStr = '20240701'
+    endDayStr = '20250422'
+
+    df = getDataFromMC(startDayStr, endDayStr)
+    df['day'] = pd.to_datetime(df['day'], format='%Y%m%d')
+
+    # 先计算出可以完整获得1日、7日、30日……的最后日期
+    endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
+    endDay1 = endDay - datetime.timedelta(days=1)
+    endDay7 = endDay - datetime.timedelta(days=7)
+    endDay30 = endDay - datetime.timedelta(days=30)
+    endDay60 = endDay - datetime.timedelta(days=60)
+    endDay90 = endDay - datetime.timedelta(days=90)
+    endDay120 = endDay - datetime.timedelta(days=120)
+    endDay150 = endDay - datetime.timedelta(days=150)
+    endDay180 = endDay - datetime.timedelta(days=180)
+    endDay210 = endDay - datetime.timedelta(days=210)
+    endDay240 = endDay - datetime.timedelta(days=240)
+    endDay270 = endDay - datetime.timedelta(days=270)
+
+    print('endDay1:', endDay1)
+    print('endDay7:', endDay7)
+    print('endDay30:', endDay30)
+    print('endDay60:', endDay60)
+    print('endDay90:', endDay90)
+    print('endDay120:', endDay120)
+    print('endDay150:', endDay150)
+    print('endDay180:', endDay180)
+    print('endDay210:', endDay210)
+    print('endDay240:', endDay240)
+    print('endDay270:', endDay270)
+
+    df = df[df['day'] <= endDay1].copy()
+    df.loc[df['day']> endDay7,'r7usd'] = None
+    df.loc[df['day']> endDay30,'r30usd'] = None
+    df.loc[df['day']> endDay60,'r60usd'] = None
+    df.loc[df['day']> endDay90,'r90usd'] = None
+    df.loc[df['day']> endDay120,'r120usd'] = None
+    df.loc[df['day']> endDay150,'r150usd'] = None
+    df.loc[df['day']> endDay180,'r180usd'] = None
+    df.loc[df['day']> endDay210,'r210usd'] = None
+    df.loc[df['day']> endDay240,'r240usd'] = None
+    df.loc[df['day']> endDay270,'r270usd'] = None
+
+    df['month'] = df['day'].dt.strftime('%Y%m')
+    
+    def custom_sum(series):
+        return series.sum() if not series.isnull().any() else None
+
+    df = df.groupby(['month', 'appid']).agg({
+        'cost': custom_sum,
+        'r1usd': custom_sum,
+        'r7usd': custom_sum,
+        'r30usd': custom_sum,
+        'r60usd': custom_sum,
+        'r90usd': custom_sum,
+        'r120usd': custom_sum,
+        'r150usd': custom_sum,
+        'r180usd': custom_sum,
+        'r210usd': custom_sum,
+        'r240usd': custom_sum,
+        'r270usd': custom_sum
+    }).reset_index()
+
+    df = df.sort_values(by=['month', 'appid'])
+    # print(df[df['appid'] == 'com.greenmushroom.boomblitz.gp'])    
 
     appidList = df['appid'].unique()
 
@@ -63,18 +128,18 @@ def main():
 
     # 不分app
     df2 = df.groupby(['month']).agg({
-        'cost': 'sum',
-        'r1usd': 'sum',
-        'r7usd': 'sum',
-        'r30usd': 'sum',
-        'r60usd': 'sum',
-        'r90usd': 'sum',
-        'r120usd': 'sum',
-        'r150usd': 'sum',
-        'r180usd': 'sum',
-        'r210usd': 'sum',
-        'r240usd': 'sum',
-        'r270usd': 'sum'
+        'cost': custom_sum,
+        'r1usd': custom_sum,
+        'r7usd': custom_sum,
+        'r30usd': custom_sum,
+        'r60usd': custom_sum,
+        'r90usd': custom_sum,
+        'r120usd': custom_sum,
+        'r150usd': custom_sum,
+        'r180usd': custom_sum,
+        'r210usd': custom_sum,
+        'r240usd': custom_sum,
+        'r270usd': custom_sum
     }).reset_index()
     df2 = df2.sort_values(by=['month'])
     df2.to_csv('/src/data/th2_20240701_20250422.csv', index=False)
@@ -84,5 +149,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
