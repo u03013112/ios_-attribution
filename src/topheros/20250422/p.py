@@ -147,5 +147,35 @@ def main():
     print(df2.corr())
     print('')
 
+def debug():
+    df = pd.read_csv('/src/data/th2_20240701_20250422.csv')
+
+    cols = df.columns.tolist()
+    # 去掉第一列
+    cols = cols[1:]
+    print(cols)
+
+    for i in range(len(cols)-1):
+        col0 = cols[i]
+        col1 = cols[i+1]
+
+        # 计算比例
+        df0 = df[[col0, col1]].copy()
+        # 排除空值所在的行
+        df0 = df0.dropna()
+
+        if df0[col1].sum() == 0 or df0[col0].sum() == 0:
+            continue
+
+        # print(df0[col1].sum(), df0[col0].sum())
+
+        ratio = df0[col1].sum() / df0[col0].sum()
+        print(f'{col1} / {col0} = {ratio}')
+        
+        
+
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    debug()
