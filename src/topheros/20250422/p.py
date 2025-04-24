@@ -147,6 +147,37 @@ def main():
     print(df2.corr())
     print('')
 
+def predict():
+    df = pd.read_csv('/src/data/th2_20240701_20250422.csv')
+    df = df[['cost', 'r30usd', 'r60usd', 'r90usd', 'r120usd', 'r150usd', 'r180usd', 'r210usd', 'r240usd', 'r270usd']]
+    
+    df['roi30'] = df['r30usd'] / df['cost']
+    df['roi60'] = df['r60usd'] / df['cost']
+    df['roi90'] = df['r90usd'] / df['cost']
+    df['roi120'] = df['r120usd'] / df['cost']
+    df['roi150'] = df['r150usd'] / df['cost']
+    df['roi180'] = df['r180usd'] / df['cost']
+    df['roi210'] = df['r210usd'] / df['cost']
+    df['roi240'] = df['r240usd'] / df['cost']
+    df['roi270'] = df['r270usd'] / df['cost']
+
+    roiList = [
+        df['roi30'].mean(),
+        df['roi60'].mean(),
+        df['roi90'].mean(),
+        df['roi120'].mean(),
+        df['roi150'].mean(),
+        df['roi180'].mean(),
+        df['roi210'].mean(),
+        df['roi240'].mean()
+    ]
+
+    print('roiList:')
+    print(roiList)
+
+    # 基于roiList预测后面roi270,roi300, roi330, roi360
+
+
 def debug():
     df = pd.read_csv('/src/data/th2_20240701_20250422.csv')
 
@@ -178,4 +209,5 @@ def debug():
 
 if __name__ == '__main__':
     # main()
-    debug()
+    # debug()
+    predict()
