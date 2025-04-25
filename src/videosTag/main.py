@@ -1,17 +1,8 @@
-# 视频获取
-# Google 
-# US
-# 视频
-# 上传时间：2025-01-01~2025-02-28
-# 消耗时间：2025-03-01~2025-03-31
-# 消耗金额前10名
 import pandas as pd
 import numpy as np
 import os
 import cv2
 import json
-
-videoInfoDf = pd.read_csv('video2.csv')
 
 def getVideoInfoDfFromJson(jsonStr):
     # 解析JSON字符串
@@ -22,10 +13,15 @@ def getVideoInfoDfFromJson(jsonStr):
 
     for i in range(len(dataList)):
         index = i + 1
+
+        # for test
+        if index >= 200:
+            break
+
         filename = f'{index}.mp4'
         name = dataList[i]['material_name']
         cost = dataList[i]['cost_value_usd']
-        cost_rate = dataList[i]['cost_rate']
+        # cost_rate = dataList[i]['cost_rate']
 
         video_url = dataList[i]['video_url']
         # 下载视频到本地 videos目录下
@@ -34,16 +30,44 @@ def getVideoInfoDfFromJson(jsonStr):
             os.makedirs(video_dir)
 
         video_path = os.path.join(video_dir, filename)
-        if not os.path.exists(video_path):
+        video_frames_dir = os.path.join(video_dir, f'{index}_frames')
+        # if not os.path.exists(video_path):
+        # 改为如果帧目录不存在，则下载视频，重新制作帧
+        if not os.path.exists(video_frames_dir):
             # 下载视频
             os.system(f'curl -o {video_path} {video_url}')
+            os.makedirs(video_frames_dir)
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            fps = int(fps)
+            print('fps:',fps)
+            frame_count = 0
+            frame_name_count = 1
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                if frame_count % fps == 0:
+                    frame_filename = os.path.join(video_frames_dir, f'frame_{frame_name_count}.jpg')
+                    frame_name_count += 1
+                    cv2.imwrite(frame_filename, frame,[cv2.IMWRITE_JPEG_QUALITY, 60])
+                    # 最多保存30帧
+                    if frame_name_count > 30:
+                        break
+
+                frame_count += 1
+            cap.release()
+            # 删除视频文件
+            os.remove(video_path)
 
         # 创建一个新的 DataFrame行
         new_row = pd.DataFrame([{
             'filename': filename,
+            'frames_dir': video_frames_dir,
+            'video_url': video_url,
             'name': name,
             'cost': cost,
-            'cost_rate': cost_rate
+            # 'cost_rate': cost_rate
         }])
 
         # 使用 pd.concat() 将新行添加到现有 DataFrame
@@ -70,18 +94,18 @@ color_ranges = {
     '灰': [(0, 0, 51), (180, 30, 199)]       # 新增灰度过渡带
 }
 
-# 为视频文件找到颜色标签3s版本
-def findColorTag3s(filename):
-    # 读取视频文件，每一秒一张图
-    cap = cv2.VideoCapture(filename)
+# 为视频帧找到颜色标签
+def findColorTagfromFrame(frame_dir,filename):
+    # 遍历文件夹中的所有图片
     frames = []
-    for i in range(3):
-        ret, frame = cap.read()
-        if ret:
+    sorted_filenames = sorted(os.listdir(frame_dir))
+    for frame_filename in sorted_filenames:
+        if frame_filename.endswith('.jpg'):
+            # print('frame_filename:', frame_filename)
+            frame_path = os.path.join(frame_dir, frame_filename)
+            frame = cv2.imread(frame_path)
             frames.append(frame)
-    cap.release()
 
-    # 然后将这3张图进行颜色分类
     color_tags = list(color_ranges.keys())
     color_ratios = {color: 0 for color in color_tags}
 
@@ -93,7 +117,7 @@ def findColorTag3s(filename):
         for color, (lower, upper) in color_ranges.items():
             mask = cv2.inRange(hsv, lower, upper)
             ratio = cv2.countNonZero(mask) / (frame.shape[0] * frame.shape[1])
-            color_ratios[color] += ratio / 3
+            color_ratios[color] += ratio / len(frames)
 
     # 计算其他颜色的占比
     other_ratio = 1 - sum(color_ratios.values())
@@ -105,6 +129,7 @@ def findColorTag3s(filename):
     ] + [{'filename': filename, 'color': 'other', 'ratio': other_ratio}])
     
     return result_df
+
 
 def checkColor(color_ranges):
     import numpy as np
@@ -122,18 +147,19 @@ def checkColor(color_ranges):
     ax.axis('off')
     plt.show()
 
-def test():
-    filename = '1.mp4'
-    result_df = findColorTag3s(filename)
-    print(result_df)
-
 # 将videoInfoDf中，每个视频使用findColorTag3s函数
 # 最终输出一个dataframe，列名为：videoInfoDf 元有列 + '赤ratio','赤2ratio','橙ratio','黄ratio','绿ratio','蓝ratio','紫ratio','黑ratio','白ratio','灰ratio','otherratio'
 def videoInfoAddColorTag(videoInfoDf):
 
     colorTagDf = pd.DataFrame()
-    for filename in videoInfoDf['filename']:
-        colorTagDf0 = findColorTag3s(filename)
+    for i in range(len(videoInfoDf)):
+        filename = videoInfoDf.loc[i, 'filename']
+        frames_dir = videoInfoDf.loc[i, 'frames_dir']
+
+        # colorTagDf0 = findColorTag3s(filename)
+        colorTagDf0 = findColorTagfromFrame(frames_dir, filename)
+        # print('colorTagDf0:')
+        # print(colorTagDf0)
         # 将colorTagDf0 pivot成列,filename,'赤ratio','赤2ratio' 等
         colorTagDf0 = colorTagDf0.pivot(index='filename', columns='color', values='ratio').reset_index()
         colorTagDf = pd.concat([colorTagDf, colorTagDf0], ignore_index=True)
@@ -141,45 +167,6 @@ def videoInfoAddColorTag(videoInfoDf):
     videoInfoDf = pd.merge(videoInfoDf, colorTagDf, on='filename', how='left')
 
     return videoInfoDf
-
-from econml.dml import LinearDML
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-
-def econml_example():
-    # 读取数据
-    data = pd.read_csv('videoWithColorTag.csv')
-    
-    # 提取颜色比例特征
-    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
-    T = data[color_features]  # 处理变量
-    
-
-
-    # 提取目标变量
-    y_cost = data['cost']
-    
-    # 使用双重机器学习模型进行因果推断
-    model_y = RandomForestRegressor()  # 用于预测目标变量
-    model_t = LinearRegression()       # 用于预测处理变量
-    
-    # 初始化 DML 模型
-    dml_cost = LinearDML(model_y=model_y, model_t=model_t)
-    
-    # 拟合模型
-    dml_cost.fit(Y=y_cost, T=T, X=None)
-    
-    # 计算 ATE
-    ate_cost = dml_cost.ate(X=None)
-
-    print("ATE for cost:")
-    print(ate_cost)
-    
-    # # 输出结果
-    # print("ATE for cost:")
-    # for feature, ate in zip(color_features, ate_cost):
-    #     print(f"{feature}: {ate}")
-
 
 from sklearn.tree import DecisionTreeRegressor, plot_tree
 from sklearn.metrics import mean_absolute_percentage_error
@@ -224,57 +211,6 @@ def visualize_tree(model, feature_names):
     plot_tree(model, feature_names=feature_names, filled=True, rounded=True)
     plt.savefig("decision_tree.png")  # 保存为 decision_tree.png
     # plt.show()
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.optimizers import Adam
-from sklearn.preprocessing import StandardScaler
-
-def fit_predict_cost_with_dnn():
-    # 读取数据
-    data = pd.read_csv('videoWithColorTag.csv')
-    
-    # 提取颜色比例特征
-    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
-    X = data[color_features].values  # 输入特征
-    
-    # 提取目标变量
-    y = data['cost'].values  # 输出变量
-    # 标准化输入特征
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # 初始化 DNN 模型
-    model = Sequential([
-        Dense(64, activation='relu', input_shape=(X.shape[1],)),
-        Dense(32, activation='relu'),
-        Dense(32, activation='relu'),
-        Dense(1)
-    ])
-    
-    # 编译模型
-    model.compile(optimizer='RMSprop', loss='mean_squared_error', metrics=['mean_absolute_percentage_error'])
-    # model.compile(optimizer='RMSprop', loss='mean_absolute_percentage_error', metrics=['mean_absolute_percentage_error'])
-    
-    # 拟合模型
-    model.fit(
-        X_scaled, y, epochs=10000, batch_size=8,
-        validation_split=0.2,  # 20% 的数据用于验证
-        verbose=1
-    )
-    
-    # 预测 cost
-    data['predicted_cost'] = model.predict(X_scaled).flatten()
-    
-    # 计算每行的 MAPE
-    # data['mape'] = mean_absolute_percentage_error(data['cost'], data['predicted_cost'])
-    data['mape'] = np.abs(data['cost'] - data['predicted_cost']) / data['cost']
-    
-    # 计算最终的 MAPE 的 mean
-    mean_mape = data['mape'].mean()
-    
-    
-    return model, data, mean_mape
 
 from sklearn.metrics import precision_score, recall_score, r2_score
 def fit_predict_cost_with_dnn2():
@@ -336,17 +272,19 @@ def fit_predict_cost_with_decision_tree2():
     data = pd.read_csv('videoWithColorTag.csv')
     
     # 提取颜色比例特征
-    color_features = data.columns[4:-1]  # 颜色比例特征列名
+    color_features = data.columns[5:-1]  # 颜色比例特征列名
     print('color_features:')
     print(color_features)
 
     X = data[color_features]  # 输入特征
-    
-    # 提取目标变量
-    # 将 cost 前10名标记为畅销素材
-    top_10_indices = data['cost'].nlargest(10).index
+
+    # 按照cost进行分类，超过1000000的标记为0，超过100000的标记为1，超过10000的标记为2，其他的标记为3
     y = np.zeros(data.shape[0])
-    y[top_10_indices] = 1
+    y[data['cost'] <= 10000] = 3
+    y[data['cost'] > 10000] = 2
+    y[data['cost'] > 100000] = 1
+    y[data['cost'] > 1000000] = 0
+    
     
     # 初始化决策树分类模型
     model = DecisionTreeClassifier(
@@ -376,52 +314,29 @@ def fit_predict_cost_with_decision_tree2():
     return model, data, precision, recall, r2
 
 def main():
-    jsonFilename = '20250411.json'
+    jsonFilename = '20250424.json'
 
     # 读取json文件
     with open(jsonFilename, 'r', encoding='utf-8') as f:
         jsonStr = f.read()
     
     videoInfoDf = getVideoInfoDfFromJson(jsonStr)
-    videoInfoDf.to_csv('video2.csv', index=False)
+    videoInfoDf.to_csv('video.csv', index=False)
 
     # checkColor(color_ranges)
 
-    # videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
-    # videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
-
-    # 使用决策树进行拟合和预测
-    model, data_with_predictions, mean_mape = fit_predict_cost_with_decision_tree()
-    
-    # 输出结果
-    print(data_with_predictions[['filename', 'cost', 'predicted_cost', 'mape']])
-    print(f"Mean MAPE: {mean_mape}")
-    
-    # 可视化决策树
-    visualize_tree(model, ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑'])
-
-    # model, data, mean_mape = fit_predict_cost_with_dnn()
-    # data.to_csv('videoWithColorTag_dnn.csv', index=False)
-    # print(f"Mean MAPE: {mean_mape}")
-
-
-if __name__ == "__main__":
-    # econml_example()
-
-    main()
-
-    # model, data, mean_mape = fit_predict_cost_with_dnn()
-    # data.to_csv('fit_predict_cost_with_dnn.csv', index=False)
-    # print(f"Mean MAPE: {mean_mape}")
-
-    # model, data, precision, recall, r2 = fit_predict_cost_with_dnn2()
-    # data.to_csv('fit_predict_cost_with_dnn2.csv', index=False)
-    # print(f"Precision: {precision}")
-    # print(f"Recall: {recall}")
-    # print(f"R2: {r2}")
+    videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
+    videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
 
     model, data, precision, recall, r2 = fit_predict_cost_with_decision_tree2()
     data.to_csv('fit_predict_cost_with_decision_tree2.csv', index=False)
     print(f"Precision: {precision}")
     print(f"Recall: {recall}")
     print(f"R2: {r2}")
+
+
+if __name__ == "__main__":
+    main()
+
+    
+    

@@ -6,6 +6,9 @@ from src.maxCompute import execSql
 import os
 import datetime
 import pandas as pd
+import numpy as np
+from scipy.optimize import curve_fit
+from sklearn.metrics import mean_absolute_percentage_error
 
 def getDataFromMC(startDayStr, endDayStr):
     filename = f'/src/data/th_{startDayStr}_{endDayStr}.csv'
@@ -50,7 +53,7 @@ group by
 
 def main():
     startDayStr = '20240701'
-    endDayStr = '20250422'
+    endDayStr = '20250424'
 
     df = getDataFromMC(startDayStr, endDayStr)
     df['day'] = pd.to_datetime(df['day'], format='%Y%m%d')
@@ -116,15 +119,15 @@ def main():
     df = df.sort_values(by=['month', 'appid'])
     # print(df[df['appid'] == 'com.greenmushroom.boomblitz.gp'])    
 
-    appidList = df['appid'].unique()
+    # appidList = df['appid'].unique()
 
-    for appid in appidList:
-        print(f'appid: {appid}')
-        appDf = df[df['appid'] == appid]
-        appDf = appDf.sort_values(by=['month'])
-        appDf.to_csv(f'/src/data/th2_{appid}_20240701_20250422.csv', index=False)
-        print(appDf.corr())
-        print('')
+    # for appid in appidList:
+    #     print(f'appid: {appid}')
+    #     appDf = df[df['appid'] == appid]
+    #     appDf = appDf.sort_values(by=['month'])
+    #     appDf.to_csv(f'/src/data/th2_{appid}_20240701_20250422.csv', index=False)
+    #     print(appDf.corr())
+    #     print('')
 
     # 不分app
     df2 = df.groupby(['month']).agg({
@@ -142,13 +145,13 @@ def main():
         'r270usd': custom_sum
     }).reset_index()
     df2 = df2.sort_values(by=['month'])
-    df2.to_csv('/src/data/th2_20240701_20250422.csv', index=False)
+    df2.to_csv('/src/data/th2_20240701_20250424.csv', index=False)
     print('不分appid:')
     print(df2.corr())
     print('')
 
 def predict():
-    df = pd.read_csv('/src/data/th2_20240701_20250422.csv')
+    df = pd.read_csv('/src/data/th2_20240701_20250424.csv')
     df = df[['cost', 'r30usd', 'r60usd', 'r90usd', 'r120usd', 'r150usd', 'r180usd', 'r210usd', 'r240usd', 'r270usd']]
     
     df['roi30'] = df['r30usd'] / df['cost']
@@ -160,6 +163,8 @@ def predict():
     df['roi210'] = df['r210usd'] / df['cost']
     df['roi240'] = df['r240usd'] / df['cost']
     df['roi270'] = df['r270usd'] / df['cost']
+
+    df.to_csv('/src/data/th2_20240701_20250424_roi.csv', index=False)
 
     roiList = [
         df['roi30'].mean(),
@@ -176,15 +181,99 @@ def predict():
     print(roiList)
 
     # 基于roiList预测后面roi270,roi300, roi330, roi360
+    # 使用对数模型拟合
+    x_data = np.array([30, 60, 90, 120, 150, 180, 210, 240])
+    y_data = np.array(roiList)
+
+    def log_model(x, a, b):
+        return a * np.log(x) + b
+
+    popt, _ = curve_fit(log_model, x_data, y_data)
+    a, b = popt
+
+    print(f'拟合参数: a = {a}, b = {b}')
+
+    # 计算每个点的误差mape
+    y_pred = log_model(x_data, a, b)
+    mape_values = mean_absolute_percentage_error(y_data, y_pred)
+    print(f'每个点的误差MAPE: {mape_values}')
+
+    # 预测后续的roi270, roi300, roi330, roi360
+    future_x = np.array([270, 300, 330, 360])
+    future_roi = log_model(future_x, a, b)
+    print('预测的ROI:', future_roi)
+
+    # 画图，x轴为时间，y轴为roi
+    # 现有的roi 画一条线
+    # 预测的roi 画一条线，包括前面拟合部分数据和后面预测部分数据
+    x_data2 = np.concatenate((x_data, future_x))
+    y_data2 = np.concatenate((y_data, future_roi))
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    sns.set(style="darkgrid")
+    plt.figure(figsize=(10, 6))
+    plt.plot(x_data, y_data, 'o', label='real ROI')
+    plt.plot(x_data2, log_model(x_data2, a, b), 'r-', label='fitted ROI')
+    plt.xlabel('Days')
+    plt.ylabel('ROI')
+    plt.title('ROI Prediction')
+    plt.legend()
+    plt.xticks(np.arange(0, 400, 30))
+    plt.grid(True)
+    plt.savefig('/src/data/th2_20240701_20250424_roi_prediction.png')
+    plt.close()
+    
+
+# 计算均值的MAPE
+def meanMape():
+    df = pd.read_csv('/src/data/th2_20240701_20250422_roi.csv')
+    df = df[['roi30', 'roi60', 'roi90', 'roi120', 'roi150', 'roi180', 'roi210', 'roi240']]
+    df['roi30mean'] = df['roi30'].mean()
+    df['roi60mean'] = df['roi60'].mean()
+    df['roi90mean'] = df['roi90'].mean()
+    df['roi120mean'] = df['roi120'].mean()
+    df['roi150mean'] = df['roi150'].mean()
+    df['roi180mean'] = df['roi180'].mean()
+    df['roi210mean'] = df['roi210'].mean()
+    df['roi240mean'] = df['roi240'].mean()
+
+    df['roi30mape'] = abs(df['roi30'] - df['roi30mean']) / df['roi30mean']
+    df['roi60mape'] = abs(df['roi60'] - df['roi60mean']) / df['roi60mean']
+    df['roi90mape'] = abs(df['roi90'] - df['roi90mean']) / df['roi90mean']
+    df['roi120mape'] = abs(df['roi120'] - df['roi120mean']) / df['roi120mean']
+    df['roi150mape'] = abs(df['roi150'] - df['roi150mean']) / df['roi150mean']
+    df['roi180mape'] = abs(df['roi180'] - df['roi180mean']) / df['roi180mean']
+    df['roi210mape'] = abs(df['roi210'] - df['roi210mean']) / df['roi210mean']
+    df['roi240mape'] = abs(df['roi240'] - df['roi240mean']) / df['roi240mean']
+
+    roi30mape = df['roi30mape'].mean()
+    roi60mape = df['roi60mape'].mean()
+    roi90mape = df['roi90mape'].mean()
+    roi120mape = df['roi120mape'].mean()
+    roi150mape = df['roi150mape'].mean()
+    roi180mape = df['roi180mape'].mean()
+    roi210mape = df['roi210mape'].mean()
+    roi240mape = df['roi240mape'].mean()
+
+    print('roi30mape:', roi30mape)
+    print('roi60mape:', roi60mape)
+    print('roi90mape:', roi90mape)
+    print('roi120mape:', roi120mape)
+    print('roi150mape:', roi150mape)
+    print('roi180mape:', roi180mape)
+    print('roi210mape:', roi210mape)
+    print('roi240mape:', roi240mape)
+
+
 
 
 def debug():
     df = pd.read_csv('/src/data/th2_20240701_20250422.csv')
 
+    df = df[['cost', 'r30usd', 'r60usd', 'r90usd', 'r120usd', 'r150usd', 'r180usd', 'r210usd', 'r240usd', 'r270usd']]
+
     cols = df.columns.tolist()
-    # 去掉第一列
-    cols = cols[1:]
-    print(cols)
 
     for i in range(len(cols)-1):
         col0 = cols[i]
@@ -208,6 +297,8 @@ def debug():
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     # debug()
     predict()
+
+    # meanMape()
