@@ -92,9 +92,78 @@ id6448786147,30,af_purchase_update_skan_on,0,1,620.8,972.22,0,24,2024-07-05 09:4
 id6448786147,31,af_purchase_update_skan_on,0,1,972.22,2038.09,0,24,2024-07-05 09:48:05,0,,,
 '''
 
+csvStr20250403 = '''
+app_id,conversion_value,event_name,min_event_counter,max_event_counter,min_event_revenue,max_event_revenue,min_time_post_install,max_time_post_install,last_config_change,postback_sequence_index,coarse_conversion_value,lock_window_type,lock_window_time
+id6448786147,0,,,,,,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,1,af_purchase_update_skan_on,0,1,0,1.06,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,2,af_purchase_update_skan_on,0,1,1.06,2.13,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,3,af_purchase_update_skan_on,0,1,2.13,3.2,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,4,af_purchase_update_skan_on,0,1,3.2,5.97,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,5,af_purchase_update_skan_on,0,1,5.97,8.08,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,6,af_purchase_update_skan_on,0,1,8.08,10.91,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,7,af_purchase_update_skan_on,0,1,10.91,13.31,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,8,af_purchase_update_skan_on,0,1,13.31,17.17,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,9,af_purchase_update_skan_on,0,1,17.17,22.15,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,10,af_purchase_update_skan_on,0,1,22.15,27.18,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,11,af_purchase_update_skan_on,0,1,27.18,32.25,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,12,af_purchase_update_skan_on,0,1,32.25,37.27,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,13,af_purchase_update_skan_on,0,1,37.27,42.96,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,14,af_purchase_update_skan_on,0,1,42.96,49.94,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,15,af_purchase_update_skan_on,0,1,49.94,57.19,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,16,af_purchase_update_skan_on,0,1,57.19,63.4,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,17,af_purchase_update_skan_on,0,1,63.4,70.59,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,18,af_purchase_update_skan_on,0,1,70.59,79.52,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,19,af_purchase_update_skan_on,0,1,79.52,89.43,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,20,af_purchase_update_skan_on,0,1,89.43,98.61,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,21,af_purchase_update_skan_on,0,1,98.61,105.7,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,22,af_purchase_update_skan_on,0,1,105.7,114.61,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,23,af_purchase_update_skan_on,0,1,114.61,124.59,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,24,af_purchase_update_skan_on,0,1,124.59,135.71,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,25,af_purchase_update_skan_on,0,1,135.71,148.07,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,26,af_purchase_update_skan_on,0,1,148.07,160.79,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,27,af_purchase_update_skan_on,0,1,160.79,173.8,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,28,af_purchase_update_skan_on,0,1,173.8,185.74,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,29,af_purchase_update_skan_on,0,1,185.74,199.42,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,30,af_purchase_update_skan_on,0,1,199.42,215.69,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,31,af_purchase_update_skan_on,0,1,215.69,232.62,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,32,af_purchase_update_skan_on,0,1,232.62,247.52,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,33,af_purchase_update_skan_on,0,1,247.52,264.32,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,34,af_purchase_update_skan_on,0,1,264.32,283.8,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,35,af_purchase_update_skan_on,0,1,283.8,299.49,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,36,af_purchase_update_skan_on,0,1,299.49,325.72,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,37,af_purchase_update_skan_on,0,1,325.72,347.38,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,38,af_purchase_update_skan_on,0,1,347.38,374.22,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,39,af_purchase_update_skan_on,0,1,374.22,401.19,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,40,af_purchase_update_skan_on,0,1,401.19,441.07,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,41,af_purchase_update_skan_on,0,1,441.07,492.51,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,42,af_purchase_update_skan_on,0,1,492.51,519.21,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,43,af_purchase_update_skan_on,0,1,519.21,549.44,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,44,af_purchase_update_skan_on,0,1,549.44,580.15,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,45,af_purchase_update_skan_on,0,1,580.15,617.15,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,46,af_purchase_update_skan_on,0,1,617.15,668.99,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,47,af_purchase_update_skan_on,0,1,668.99,711.78,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,48,af_purchase_update_skan_on,0,1,711.78,762.73,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,49,af_purchase_update_skan_on,0,1,762.73,815.06,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,50,af_purchase_update_skan_on,0,1,815.06,915.85,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,51,af_purchase_update_skan_on,0,1,915.85,975.68,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,52,af_purchase_update_skan_on,0,1,975.68,1057.86,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,53,af_purchase_update_skan_on,0,1,1057.86,1239.54,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,54,af_purchase_update_skan_on,0,1,1239.54,1282.83,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,55,af_purchase_update_skan_on,0,1,1282.83,1416.8,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,56,af_purchase_update_skan_on,0,1,1416.8,1570,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,57,af_purchase_update_skan_on,0,1,1570,1628.32,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,58,af_purchase_update_skan_on,0,1,1628.32,1745.34,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,59,af_purchase_update_skan_on,0,1,1745.34,1792.65,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,60,af_purchase_update_skan_on,0,1,1792.65,1935.41,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,61,af_purchase_update_skan_on,0,1,1935.41,2304.95,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,62,af_purchase_update_skan_on,0,1,2304.95,3006.72,0,24,2025-04-03 05:19:54,0,,,
+id6448786147,63,af_purchase_update_skan_on,0,1,3006.72,3814.71,0,24,2025-04-03 05:19:54,0,,,
+'''
+
 cvMapList = [
     {'validDateRange':['20230101','20240705'],'cvMap':csvStr},
-    {'validDateRange':['20240706','20251231'],'cvMap':csvStr20240706}
+    {'validDateRange':['20240706','20250403'],'cvMap':csvStr20240706},
+    {'validDateRange':['20250404','20261231'],'cvMap':csvStr20250403},
 ]
 
 def init():
@@ -130,7 +199,7 @@ def init():
 
         execSql = execSql_local
 
-        dayStr = '20240708'
+        dayStr = '20250410'
         days = '30'
 
     # 如果days不是整数，转成整数
@@ -587,8 +656,8 @@ def meanAttributionFastv2(userDf, skanDf):
                 new_pending_skan_indices.append(index)
 
         print('未分配成功：', len(new_pending_skan_indices))
-        # # 将未分配成功的skan的前10条打印出来
-        # print(skanDf_to_process.loc[new_pending_skan_indices].head(10))
+        # 将未分配成功的skan的前10条打印出来
+        print(skanDf_to_process.loc[new_pending_skan_indices].head(10))
 
         attributeDf2 = pd.DataFrame({'user index': user_indices, 'campaignId': campaignIds, 'skan index': skan_indices, 'rate': rates})
         
@@ -807,7 +876,13 @@ def main():
     # 对数据进行简单修正，将cv>=32 的数据 cv 减去 32，其他的数据不变
     skanDf['cv'] = pd.to_numeric(skanDf['cv'], errors='coerce')
     skanDf['cv'] = skanDf['cv'].fillna(-1)
-    skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+
+    cvMapDf = getCvMap()
+    print('len cvMapDf:',len(cvMapDf))
+
+    if len(cvMapDf) == 32:
+        skanDf.loc[skanDf['cv']>=32,'cv'] -= 32
+
     # 2、计算合法的激活时间范围
     skanDf = skanAddValidInstallDate(skanDf)
     # 3、获取广告信息

@@ -213,59 +213,6 @@ def visualize_tree(model, feature_names):
     # plt.show()
 
 from sklearn.metrics import precision_score, recall_score, r2_score
-def fit_predict_cost_with_dnn2():
-    # 读取数据
-    data = pd.read_csv('videoWithColorTag.csv')
-    
-    # 提取颜色比例特征
-    color_features = ['橙', '灰', '白', '紫', '绿', '蓝', '赤', '赤2', '黄', '黑']
-    X = data[color_features].values  # 输入特征
-    
-    # 提取目标变量
-    # 将 cost 前10名标记为畅销素材
-    top_10_indices = data['cost'].nlargest(10).index
-    y = np.zeros(data.shape[0])
-    y[top_10_indices] = 1
-    
-    # 标准化输入特征
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # 初始化 DNN 模型
-    model = Sequential([
-        Dense(64, activation='relu', input_shape=(X_scaled.shape[1],)),
-        Dense(32, activation='relu'),
-        Dense(32, activation='relu'),
-        Dense(1, activation='sigmoid')  # 使用 sigmoid 激活函数进行二分类
-    ])
-    
-    # 编译模型
-    model.compile(optimizer='RMSprop', loss='binary_crossentropy', metrics=['accuracy'])
-    
-    # 拟合模型
-    model.fit(
-        X_scaled, y, epochs=10000, batch_size=8,
-        validation_split=0.2,  # 20% 的数据用于验证
-        verbose=1
-    )
-    
-    # 预测畅销素材
-    data['predicted_value'] = model.predict(X_scaled).flatten()
-    data['predicted_class'] = (model.predict(X_scaled).flatten() > 0.5).astype(int)
-    
-    # 计算查准率和查全率
-    precision = precision_score(y, data['predicted_class'])
-    recall = recall_score(y, data['predicted_class'])
-    
-    # 计算 R2
-    r2 = r2_score(y, data['predicted_class'])
-    
-    # print(f"Precision: {precision}")
-    # print(f"Recall: {recall}")
-    # print(f"R2: {r2}")
-    
-    return model, data, precision, recall, r2
-
 from sklearn.tree import DecisionTreeClassifier
 def fit_predict_cost_with_decision_tree2():
     # 读取数据
@@ -280,10 +227,15 @@ def fit_predict_cost_with_decision_tree2():
 
     # 按照cost进行分类，超过1000000的标记为0，超过100000的标记为1，超过10000的标记为2，其他的标记为3
     y = np.zeros(data.shape[0])
-    y[data['cost'] <= 10000] = 3
-    y[data['cost'] > 10000] = 2
-    y[data['cost'] > 100000] = 1
-    y[data['cost'] > 1000000] = 0
+    # y[data['cost'] <= 10000] = 3
+    # y[data['cost'] > 10000] = 2
+    # y[data['cost'] > 100000] = 1
+    # y[data['cost'] > 1000000] = 0
+
+
+    y[data['cost'] > 1000000] = 1
+    
+
     
     
     # 初始化决策树分类模型
@@ -314,19 +266,19 @@ def fit_predict_cost_with_decision_tree2():
     return model, data, precision, recall, r2
 
 def main():
-    jsonFilename = '20250424.json'
+    # jsonFilename = '20250424.json'
 
-    # 读取json文件
-    with open(jsonFilename, 'r', encoding='utf-8') as f:
-        jsonStr = f.read()
+    # # 读取json文件
+    # with open(jsonFilename, 'r', encoding='utf-8') as f:
+    #     jsonStr = f.read()
     
-    videoInfoDf = getVideoInfoDfFromJson(jsonStr)
-    videoInfoDf.to_csv('video.csv', index=False)
+    # videoInfoDf = getVideoInfoDfFromJson(jsonStr)
+    # videoInfoDf.to_csv('video.csv', index=False)
 
-    # checkColor(color_ranges)
+    # # checkColor(color_ranges)
 
-    videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
-    videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
+    # videoInfoWithColorTagDf = videoInfoAddColorTag(videoInfoDf)
+    # videoInfoWithColorTagDf.to_csv('videoWithColorTag.csv', index=False)
 
     model, data, precision, recall, r2 = fit_predict_cost_with_decision_tree2()
     data.to_csv('fit_predict_cost_with_decision_tree2.csv', index=False)
