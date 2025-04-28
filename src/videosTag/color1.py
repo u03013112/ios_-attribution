@@ -83,9 +83,10 @@ def visualize_tree(model, feature_names):
 
 from sklearn.metrics import precision_score, recall_score, r2_score
 from sklearn.tree import DecisionTreeClassifier
-def fit_predict_cost_with_decision_tree2():
+def fit_predict_cost_with_decision_tree():
     # 读取数据
-    data = pd.read_csv('videoWithColorTag.csv')
+    data = pd.read_csv('videoWithColor1Tag.csv', dtype={'earliest_day': str})
+    
     
     # 提取颜色比例特征
     color_features = data.columns[5:-1]  # 颜色比例特征列名
@@ -95,8 +96,31 @@ def fit_predict_cost_with_decision_tree2():
     X = data[color_features]  # 输入特征
 
     y = np.zeros(data.shape[0])
-    y[data['cost'] > 1000000] = 1
+    y[data['cost'] > 3500] = 1
     
+    print('共有', len(y), '条数据')
+    print('畅销素材数量:', len(y[y == 1]))
+    print('')
+    # 将数据拆分成训练集和测试集，将earliest_day大于等于20250324的作为测试集
+    train_mask = data['earliest_day'] < '20250324'
+
+    trainDf = data[train_mask]
+    testDf = data[~train_mask]
+
+    X_train = X[train_mask]
+    y_train = y[train_mask]
+
+    # 测试集
+    X_test = X[~train_mask]
+    y_test = y[~train_mask]
+
+    print('训练集数量:', len(X_train))
+    print('训练集中畅销素材数量:', len(y_train[y_train == 1]))
+    print('测试集数量:', len(X_test))
+    print('测试集中畅销素材数量:', len(y_test[y_test == 1]))
+
+    
+
     # 初始化决策树分类模型
     model = DecisionTreeClassifier(
         max_depth=2,
@@ -104,22 +128,33 @@ def fit_predict_cost_with_decision_tree2():
     )
     
     # 拟合模型
-    model.fit(X, y)
+    model.fit(X_train, y_train)
     
     # 预测畅销素材
-    data['predicted_class'] = model.predict(X)
+    testDf['predicted_class'] = model.predict(X_test)
     
     # 计算查准率和查全率
-    precision = precision_score(y, data['predicted_class'])
-    recall = recall_score(y, data['predicted_class'])
+    precision = precision_score(y_test, testDf['predicted_class'])
+    recall = recall_score(y_test, testDf['predicted_class'])
     
     # 计算 R2
-    r2 = r2_score(y, data['predicted_class'])
-    
-    # print(f"Precision: {precision}")
-    # print(f"Recall: {recall}")
-    # print(f"R2: {r2}")
+    r2 = r2_score(y_test, testDf['predicted_class'])
 
     visualize_tree(model, color_features)
     
     return model, data, precision, recall, r2
+
+
+def main():
+    # videoInfoDf = pd.read_csv('videosTag_train2.csv')
+    # df = addTag(videoInfoDf)
+    # df.to_csv('videoWithColor1Tag.csv', index=False)
+
+    model, data, precision, recall, r2 = fit_predict_cost_with_decision_tree()
+    print('precision:', precision)
+    print('recall:', recall)
+    print('r2:', r2)
+
+
+if __name__ == '__main__':
+    main()
