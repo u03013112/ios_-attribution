@@ -7,6 +7,8 @@ sys.path.append('/src')
 from src.sensortower.intel import getRanking
 from src.sensortower.iosIdToName import iOSIdToNameWithCountry2
 from src.sensortower.androidIdToName import androidIdToName2
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
+
 
 import rpyc
 import json
@@ -128,12 +130,15 @@ def topWatch(isDebug=False,gpt=False):
         retStr += '\n'
     
     conn = rpyc.connect("192.168.40.62", 10001)
+    webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/7d0de3ec-039e-4fa1-a63d-46aefd145691'
+
     if len(retList) > 0:  
         print(retStr)  
         if gpt:
             retStr = toGpt(retStr)
         if not isDebug:
             conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+            sendMessageToWebhook(retStr,webhookUrl)
         else:
             conn.root.sendMessageDebug(retStr)
     else:
@@ -141,6 +146,7 @@ def topWatch(isDebug=False,gpt=False):
         print(retStr)
         if not isDebug:
             conn.root.sendMessageWithoutToken(retStr,'oc_353fdbdcf86e05d80123fc5e0fca7daa')
+            sendMessageToWebhook(retStr,webhookUrl)
         else:
             conn.root.sendMessageDebug(retStr)
 

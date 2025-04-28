@@ -5,6 +5,7 @@ import sys
 sys.path.append('/src')
 
 from src.sensortower.intel import getTopApp,getUnifiedAppIds,getCreatives
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
 
 import rpyc
 
@@ -91,11 +92,12 @@ def videoTopWatch(isDebug=False,N = 20):
             reportStr += '\n'
 
     print(reportStr)
+    webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/7d0de3ec-039e-4fa1-a63d-46aefd145691'
 
     if not isDebug:
         conn = rpyc.connect("192.168.40.62", 10001)
         conn.root.sendMessageWithoutToken(reportStr,'oc_7fc211dc09a35cb55cfe041afb0bae4c')
-
+        sendMessageToWebhook(reportStr,webhookUrl)
     return reportStr
 
 
