@@ -14,7 +14,7 @@ from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,add
 def toGpt(text):
     content = '''
 你是一个AI新闻助手，你需要做下面几件事：
-1、从我给你的文档中提取与AI有关的最新10条新闻
+1、从我给你的文档中提取与AI有关新闻，根据原有的条目与排序进行整理，原信息中有编号
 2、如果不是中文，请翻译成中文
 3、内容输出格式使用：
 （标题，需要翻译）
@@ -22,6 +22,11 @@ content主要内容摘要（需要翻译）
 新闻链接（点击跳转）
 （中间空一行）
     '''
+
+    textFix = f'''
+下面是我给你的信息：
+{text}
+'''
 
     message = [
         {"role":"user","content":content},
@@ -78,16 +83,17 @@ for article in articles:
         'content': content
     })
 
-# print(news)
+print(news)
 
 # 将news变为text，以便于传入gpt
 newsText = ''
 for i in range(len(news)):
-    newsText += f'{news[i]["title"]}\n'
+    newsText += f'{i+1}.{news[i]["title"]}\n'
     newsText += f'   {news[i]["description"]}\n'
     newsText += f'   {news[i]["url"]}\n\n'
     newsText += f'   {news[i]["content"]}\n\n'
 
+print('newsText:', newsText)
 response = toGpt(newsText)
 # print('response:',response)
 

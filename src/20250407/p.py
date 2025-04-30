@@ -116,7 +116,7 @@ where
 
 
 def p1():
-    df = getSKANDataFromMC('20250421', 14)
+    df = getSKANDataFromMC('20250429', 21)
 
     df = df.groupby(['day', 'cv']).agg({'cnt': 'sum'}).reset_index()
 
@@ -142,9 +142,44 @@ def af20250415():
     df.to_csv('/src/data/20250407_af20250415.csv', index=False)
 
 
+import os
+def debug():
+    filename = '/src/data/20250429_debug.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        sql = '''
+SELECT
+    skad_conversion_value as cv,
+    count(*) as cnt,
+    media_source,
+    ad_network_campaign_name,
+    day
+FROM
+    ods_platform_appsflyer_skad_details
+WHERE
+    day between '20250421'
+    and '20250427'
+    AND app_id = 'id6448786147'
+    AND event_name in ('af_purchase_update_skan_on')
+    and skad_conversion_value = 32
+GROUP BY
+    skad_conversion_value,
+    media_source,
+    ad_network_campaign_name,
+    day;
+        '''
+
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+
+    return df
+
 if __name__ == "__main__":
     # main()
     # forHaitao()
     # forHaitao2()
-    p1()
+    # p1()
     # af20250415()
+
+    debugDf = debug()

@@ -104,8 +104,8 @@ def fit_predict_cost_with_decision_tree():
     # 将数据拆分成训练集和测试集，将earliest_day大于等于20250324的作为测试集
     train_mask = data['earliest_day'] < '20250324'
 
-    trainDf = data[train_mask]
-    testDf = data[~train_mask]
+    trainDf = data[train_mask].copy()
+    testDf = data[~train_mask].copy()
 
     X_train = X[train_mask]
     y_train = y[train_mask]
@@ -130,8 +130,20 @@ def fit_predict_cost_with_decision_tree():
     # 拟合模型
     model.fit(X_train, y_train)
     
-    # 预测畅销素材
-    testDf['predicted_class'] = model.predict(X_test)
+    # # 预测畅销素材
+    # testDf.loc[:, 'predicted_class'] = model.predict(X_test)
+
+    # 获取预测概率
+    probabilities = model.predict_proba(X_test)
+    # 输出每个样本属于每个类别的概率
+    # print(probabilities)
+    # 自定义阈值
+    threshold = 0.2
+    testDf.loc[:, 'predicted_class'] = (probabilities[:, 1] >= threshold).astype(int)
+    testDf.loc[:, 'probabilities'] = probabilities[:, 1]
+    testDf.loc[:, 'y_test'] = y_test
+    print('testDf:')
+    print(testDf)
     
     # 计算查准率和查全率
     precision = precision_score(y_test, testDf['predicted_class'])
