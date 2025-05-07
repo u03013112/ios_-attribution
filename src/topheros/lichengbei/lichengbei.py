@@ -173,6 +173,9 @@ def total():
     lichengbeiCost = lichengbeiDf['target_usd'].values[0]
 
     today = datetime.datetime.now()
+    # 修正一些错误数据，install_day 大于等于今天的，去掉
+    allDf = allDf[allDf['install_day'] < today]
+    
     # 计算满7日数据截止日期
     full7dayEndDate = today - datetime.timedelta(days=8)
 
@@ -194,7 +197,7 @@ def total():
 
     ax.set_xlabel('Install Day')
     ax.set_ylabel('Cost')
-    ax.set_title('milestones Cost Analysis')
+    ax.set_title('total milestones cost')
 
     ax.legend()
     plt.xticks(rotation=45)
