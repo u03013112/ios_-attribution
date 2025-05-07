@@ -80,7 +80,7 @@ FROM
 			app = '116'
 			AND zone = '0'
 			and facebook_segment in ('country', 'N/A')
-			AND install_day BETWEEN ('{lichengbeiStartDayStr}' AND '{todayStr}')
+			AND install_day BETWEEN '{lichengbeiStartDayStr}' AND '{todayStr}'
 	) AS transformed_data
 GROUP BY
 	install_day,
@@ -98,16 +98,19 @@ GROUP BY
 
 def totalAndPlatformCountry():
     today = datetime.datetime.now()
-    # 修正一些错误数据，install_day 大于等于今天的，去掉
-    allDf = allDf[allDf['install_day'] < today]
+    today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 计算满7日数据截止日期
     full7dayEndDate = today - datetime.timedelta(days=8)
+    
 
     print('today:', today.strftime('%Y%m%d'),' full7dayEndDate:', full7dayEndDate.strftime('%Y%m%d'))
 
     lichengbeiDf = getLichengbeiData()
     df = getData()
+    df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
+    # 修正一些错误数据，install_day 大于等于今天的，去掉
+    df = df[df['install_day'] < today]
 
     groupByPlatformAndCountryDf = df.groupby(['install_day', 'platform', 'country_group']).agg({'cost': 'sum','r7usd': 'sum'}).reset_index()
     # groupByPlatformAndCountryDf = groupByPlatformAndCountryDf.sort_values(by=['platform', 'country_group','install_day'], ascending=[True, True, True])
@@ -150,13 +153,21 @@ def totalAndPlatformCountry():
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    
-
-
-
-    
-
-
+    ax.plot(JP_AOSDf['install_day'], JP_AOSDf['cost'], label='daily cost', color='blue')
+    ax.legend(loc='upper left')
+    ax.set_ylabel('daily cost')
+    ax2 = ax.twinx()
+    ax2.fill_between(JP_AOSDf['install_day'], JP_AOSDf['sum_cost_ok'], color='green', alpha=0.5, label='sum cost ok')
+    # ax2.plot(JP_AOSDf['install_day'], JP_AOSDf['sum_cost_ok'], label='sum cost ok', color='green')
+    ax2.legend(loc='upper right')
+    ax2.set_ylabel('sum cost ok')
+    ax.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax.set_xlabel('Install Day')
+    ax.set_title('AOS JP daily cost and sum cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_AOS_cost.png')
+    plt.close()
 
     # JP + IOS
     JP_IOSDf = groupByPlatformAndCountryDf[
