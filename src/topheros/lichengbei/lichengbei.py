@@ -36,7 +36,14 @@ def getLichengbeiData():
     return lichengbei20250426Df
 
 def getData(lichengbeiStartDayStr = '20250426'):
-    sql = f'''
+    today = datetime.datetime.now()
+    todayStr = today.strftime('%Y%m%d')
+
+    filename = f'/src/data/th_lichengbei_data_{todayStr}.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        sql = f'''
 SELECT
 	install_day,
 	platform,
@@ -73,7 +80,7 @@ FROM
 			app = '116'
 			AND zone = '0'
 			and facebook_segment in ('country', 'N/A')
-			AND install_day >= '{lichengbeiStartDayStr}'
+			AND install_day BETWEEN ('{lichengbeiStartDayStr}' AND '{todayStr}')
 	) AS transformed_data
 GROUP BY
 	install_day,
@@ -82,13 +89,23 @@ GROUP BY
 	media,
 	campaign_type
 ;
-    '''
-    print(sql)
-    df = execSql(sql)
+        '''
+        print(sql)
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
 
     return df
 
-def total():
+def totalAndPlatformCountry():
+    today = datetime.datetime.now()
+    # 修正一些错误数据，install_day 大于等于今天的，去掉
+    allDf = allDf[allDf['install_day'] < today]
+
+    # 计算满7日数据截止日期
+    full7dayEndDate = today - datetime.timedelta(days=8)
+
+    print('today:', today.strftime('%Y%m%d'),' full7dayEndDate:', full7dayEndDate.strftime('%Y%m%d'))
+
     lichengbeiDf = getLichengbeiData()
     df = getData()
 
@@ -110,7 +127,36 @@ def total():
     JP_AOSDf['sum_cost_ok'] = JP_AOSDf.apply(
         lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
     )
-    # JP_AOSDf.to_csv('/src/data/th_lichengbei_JP_AOS.csv', index=False)
+    JP_AOSDf.to_csv('/src/data/th_lichengbei_JP_AOS.csv', index=False)
+
+    JP_AOSDf['install_day'] = pd.to_datetime(JP_AOSDf['install_day'], format='%Y%m%d')
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax.plot(JP_AOSDf['install_day'], JP_AOSDf['KPI'], label='KPI', color='blue')
+    ax.plot(JP_AOSDf['install_day'], JP_AOSDf['sum_7roi'], label='sum 7roi', color='green')
+    ax.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax.set_xlabel('Install Day')
+    ax.set_ylabel('ROI')
+    ax.set_title('AOS JP 7ROI')
+    ax.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_AOS_ROI.png')
+    plt.close()
+
+    # 双y轴，一个cost（每日花费），一个sum_cost_ok（累计达标花费）
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    
+
+
+
+    
+
+
 
     # JP + IOS
     JP_IOSDf = groupByPlatformAndCountryDf[
@@ -126,7 +172,7 @@ def total():
     JP_IOSDf['sum_cost_ok'] = JP_IOSDf.apply(
         lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
     )
-    # JP_IOSDf.to_csv('/src/data/th_lichengbei_JP_IOS.csv', index=False)
+    JP_IOSDf.to_csv('/src/data/th_lichengbei_JP_IOS.csv', index=False)
 
     # NOJP + AOS
     NOJP_AOSDf = groupByPlatformAndCountryDf[
@@ -142,7 +188,7 @@ def total():
     NOJP_AOSDf['sum_cost_ok'] = NOJP_AOSDf.apply(
         lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
     )
-    # NOJP_AOSDf.to_csv('/src/data/th_lichengbei_NOJP_AOS.csv', index=False)
+    NOJP_AOSDf.to_csv('/src/data/th_lichengbei_NOJP_AOS.csv', index=False)
 
     # NOJP + IOS
     NOJP_IOSDf = groupByPlatformAndCountryDf[
@@ -158,7 +204,7 @@ def total():
     NOJP_IOSDf['sum_cost_ok'] = NOJP_IOSDf.apply(
         lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
     )
-    # NOJP_IOSDf.to_csv('/src/data/th_lichengbei_NOJP_IOS.csv', index=False)
+    NOJP_IOSDf.to_csv('/src/data/th_lichengbei_NOJP_IOS.csv', index=False)
 
     # 合并
     allDf = pd.concat([JP_AOSDf, JP_IOSDf, NOJP_AOSDf, NOJP_IOSDf], ignore_index=True)
@@ -171,15 +217,6 @@ def total():
 
     allDf['install_day'] = pd.to_datetime(allDf['install_day'], format='%Y%m%d')
     lichengbeiCost = lichengbeiDf['target_usd'].values[0]
-
-    today = datetime.datetime.now()
-    # 修正一些错误数据，install_day 大于等于今天的，去掉
-    allDf = allDf[allDf['install_day'] < today]
-    
-    # 计算满7日数据截止日期
-    full7dayEndDate = today - datetime.timedelta(days=8)
-
-    print('today:', today.strftime('%Y%m%d'),' full7dayEndDate:', full7dayEndDate.strftime('%Y%m%d'))
 
     # 画图
     # install_day 是横坐标，sum_cost 与 sum_cost_ok 是纵坐标
@@ -197,13 +234,14 @@ def total():
 
     ax.set_xlabel('Install Day')
     ax.set_ylabel('Cost')
-    ax.set_title('total milestones cost')
+    ax.set_title('totalAndPlatformCountry milestones cost')
 
     ax.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
 
     plt.savefig('/src/data/th_lichengbei_all.png')
+    plt.close()
     
 
 
@@ -213,4 +251,4 @@ def main():
 
 if __name__ == '__main__':
     # main()
-    total()
+    totalAndPlatformCountry()
