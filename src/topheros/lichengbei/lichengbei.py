@@ -351,6 +351,402 @@ def totalAndPlatformCountry():
     plt.savefig('/src/data/th_lichengbei_all.png')
     plt.close()
     
+def applovin():
+    today = datetime.datetime.now()
+    today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 计算满7日数据截止日期
+    full7dayEndDate = today - datetime.timedelta(days=8)
+    
+
+    print('today:', today.strftime('%Y%m%d'),' full7dayEndDate:', full7dayEndDate.strftime('%Y%m%d'))
+
+    lichengbeiDf = getLichengbeiData()
+    df = getData()
+    df['install_day'] = pd.to_datetime(df['install_day'], format='%Y%m%d')
+    # 修正一些错误数据，install_day 大于等于今天的，去掉
+    df = df[df['install_day'] < today]
+
+    applovinDf = df[
+        (df['media'] == 'applovin_int')
+    ].copy()
+
+    # JP + AOS + 7D
+    JP_AOS7Df = applovinDf[
+        (applovinDf['country_group'] == 'JP') &
+        (applovinDf['platform'] == 'AOS') &
+        (applovinDf['campaign_type'] == '7D')
+    ].copy()
+    JP_AOS7Df = JP_AOS7Df.sort_values(by=['install_day'], ascending=[True])
+    JP_AOS7Df['7roi'] = JP_AOS7Df['r7usd'] / JP_AOS7Df['cost']
+    JP_AOS7Df['sum_cost'] = JP_AOS7Df['cost'].cumsum()
+    JP_AOS7Df['sum_r7usd'] = JP_AOS7Df['r7usd'].cumsum()
+    JP_AOS7Df['sum_7roi'] = JP_AOS7Df['sum_r7usd'] / JP_AOS7Df['sum_cost']
+    JP_AOS7Df['KPI'] = lichengbeiDf['Android_JP_Applovin_7DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    JP_AOS7Df['sum_cost_ok'] = JP_AOS7Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    JP_AOS7Df.to_csv('/src/data/th_lichengbei_JP_AOS_7D.csv', index=False)
+    JP_AOS7Df['install_day'] = pd.to_datetime(JP_AOS7Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(JP_AOS7Df['install_day'], JP_AOS7Df['KPI'], label='KPI', color='red')
+    ax1.plot(JP_AOS7Df['install_day'], JP_AOS7Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('AOS JP 7ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(JP_AOS7Df['install_day'], JP_AOS7Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(JP_AOS7Df['install_day'], JP_AOS7Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(JP_AOS7Df['install_day'], JP_AOS7Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('AOS JP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_AOS_7D.png')
+    plt.close()
+
+    # JP + AOS + 28D
+    JP_AOS28Df = applovinDf[
+        (applovinDf['country_group'] == 'JP') &
+        (applovinDf['platform'] == 'AOS') &
+        (applovinDf['campaign_type'] == '28D')
+    ].copy()
+    JP_AOS28Df = JP_AOS28Df.sort_values(by=['install_day'], ascending=[True])
+    JP_AOS28Df['7roi'] = JP_AOS28Df['r7usd'] / JP_AOS28Df['cost']
+    JP_AOS28Df['sum_cost'] = JP_AOS28Df['cost'].cumsum()
+    JP_AOS28Df['sum_r7usd'] = JP_AOS28Df['r7usd'].cumsum()
+    JP_AOS28Df['sum_7roi'] = JP_AOS28Df['sum_r7usd'] / JP_AOS28Df['sum_cost']
+    JP_AOS28Df['KPI'] = lichengbeiDf['Android_JP_Applovin_28DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    JP_AOS28Df['sum_cost_ok'] = JP_AOS28Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    JP_AOS28Df.to_csv('/src/data/th_lichengbei_JP_AOS_28D.csv', index=False)
+    JP_AOS28Df['install_day'] = pd.to_datetime(JP_AOS28Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(JP_AOS28Df['install_day'], JP_AOS28Df['KPI'], label='KPI', color='red')
+    ax1.plot(JP_AOS28Df['install_day'], JP_AOS28Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('AOS JP 28D ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(JP_AOS28Df['install_day'], JP_AOS28Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(JP_AOS28Df['install_day'], JP_AOS28Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(JP_AOS28Df['install_day'], JP_AOS28Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('AOS JP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_AOS_28D.png')
+    plt.close()
+
+    # JP + IOS + 7D
+    JP_IOS7Df = applovinDf[
+        (applovinDf['country_group'] == 'JP') &
+        (applovinDf['platform'] == 'IOS') &
+        (applovinDf['campaign_type'] == '7D')
+    ].copy()
+    JP_IOS7Df = JP_IOS7Df.sort_values(by=['install_day'], ascending=[True])
+    JP_IOS7Df['7roi'] = JP_IOS7Df['r7usd'] / JP_IOS7Df['cost']
+    JP_IOS7Df['sum_cost'] = JP_IOS7Df['cost'].cumsum()
+    JP_IOS7Df['sum_r7usd'] = JP_IOS7Df['r7usd'].cumsum()
+    JP_IOS7Df['sum_7roi'] = JP_IOS7Df['sum_r7usd'] / JP_IOS7Df['sum_cost']
+    JP_IOS7Df['KPI'] = lichengbeiDf['iOS_JP_Applovin_7DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    JP_IOS7Df['sum_cost_ok'] = JP_IOS7Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    JP_IOS7Df.to_csv('/src/data/th_lichengbei_JP_IOS_7D.csv', index=False)
+    JP_IOS7Df['install_day'] = pd.to_datetime(JP_IOS7Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(JP_IOS7Df['install_day'], JP_IOS7Df['KPI'], label='KPI', color='red')
+    ax1.plot(JP_IOS7Df['install_day'], JP_IOS7Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('IOS JP 7ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(JP_IOS7Df['install_day'], JP_IOS7Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(JP_IOS7Df['install_day'], JP_IOS7Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(JP_IOS7Df['install_day'], JP_IOS7Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('IOS JP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_IOS_7D.png')
+    plt.close()
+
+    # JP + IOS + 28D
+    JP_IOS28Df = applovinDf[
+        (applovinDf['country_group'] == 'JP') &
+        (applovinDf['platform'] == 'IOS') &
+        (applovinDf['campaign_type'] == '28D')
+    ].copy()
+    JP_IOS28Df = JP_IOS28Df.sort_values(by=['install_day'], ascending=[True])
+    JP_IOS28Df['7roi'] = JP_IOS28Df['r7usd'] / JP_IOS28Df['cost']
+    JP_IOS28Df['sum_cost'] = JP_IOS28Df['cost'].cumsum()
+    JP_IOS28Df['sum_r7usd'] = JP_IOS28Df['r7usd'].cumsum()
+    JP_IOS28Df['sum_7roi'] = JP_IOS28Df['sum_r7usd'] / JP_IOS28Df['sum_cost']
+    JP_IOS28Df['KPI'] = lichengbeiDf['iOS_JP_Applovin_28DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    JP_IOS28Df['sum_cost_ok'] = JP_IOS28Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    JP_IOS28Df.to_csv('/src/data/th_lichengbei_JP_IOS_28D.csv', index=False)
+    JP_IOS28Df['install_day'] = pd.to_datetime(JP_IOS28Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(JP_IOS28Df['install_day'], JP_IOS28Df['KPI'], label='KPI', color='red')
+    ax1.plot(JP_IOS28Df['install_day'], JP_IOS28Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('IOS JP 28D ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(JP_IOS28Df['install_day'], JP_IOS28Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(JP_IOS28Df['install_day'], JP_IOS28Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(JP_IOS28Df['install_day'], JP_IOS28Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('IOS JP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_JP_IOS_28D.png')
+    plt.close()
+
+    # NOJP + AOS + 7D
+    NOJP_AOS7Df = applovinDf[
+        (applovinDf['country_group'] == 'OTHER') &
+        (applovinDf['platform'] == 'AOS') &
+        (applovinDf['campaign_type'] == '7D')
+    ].copy()
+    NOJP_AOS7Df = NOJP_AOS7Df.sort_values(by=['install_day'], ascending=[True])
+    NOJP_AOS7Df['7roi'] = NOJP_AOS7Df['r7usd'] / NOJP_AOS7Df['cost']
+    NOJP_AOS7Df['sum_cost'] = NOJP_AOS7Df['cost'].cumsum()
+    NOJP_AOS7Df['sum_r7usd'] = NOJP_AOS7Df['r7usd'].cumsum()
+    NOJP_AOS7Df['sum_7roi'] = NOJP_AOS7Df['sum_r7usd'] / NOJP_AOS7Df['sum_cost']
+    NOJP_AOS7Df['KPI'] = lichengbeiDf['Android_noJP_Applovin_7DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    NOJP_AOS7Df['sum_cost_ok'] = NOJP_AOS7Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    NOJP_AOS7Df.to_csv('/src/data/th_lichengbei_NOJP_AOS_7D.csv', index=False)
+    NOJP_AOS7Df['install_day'] = pd.to_datetime(NOJP_AOS7Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(NOJP_AOS7Df['install_day'], NOJP_AOS7Df['KPI'], label='KPI', color='red')
+    ax1.plot(NOJP_AOS7Df['install_day'], NOJP_AOS7Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('AOS NOJP 7ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(NOJP_AOS7Df['install_day'], NOJP_AOS7Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(NOJP_AOS7Df['install_day'], NOJP_AOS7Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(NOJP_AOS7Df['install_day'], NOJP_AOS7Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('AOS NOJP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_NOJP_AOS_7D.png')
+    plt.close()
+
+    # NOJP + AOS + 28D
+    NOJP_AOS28Df = applovinDf[
+        (applovinDf['country_group'] == 'OTHER') &
+        (applovinDf['platform'] == 'AOS') &
+        (applovinDf['campaign_type'] == '28D')
+    ].copy()
+    NOJP_AOS28Df = NOJP_AOS28Df.sort_values(by=['install_day'], ascending=[True])
+    NOJP_AOS28Df['7roi'] = NOJP_AOS28Df['r7usd'] / NOJP_AOS28Df['cost']
+    NOJP_AOS28Df['sum_cost'] = NOJP_AOS28Df['cost'].cumsum()
+    NOJP_AOS28Df['sum_r7usd'] = NOJP_AOS28Df['r7usd'].cumsum()
+    NOJP_AOS28Df['sum_7roi'] = NOJP_AOS28Df['sum_r7usd'] / NOJP_AOS28Df['sum_cost']
+    NOJP_AOS28Df['KPI'] = lichengbeiDf['Android_noJP_Applovin_28DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    NOJP_AOS28Df['sum_cost_ok'] = NOJP_AOS28Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    NOJP_AOS28Df.to_csv('/src/data/th_lichengbei_NOJP_AOS_28D.csv', index=False)
+    NOJP_AOS28Df['install_day'] = pd.to_datetime(NOJP_AOS28Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(NOJP_AOS28Df['install_day'], NOJP_AOS28Df['KPI'], label='KPI', color='red')
+    ax1.plot(NOJP_AOS28Df['install_day'], NOJP_AOS28Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('AOS NOJP 28D ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(NOJP_AOS28Df['install_day'], NOJP_AOS28Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(NOJP_AOS28Df['install_day'], NOJP_AOS28Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(NOJP_AOS28Df['install_day'], NOJP_AOS28Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('AOS NOJP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_NOJP_AOS_28D.png')
+    plt.close()
+
+    # NOJP + IOS + 7D
+    NOJP_IOS7Df = applovinDf[
+        (applovinDf['country_group'] == 'OTHER') &
+        (applovinDf['platform'] == 'IOS') &
+        (applovinDf['campaign_type'] == '7D')
+    ].copy()
+    NOJP_IOS7Df = NOJP_IOS7Df.sort_values(by=['install_day'], ascending=[True])
+    NOJP_IOS7Df['7roi'] = NOJP_IOS7Df['r7usd'] / NOJP_IOS7Df['cost']
+    NOJP_IOS7Df['sum_cost'] = NOJP_IOS7Df['cost'].cumsum()
+    NOJP_IOS7Df['sum_r7usd'] = NOJP_IOS7Df['r7usd'].cumsum()
+    NOJP_IOS7Df['sum_7roi'] = NOJP_IOS7Df['sum_r7usd'] / NOJP_IOS7Df['sum_cost']
+    NOJP_IOS7Df['KPI'] = lichengbeiDf['iOS_noJP_Applovin_7DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    NOJP_IOS7Df['sum_cost_ok'] = NOJP_IOS7Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    NOJP_IOS7Df.to_csv('/src/data/th_lichengbei_NOJP_IOS_7D.csv', index=False)
+    NOJP_IOS7Df['install_day'] = pd.to_datetime(NOJP_IOS7Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(NOJP_IOS7Df['install_day'], NOJP_IOS7Df['KPI'], label='KPI', color='red')
+    ax1.plot(NOJP_IOS7Df['install_day'], NOJP_IOS7Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('IOS NOJP 7ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(NOJP_IOS7Df['install_day'], NOJP_IOS7Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(NOJP_IOS7Df['install_day'], NOJP_IOS7Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(NOJP_IOS7Df['install_day'], NOJP_IOS7Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('IOS NOJP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_NOJP_IOS_7D.png')
+    plt.close()
+    
+    # NOJP + IOS + 28D
+    NOJP_IOS28Df = applovinDf[
+        (applovinDf['country_group'] == 'OTHER') &
+        (applovinDf['platform'] == 'IOS') &
+        (applovinDf['campaign_type'] == '28D')
+    ].copy()
+    NOJP_IOS28Df = NOJP_IOS28Df.sort_values(by=['install_day'], ascending=[True])
+    NOJP_IOS28Df['7roi'] = NOJP_IOS28Df['r7usd'] / NOJP_IOS28Df['cost']
+    NOJP_IOS28Df['sum_cost'] = NOJP_IOS28Df['cost'].cumsum()
+    NOJP_IOS28Df['sum_r7usd'] = NOJP_IOS28Df['r7usd'].cumsum()
+    NOJP_IOS28Df['sum_7roi'] = NOJP_IOS28Df['sum_r7usd'] / NOJP_IOS28Df['sum_cost']
+    NOJP_IOS28Df['KPI'] = lichengbeiDf['iOS_noJP_Applovin_28DCampaign_7ROI'].values[0]
+    # 如果sum_7roi < KPI, 则sum_cost_ok = 0, 否则sum_cost_ok = sum_cost
+    NOJP_IOS28Df['sum_cost_ok'] = NOJP_IOS28Df.apply(
+        lambda row: 0 if row['sum_7roi'] < row['KPI'] else row['sum_cost'], axis=1
+    )
+    NOJP_IOS28Df.to_csv('/src/data/th_lichengbei_NOJP_IOS_28D.csv', index=False)
+    NOJP_IOS28Df['install_day'] = pd.to_datetime(NOJP_IOS28Df['install_day'], format='%Y%m%d')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), sharex=True)
+    ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.plot(NOJP_IOS28Df['install_day'], NOJP_IOS28Df['KPI'], label='KPI', color='red')
+    ax1.plot(NOJP_IOS28Df['install_day'], NOJP_IOS28Df['sum_7roi'], label='sum 7roi', color='orange')
+    ax1.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax1.set_ylabel('ROI')
+    ax1.set_title('IOS NOJP 28D ROI')
+    ax1.legend()
+    ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax2.plot(NOJP_IOS28Df['install_day'], NOJP_IOS28Df['cost'], label='daily cost', color='blue')
+    ax2.legend(loc='upper left')
+    ax2.set_ylabel('daily cost')
+    ax3 = ax2.twinx()
+    ax3.fill_between(NOJP_IOS28Df['install_day'], NOJP_IOS28Df['sum_cost_ok'], color='green', alpha=0.5)
+    ax3.plot(NOJP_IOS28Df['install_day'], NOJP_IOS28Df['sum_cost_ok'], color='green', label='Sum Cost ok')
+    ax3.set_ylim(bottom=0)
+    ax3.margins(y=0.1)
+    ax3.legend(loc='upper right')
+    ax3.set_ylabel('Sum Cost ok')
+    ax2.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
+    ax2.set_xlabel('Install Day')
+    ax2.set_title('IOS NOJP daily cost and Sum Cost ok')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig('/src/data/th_lichengbei_NOJP_IOS_28D.png')
+    plt.close()
+
 
 
 def main():
@@ -359,4 +755,5 @@ def main():
 
 if __name__ == '__main__':
     # main()
-    totalAndPlatformCountry()
+    # totalAndPlatformCountry()
+    applovin()
