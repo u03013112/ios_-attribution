@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from PIL import Image
 
 import sys
 sys.path.append('/src')
@@ -342,6 +343,7 @@ def totalAndPlatformCountry(dayStr,reportData):
 
     allDf['install_day'] = pd.to_datetime(allDf['install_day'], format='%Y%m%d')
     milestonesCost = milestonesDf['target_usd'].values[0]
+    reportData['milestonesTargetUsd'] = milestonesCost
 
     # 画图
     # install_day 是横坐标，sum_cost 与 sum_cost_ok 是纵坐标
@@ -767,7 +769,37 @@ def applovin(dayStr,reportData):
     plt.savefig('/src/data/th_milestones_NOJP_IOS_28D.png')
     plt.close()
 
-from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
+def merge_images_horizontally(image_path1, image_path2, output_path):
+    """
+    将两张图片横向并排合并成一张图片并保存。
+    :param image_path1: 第一张图片的路径
+    :param image_path2: 第二张图片的路径
+    :param output_path: 合并后图片的保存路径
+    """
+    try:
+        # 打开两张图片
+        img1 = Image.open(image_path1)
+        img2 = Image.open(image_path2)
+        # 获取图片的尺寸
+        width1, height1 = img1.size
+        width2, height2 = img2.size
+        # 创建一个新的图像，其宽度是两张图片宽度之和，高度为两张图片的最大高度
+        new_width = width1 + width2
+        new_height = max(height1, height2)
+        # 创建一个新的空白图像
+        new_img = Image.new('RGB', (new_width, new_height))
+        # 将第一张图片粘贴到新图像的左侧
+        new_img.paste(img1, (0, 0))
+        # 将第二张图片粘贴到新图像的右侧
+        new_img.paste(img2, (width1, 0))
+        # 保存合并后的图片
+        new_img.save(output_path)
+        print(f"合并后的图片已保存到: {output_path}")
+    except Exception as e:
+        print(f"合并图片时发生错误: {e}")
+
+
+from src.report.feishu.feishu import getTenantAccessToken,createDoc,addHead1,addHead2,addHead3,addText,addFile,sendMessage,addImage,addCode,sendMessageToWebhook,sendMessageToWebhook2
 def report(reportData):
     
     # 获取飞书的token
@@ -780,7 +812,13 @@ def report(reportData):
     addText(tenantAccessToken, docId, '', '本文档每周一自动生成，获得从最近里程碑开始到上周数据。\n')
 
     addHead1(tenantAccessToken, docId, '', '里程碑进度')
-    text1 = f"目前里程碑于{reportData['startDay']}开始，截止目前满7日数据（{reportData['endDay']}），共计{reportData['days']}天。"
+    allDf = reportData['allDf']
+    costOk = allDf[allDf['install_day'] == reportData['endDay']]['sum_cost_ok'].sum()
+    costOkRate = costOk / reportData['milestonesTargetUsd'] * 100
+
+    text1 = f"目前里程碑于{reportData['startDay']}开始，截止目前满7日数据（{reportData['endDay']}），共计{reportData['days']}天。\n"
+    text1 += f"目前累计里程碑达标花费金额{costOk:.0f}美元，完成{costOkRate:.2f}%\n"
+    
     addText(tenantAccessToken, docId, '', text1)
 
     if reportData['days'] < 14:
@@ -796,58 +834,205 @@ def report(reportData):
 
         addHead2(tenantAccessToken, docId,'', '大盘')
 
-        allDf = reportData['allDf']
-        thisWeekCost = allDf[allDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['cost'].sum() - allDf[allDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['cost'].sum()
-        lastWeekCost = allDf[allDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['cost'].sum() - allDf[allDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['cost'].sum()
+        warningText = ''
+
+        # allDf = reportData['allDf']
+        thisWeekCost = allDf[allDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - allDf[allDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
+        lastWeekCost = allDf[allDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - allDf[allDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
 
         weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
         op = '上升' if weekOnWeekCostRate > 0 else '下降'
         weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text2 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        text2 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text2)
 
+        if thisWeekCost < 0:
+            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。说明最近有部分平台+国家的投放数据不达标，需要警惕。\n"
+            
         addHead2(tenantAccessToken, docId, '', 'AOS JP')
         JP_AOSDf = reportData['JP_AOSDf']
-        thisWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['cost'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['cost'].sum()
-        lastWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['cost'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['cost'].sum()
+        thisWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
+        lastWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
         op = '上升' if weekOnWeekCostRate > 0 else '下降'
         weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text3 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        text3 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text3)
+
+        if thisWeekCost < 0:
+            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = JP_AOSDf[JP_AOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
+            kpi = thisWeekDf['KPI'].values[0]
+            if thisWeekROI < kpi:
+                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+            else:
+                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
+
 
         addHead2(tenantAccessToken, docId, '', 'AOS NOJP')
         NOJP_AOSDf = reportData['NOJP_AOSDf']
-        thisWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['cost'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['cost'].sum()
-        lastWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['cost'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['cost'].sum()
+        thisWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
+        lastWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
         op = '上升' if weekOnWeekCostRate > 0 else '下降'
         weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text4 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        text4 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text4)
+
+        if thisWeekCost < 0:
+            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = NOJP_AOSDf[NOJP_AOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
+            kpi = thisWeekDf['KPI'].values[0]
+            if thisWeekROI < kpi:
+                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+            else:
+                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
 
         addHead2(tenantAccessToken, docId, '', 'IOS JP')
         JP_IOSDf = reportData['JP_IOSDf']
-        thisWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['cost'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['cost'].sum()
-        lastWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['cost'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['cost'].sum()
+        thisWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
+        lastWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
         op = '上升' if weekOnWeekCostRate > 0 else '下降'
         weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text5 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        text5 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text5)
+
+        if thisWeekCost < 0:
+            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = JP_IOSDf[JP_IOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
+            kpi = thisWeekDf['KPI'].values[0]
+            if thisWeekROI < kpi:
+                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+            else:
+                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
         
         addHead2(tenantAccessToken, docId, '', 'IOS NOJP')
         NOJP_IOSDf = reportData['NOJP_IOSDf']
-        thisWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['cost'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['cost'].sum()
-        lastWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['cost'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['cost'].sum()
+        thisWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
+        lastWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
         op = '上升' if weekOnWeekCostRate > 0 else '下降'
         weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text6 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        text6 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text6)
+
+        if thisWeekCost < 0:
+            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = NOJP_IOSDf[NOJP_IOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
+            kpi = thisWeekDf['KPI'].values[0]
+            if thisWeekROI < kpi:
+                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+            else:
+                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
         
 
-        
+    #风险提示
+    addHead1(tenantAccessToken, docId, '', '风险提示')
+    # 如果本周里程碑达标花费金额增长为负数，说明最近有部分平台+国家的投放数据不达标，需要警惕。
+    # 如果本周里程碑达标花费金额增长为负数，且本周的平均ROI低于KPI，说明正在加剧里程碑不达标的风险。
+    addText(tenantAccessToken, docId, '', warningText,bold=True)
+
+    # 参考数据
+    addHead1(tenantAccessToken, docId, '', '参考数据')
+    addHead2(tenantAccessToken, docId, '', '大盘')
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_all.csv',view_type = 1)
+    addHead3(tenantAccessToken, docId, '', '图例解释：')
+    text = '''
+红线：KPI Cost 为里程碑目标达标花费。
+蓝线：Sum Cost 为里程碑开始至昨日花费金额。
+绿线：Sum Cost ok 为里程碑开始至昨日 达标花费金额。达标计算方式详见 备注 章节。 
+黄色竖虚线：full7dayEndDate 为满7日分割线，虚线左侧为满7日数据，虚线右侧为未满7日数据。
+    '''
+    addText(tenantAccessToken, docId, '', text)
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_all.png')
+
+    addHead2(tenantAccessToken, docId, '', '分平台 + 分国家')
+    addHead3(tenantAccessToken, docId, '', '图例解释：')
+    text = '''
+图例解释：
+红线：KPI  为达标7日ROI。
+橙线：sum 7roi 为里程碑开始至昨日 累计7日ROI。
+蓝线：daily cost 每日花费金额。
+绿线：Sum Cost ok 为里程碑开始至昨日 达标花费金额。达标计算方式详见 备注 章节。 
+黄色竖虚线：full7dayEndDate 为满7日分割线，虚线左侧为满7日数据，虚线右侧为未满7日数据。
+    '''
+    addText(tenantAccessToken, docId, '', text)
+
+    # 将JP_AOS NOJP_AOS 两张图片横向并排 合并成一张图片
+    
+    merge_images_horizontally('/src/data/th_milestones_JP_AOS.png', '/src/data/th_milestones_NOJP_AOS.png', '/src/data/th_milestones_AOS.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_AOS.png')
+    merge_images_horizontally('/src/data/th_milestones_JP_IOS.png', '/src/data/th_milestones_NOJP_IOS.png', '/src/data/th_milestones_IOS.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_IOS.png')
+    
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_AOS.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_AOS.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_IOS.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_IOS.csv',view_type = 1)
+
+    addHead2(tenantAccessToken, docId, '', 'Applivin：')
+
+    merge_images_horizontally('/src/data/th_milestones_JP_AOS_7D.png', '/src/data/th_milestones_NOJP_AOS_7D.png', '/src/data/th_milestones_AOS_7D.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_AOS_7D.png')
+    merge_images_horizontally('/src/data/th_milestones_JP_IOS_7D.png', '/src/data/th_milestones_NOJP_IOS_7D.png', '/src/data/th_milestones_IOS_7D.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_IOS_7D.png')
+    merge_images_horizontally('/src/data/th_milestones_JP_AOS_28D.png', '/src/data/th_milestones_NOJP_AOS_28D.png', '/src/data/th_milestones_AOS_28D.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_AOS_28D.png')
+    merge_images_horizontally('/src/data/th_milestones_JP_IOS_28D.png', '/src/data/th_milestones_NOJP_IOS_28D.png', '/src/data/th_milestones_IOS_28D.png')
+    addImage(tenantAccessToken, docId, '', '/src/data/th_milestones_IOS_28D.png')
+
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_AOS_7D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_AOS_7D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_IOS_7D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_IOS_7D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_AOS_28D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_AOS_28D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_JP_IOS_28D.csv',view_type = 1)
+    addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_NOJP_IOS_28D.csv',view_type = 1)
+
+
+    # 添加备注
+    addHead1(tenantAccessToken, docId, '', '备注')
+    addHead2(tenantAccessToken, docId, '', '里程碑要求')
+    addText(tenantAccessToken, docId, '', '里程碑要求没有找到数据库表格，目前写死在代码中，如果需要更改要求，请联系我。')
+
+    milestonesDf = getmilestonesData()
+    text = f'''
+里程碑开始时间：{milestonesDf['startday'].values[0]}
+里程碑目标达标总花费：{milestonesDf['target_usd'].values[0]:.0f}美元
+
+iOS JP 7ROI ：{milestonesDf['iOS_JP_7ROI'].values[0] * 100:.0f}%
+iOS noJP 7ROI ：{milestonesDf['iOS_noJP_7ROI'].values[0] * 100:.0f}%
+AOS JP 7ROI：{milestonesDf['Android_JP_7ROI'].values[0] * 100:.0f}%
+AOS noJP 7ROI：{milestonesDf['Android_noJP_7ROI'].values[0] * 100:.0f}%
+
+Applovin iOS JP 7DaysCampaign 7ROI ：{milestonesDf['iOS_JP_Applovin_7DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin iOS JP 28DaysCampaign 7ROI ：{milestonesDf['iOS_JP_Applovin_28DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin iOS noJP 7DaysCampaign 7ROI ：{milestonesDf['iOS_noJP_Applovin_7DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin iOS noJP 28DaysCampaign 7ROI ：{milestonesDf['iOS_noJP_Applovin_28DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin AOS JP 7DaysCampaign 7ROI：{milestonesDf['Android_JP_Applovin_7DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin AOS JP 28DaysCampaign 7ROI：{milestonesDf['Android_JP_Applovin_28DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin AOS noJP 7DaysCampaign 7ROI：{milestonesDf['Android_noJP_Applovin_7DCampaign_7ROI'].values[0] * 100:.0f}%
+Applovin AOS noJP 28DaysCampaign 7ROI：{milestonesDf['Android_noJP_Applovin_28DCampaign_7ROI'].values[0] * 100:.0f}%
+    '''
+    addText(tenantAccessToken, docId, '', text)
+    addHead2(tenantAccessToken, docId, '', '里程碑达标计算方式')
+    text = f'''
+从里程碑开始时间计算，计算累计的花费与累计的7日收入，并通过 累计的7日收入/累计的花费 获得累计7日ROI。
+目前维度细分 按照 分平台 + 分国家，分为4个分类 与 他们的KPI 如下：
+iOS JP：累计7日ROI {milestonesDf['iOS_JP_7ROI'].values[0] * 100:.0f}%
+iOS noJP：累计7日ROI {milestonesDf['iOS_noJP_7ROI'].values[0] * 100:.0f}%
+AOS JP：累计7日ROI {milestonesDf['Android_JP_7ROI'].values[0] * 100:.0f}%
+AOS noJP：累计7日ROI {milestonesDf['Android_noJP_7ROI'].values[0] * 100:.0f}%
+当累计ROI大于等于KPI时，达标花费等于 累计花费。否则达标花费 为 0。
+大盘达标花费 = 所有分类 达标花费 的和。
+    '''
+    addText(tenantAccessToken, docId, '', text)
 
     docUrl = 'https://rivergame.feishu.cn/docx/'+docId
     return docUrl

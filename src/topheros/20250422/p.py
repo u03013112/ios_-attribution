@@ -182,8 +182,10 @@ def predict():
 
     # 基于roiList预测后面roi270,roi300, roi330, roi360
     # 使用对数模型拟合
-    x_data = np.array([30, 60, 90, 120, 150, 180, 210, 240])
+    # x_data = np.array([30, 60, 90, 120, 150, 180, 210, 240])
+    x_data = np.array([30, 60, 90, 120, 150, 180, 210])
     y_data = np.array(roiList)
+    y_data = y_data[:len(x_data)]
 
     def log_model(x, a, b):
         return a * np.log(x) + b
@@ -199,7 +201,8 @@ def predict():
     print(f'每个点的误差MAPE: {mape_values}')
 
     # 预测后续的roi270, roi300, roi330, roi360
-    future_x = np.array([270, 300, 330, 360])
+    # future_x = np.array([270, 300, 330, 360])
+    future_x = np.array([240, 270, 300, 330, 360])
     future_roi = log_model(future_x, a, b)
     print('预测的ROI:', future_roi)
 
@@ -297,7 +300,7 @@ def debug():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
     # debug()
     predict()
 

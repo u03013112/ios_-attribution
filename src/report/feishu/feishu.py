@@ -143,6 +143,43 @@ def addHead2(tenantAccessToken,documentId,blockId,title):
     else:
         raise Exception(f"Error: {response.status_code}, {response.text}")
 
+
+def addHead3(tenantAccessToken,documentId,blockId,title):
+    # blockId 为空的时候 blockId = documentId
+
+    if not blockId or blockId == '':
+        blockId = documentId
+
+    url = f'https://open.feishu.cn/open-apis/docx/v1/documents/{documentId}/blocks/{blockId}/children'
+    headers = {
+        'Authorization': f'Bearer {tenantAccessToken}',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        'children': [
+            {
+                'block_type': 5,
+                'heading3': {
+                    'elements': [
+                        {
+                            'text_run': {
+                                'content': title
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Error: {response.status_code}, {response.text}")
+
+
 # text_color 1：红色 ,2：橙色 ,3：黄色 ,4：绿色 ,5：蓝色 ,6：紫色 ,7：灰色
 def addText(tenantAccessToken,documentId,blockId,text,text_color = 0,bold = False):
     # blockId 为空的时候 blockId = documentId
