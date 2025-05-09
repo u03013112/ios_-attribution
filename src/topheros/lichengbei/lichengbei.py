@@ -16,9 +16,9 @@ from src.maxCompute import execSql
 def getmilestonesData():
     # 如果有改变，手动更改这个表，或者改为从数据库中读取
     milestones20250426Df = pd.DataFrame({
-        # 'startday': ['20250426'],
-        # for test
-        'startday': ['20250326'],
+        'startday': ['20250426'],
+        # # for test
+        # 'startday': ['20250326'],
         'target_usd': [35000000],
 
         'iOS_noJP_7ROI': [0.15],        
@@ -355,6 +355,7 @@ def totalAndPlatformCountry(dayStr,reportData):
     ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     ax.plot(allDf['install_day'], allDf['sum_cost'], label='Sum Cost', color='blue')
+    ax.fill_between(allDf['install_day'], allDf['sum_cost_ok'], color='green', alpha=0.5)
     ax.plot(allDf['install_day'], allDf['sum_cost_ok'], label='Sum Cost ok', color='green')
     ax.axhline(y=milestonesCost, color='red', label='KPI Cost')
     ax.axvline(x=full7dayEndDate, color='orange', linestyle='--', label='full7dayEndDate')
@@ -809,7 +810,13 @@ def report(reportData):
     print('docId:', docId)
 
     addHead1(tenantAccessToken, docId, '', '文档说明')
-    addText(tenantAccessToken, docId, '', '本文档每周一自动生成，获得从最近里程碑开始到上周数据。\n')
+    readmeText = '''
+本文档每周一自动生成，获得从最近里程碑开始到上周日数据。
+鉴于里程碑需要7日ROI，主要参考数据为满7日数据，即截止到上上周日数据。
+主要目标是大盘的里程碑达标总花费金额。其中 主要参考 分平台+分国家 KPI 指标。
+applivin的分7日 28日 campaign的KPI暂时只做参考，没有将这个指标放入总体的里程碑达标金额中。
+'''
+    addText(tenantAccessToken, docId, '', readmeText,text_color = 5)
 
     addHead1(tenantAccessToken, docId, '', '里程碑进度')
     allDf = reportData['allDf']
@@ -820,6 +827,7 @@ def report(reportData):
     text1 += f"目前累计里程碑达标花费金额{costOk:.0f}美元，完成{costOkRate:.2f}%\n"
     
     addText(tenantAccessToken, docId, '', text1)
+    warningText = ''
 
     # 为了计算环比，先计算本周与上周的时间范围
     # 由于需要满7日数据，这里的本周指的是上上周，上周则是3周之前
@@ -831,10 +839,9 @@ def report(reportData):
 
     if reportData['days'] < 14:
         addText(tenantAccessToken, docId, '', '里程碑进度(满7日数据）不足14天，暂不进行环比与细分 分析。')
+        warningText += f"里程碑进度(满7日数据）不足14天，暂不进行环比与细分 分析。\n"
     else:
         addHead2(tenantAccessToken, docId,'', '大盘')
-
-        warningText = ''
 
         # allDf = reportData['allDf']
         thisWeekCost = allDf[allDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - allDf[allDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
@@ -936,10 +943,15 @@ def report(reportData):
     addHead1(tenantAccessToken, docId, '', '风险提示')
     # 如果本周里程碑达标花费金额增长为负数，说明最近有部分平台+国家的投放数据不达标，需要警惕。
     # 如果本周里程碑达标花费金额增长为负数，且本周期的平均ROI低于KPI，说明正在加剧里程碑不达标的风险。
-    addText(tenantAccessToken, docId, '', warningText,bold=True)
+    addText(tenantAccessToken, docId, '', warningText,text_color=2,bold=True)
 
     # 参考数据
     addHead1(tenantAccessToken, docId, '', '参考数据')
+    readmeText = '''
+这部分数据主要是为了直观的看出各部分的里程碑达标花费金额情况。
+请仔细看图例解释，如有不明白随时找我。
+    '''
+    addText(tenantAccessToken, docId, '', readmeText,text_color = 5)
     addHead2(tenantAccessToken, docId, '', '大盘')
     addFile(tenantAccessToken, docId, '', '/src/data/th_milestones_all.csv',view_type = 1)
     addHead3(tenantAccessToken, docId, '', '图例解释：')

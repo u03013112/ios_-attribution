@@ -202,7 +202,7 @@ def predict():
 
     # 预测后续的roi270, roi300, roi330, roi360
     # future_x = np.array([270, 300, 330, 360])
-    future_x = np.array([240, 270, 300, 330, 360])
+    future_x = np.array([240, 270, 300, 330, 360, 390, 420, 450, 480, 510, 540, 570, 600, 630, 660, 690, 720])
     future_roi = log_model(future_x, a, b)
     print('预测的ROI:', future_roi)
 
