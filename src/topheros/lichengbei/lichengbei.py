@@ -821,17 +821,17 @@ def report(reportData):
     
     addText(tenantAccessToken, docId, '', text1)
 
+    # 为了计算环比，先计算本周与上周的时间范围
+    # 由于需要满7日数据，这里的本周指的是上上周，上周则是3周之前
+    today = datetime.datetime.strptime(reportData['todayStr'], '%Y%m%d')
+    thisWeekStart = today - datetime.timedelta(days=today.weekday()) - datetime.timedelta(days=14)
+    thisWeekEnd = thisWeekStart + datetime.timedelta(days=6)
+    lastWeekStart = thisWeekStart - datetime.timedelta(days=7)
+    lastWeekEnd = thisWeekStart - datetime.timedelta(days=1)
+
     if reportData['days'] < 14:
         addText(tenantAccessToken, docId, '', '里程碑进度(满7日数据）不足14天，暂不进行环比与细分 分析。')
     else:
-        # 为了计算环比，先计算本周与上周的时间范围
-        # 由于需要满7日数据，这里的本周指的是上上周，上周则是3周之前
-        today = datetime.datetime.strptime(reportData['todayStr'], '%Y%m%d')
-        thisWeekStart = today - datetime.timedelta(days=today.weekday()) - datetime.timedelta(days=14)
-        thisWeekEnd = thisWeekStart + datetime.timedelta(days=6)
-        lastWeekStart = thisWeekStart - datetime.timedelta(days=7)
-        lastWeekEnd = thisWeekStart - datetime.timedelta(days=1)
-
         addHead2(tenantAccessToken, docId,'', '大盘')
 
         warningText = ''
@@ -847,9 +847,10 @@ def report(reportData):
         addText(tenantAccessToken, docId, '', text2)
 
         if thisWeekCost < 0:
-            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。说明最近有部分平台+国家的投放数据不达标，需要警惕。\n"
+            warningText += f"大盘 本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。说明最近有部分平台+国家的投放数据不达标，需要警惕。\n"
             
-        addHead2(tenantAccessToken, docId, '', 'AOS JP')
+        addHead2(tenantAccessToken, docId, '', '细分')
+        addHead3(tenantAccessToken, docId, '', 'AOS JP')
         JP_AOSDf = reportData['JP_AOSDf']
         thisWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         lastWeekCost = JP_AOSDf[JP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_AOSDf[JP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
@@ -860,17 +861,17 @@ def report(reportData):
         addText(tenantAccessToken, docId, '', text3)
 
         if thisWeekCost < 0:
-            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
-            thisWeekDf = JP_AOSDf[JP_AOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            warningText += f"安卓+JP 本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = JP_AOSDf[JP_AOSDf['install_day'].between(pd.to_datetime(thisWeekStart.strftime('%Y%m%d')), pd.to_datetime(thisWeekEnd.strftime('%Y%m%d')))]
             thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
             kpi = thisWeekDf['KPI'].values[0]
             if thisWeekROI < kpi:
-                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+                warningText += f"且本周期的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
             else:
-                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
+                warningText += f"但本周期的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
 
 
-        addHead2(tenantAccessToken, docId, '', 'AOS NOJP')
+        addHead3(tenantAccessToken, docId, '', 'AOS NOJP')
         NOJP_AOSDf = reportData['NOJP_AOSDf']
         thisWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         lastWeekCost = NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_AOSDf[NOJP_AOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
@@ -881,16 +882,16 @@ def report(reportData):
         addText(tenantAccessToken, docId, '', text4)
 
         if thisWeekCost < 0:
-            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
-            thisWeekDf = NOJP_AOSDf[NOJP_AOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            warningText += f"安卓+非JP 本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = NOJP_AOSDf[NOJP_AOSDf['install_day'].between(pd.to_datetime(thisWeekStart.strftime('%Y%m%d')), pd.to_datetime(thisWeekEnd.strftime('%Y%m%d')))]
             thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
             kpi = thisWeekDf['KPI'].values[0]
             if thisWeekROI < kpi:
-                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+                warningText += f"且本周期的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
             else:
-                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
+                warningText += f"但本周期的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
 
-        addHead2(tenantAccessToken, docId, '', 'IOS JP')
+        addHead3(tenantAccessToken, docId, '', 'IOS JP')
         JP_IOSDf = reportData['JP_IOSDf']
         thisWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         lastWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
@@ -901,16 +902,16 @@ def report(reportData):
         addText(tenantAccessToken, docId, '', text5)
 
         if thisWeekCost < 0:
-            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
-            thisWeekDf = JP_IOSDf[JP_IOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            warningText += f"iOS+JP 本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = JP_IOSDf[JP_IOSDf['install_day'].between(pd.to_datetime(thisWeekStart.strftime('%Y%m%d')), pd.to_datetime(thisWeekEnd.strftime('%Y%m%d')))]
             thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
             kpi = thisWeekDf['KPI'].values[0]
             if thisWeekROI < kpi:
-                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+                warningText += f"且本周期的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
             else:
-                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
+                warningText += f"但本周期的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
         
-        addHead2(tenantAccessToken, docId, '', 'IOS NOJP')
+        addHead3(tenantAccessToken, docId, '', 'IOS NOJP')
         NOJP_IOSDf = reportData['NOJP_IOSDf']
         thisWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         lastWeekCost = NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - NOJP_IOSDf[NOJP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
@@ -921,20 +922,20 @@ def report(reportData):
         addText(tenantAccessToken, docId, '', text6)
 
         if thisWeekCost < 0:
-            warningText += f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
-            thisWeekDf = NOJP_IOSDf[NOJP_IOSDf['install_day'].isbetween(thisWeekStart.strftime('%Y%m%d'), thisWeekEnd.strftime('%Y%m%d'))]
+            warningText += f"iOS+非JP 本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为负数{thisWeekCost:.0f}。"
+            thisWeekDf = NOJP_IOSDf[NOJP_IOSDf['install_day'].between(pd.to_datetime(thisWeekStart.strftime('%Y%m%d')), pd.to_datetime(thisWeekEnd.strftime('%Y%m%d')))]
             thisWeekROI = thisWeekDf['r7usd'].sum() / thisWeekDf['cost'].sum()
             kpi = thisWeekDf['KPI'].values[0]
             if thisWeekROI < kpi:
-                warningText += f"且本周的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
+                warningText += f"且本周期的平均ROI低于KPI，正在加剧里程碑不达标的风险。\n"
             else:
-                warningText += f"且本周的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
+                warningText += f"但本周期的平均ROI高于KPI，正在缓解里程碑不达标的风险。\n"
         
 
     #风险提示
     addHead1(tenantAccessToken, docId, '', '风险提示')
     # 如果本周里程碑达标花费金额增长为负数，说明最近有部分平台+国家的投放数据不达标，需要警惕。
-    # 如果本周里程碑达标花费金额增长为负数，且本周的平均ROI低于KPI，说明正在加剧里程碑不达标的风险。
+    # 如果本周里程碑达标花费金额增长为负数，且本周期的平均ROI低于KPI，说明正在加剧里程碑不达标的风险。
     addText(tenantAccessToken, docId, '', warningText,bold=True)
 
     # 参考数据
@@ -1088,4 +1089,3 @@ def historyData():
 
 if __name__ == '__main__':
     main('20250505')
-    
