@@ -1082,6 +1082,9 @@ def main(dayStr = None):
     testWebhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/acceb43c-5da3-47a2-987f-fc7228449a9c'
 
     webhookUrl = testWebhookUrl
+
+    webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/b468a249-0c13-414c-9070-fb75d1031c53'
+    
     sendMessageToWebhook2(f"TopHeros 里程碑进度速读AI版 {reportData['todayStr']} 报告已生成",message,'详细报告',docUrl,webhookUrl)
         
     
