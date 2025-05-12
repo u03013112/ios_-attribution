@@ -108,7 +108,7 @@ def totalAndPlatformCountry(dayStr,reportData):
     today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 计算满7日数据截止日期
-    full7dayEndDate = today - datetime.timedelta(days=8)
+    full7dayEndDate = today - datetime.timedelta(days=7)
 
     milestonesDf = getmilestonesData()
     startdayStr = milestonesDf['startday'].values[0]
@@ -379,7 +379,7 @@ def applovin(dayStr,reportData):
     # today = today.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 计算满7日数据截止日期
-    full7dayEndDate = today - datetime.timedelta(days=8)
+    full7dayEndDate = today - datetime.timedelta(days=7)
     
 
     print('today:', today.strftime('%Y%m%d'),' full7dayEndDate:', full7dayEndDate.strftime('%Y%m%d'))
@@ -817,14 +817,16 @@ def report(reportData):
 applivin的分7日 28日 campaign的KPI暂时只做参考，没有将这个指标放入总体的里程碑达标金额中。
 '''
     addText(tenantAccessToken, docId, '', readmeText,text_color = 5)
+    addText(tenantAccessToken, docId, '', '本文档只包含海外安卓与iOS，不包含越南和windows',bold = True ,text_color = 1)
 
     addHead1(tenantAccessToken, docId, '', '里程碑进度')
     allDf = reportData['allDf']
+    cost = allDf[allDf['install_day'] == reportData['endDay']]['sum_cost'].sum()
     costOk = allDf[allDf['install_day'] == reportData['endDay']]['sum_cost_ok'].sum()
     costOkRate = costOk / reportData['milestonesTargetUsd'] * 100
 
     text1 = f"目前里程碑于{reportData['startDay']}开始，截止目前满7日数据（{reportData['endDay']}），共计{reportData['days']}天。\n"
-    text1 += f"目前累计里程碑达标花费金额{costOk:.0f}美元，完成{costOkRate:.2f}%\n"
+    text1 += f"截止目前满7日 累计里花费{cost:.0f}美元，程碑达标花费金额{costOk:.0f}美元，完成{costOkRate:.2f}%\n"
     
     addText(tenantAccessToken, docId, '', text1)
     warningText = ''
@@ -902,10 +904,13 @@ applivin的分7日 28日 campaign的KPI暂时只做参考，没有将这个指�
         JP_IOSDf = reportData['JP_IOSDf']
         thisWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == thisWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == thisWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
         lastWeekCost = JP_IOSDf[JP_IOSDf['install_day'] == lastWeekEnd.strftime('%Y%m%d')]['sum_cost_ok'].sum() - JP_IOSDf[JP_IOSDf['install_day'] == lastWeekStart.strftime('%Y%m%d')]['sum_cost_ok'].sum()
-        weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
-        op = '上升' if weekOnWeekCostRate > 0 else '下降'
-        weekOnWeekCostRate = abs(weekOnWeekCostRate)
-        text5 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
+        if lastWeekCost == 0:
+            text5 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额为0，无法计算环比。"
+        else:
+            weekOnWeekCostRate = (thisWeekCost - lastWeekCost)/lastWeekCost * 100
+            op = '上升' if weekOnWeekCostRate > 0 else '下降'
+            weekOnWeekCostRate = abs(weekOnWeekCostRate)
+            text5 = f"本周期（{thisWeekStart.strftime('%Y%m%d')}~{thisWeekEnd.strftime('%Y%m%d')}）里程碑达标花费金额增长为{thisWeekCost:.0f}，环比上周期（{lastWeekStart.strftime('%Y%m%d')}~{lastWeekEnd.strftime('%Y%m%d')}）{op}{weekOnWeekCostRate:.2f}%。"
         addText(tenantAccessToken, docId, '', text5)
 
         if thisWeekCost < 0:
@@ -1100,4 +1105,5 @@ def historyData():
 
 
 if __name__ == '__main__':
-    main('20250505')
+    # main('20250505')
+    main()
