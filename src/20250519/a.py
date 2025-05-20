@@ -164,6 +164,7 @@ def main():
     costDf.loc[costDf['mediasource'].isin(mediaList) == False, 'mediasource'] = 'other'
     costDf = costDf.groupby(['install_day', 'mediasource']).agg({'usd': 'sum'}).reset_index()
     costDf = costDf.sort_values(by=['install_day', 'mediasource'], ascending=[False, True])
+    costDf = costDf.rename(columns={'usd': 'cost'})
     print(costDf.head(10))
 
     revenueDf = getRevenueData()
@@ -179,7 +180,77 @@ def main():
     skaRevenueDf = skaRevenueDf.groupby(['install_date', 'media_source']).agg({'ska_revenue': 'sum'}).reset_index()
     skaRevenueDf = skaRevenueDf.sort_values(by=['install_date', 'media_source'], ascending=[False, True])
     skaRevenueDf = skaRevenueDf.rename(columns={'install_date': 'install_day'})
+    skaRevenueDf = skaRevenueDf[skaRevenueDf['install_day'] >= 20250101]
     print(skaRevenueDf.head(10))
 
+    # 将所有数据汇总到一个表中，画图进行主观观察
+    costSumDf = costDf.groupby(['install_day']).agg({'cost': 'sum'}).reset_index()
+    skaRevenueSumDf = skaRevenueDf.groupby(['install_day']).agg({'ska_revenue': 'sum'}).reset_index()
+    totalDf = pd.merge(skaRevenueSumDf, revenueDf, how='left', left_on='install_day', right_on='install_day')
+    totalDf = pd.merge(totalDf, costSumDf, how='left', left_on='install_day', right_on='install_day')
+
+    totalDf.to_csv('/src/data/lw_20250519_total.csv', index=False)
+
+    totalDf = totalDf[
+        (totalDf['install_day'] >= 20250106)
+        & (totalDf['install_day'] <= 20250323)
+    ]
+    totalDf['install_day'] = pd.to_datetime(totalDf['install_day'].astype(str), format='%Y%m%d')
+    totalDf['install_week'] = totalDf['install_day'].dt.strftime('%Y-%W')
+    # 计算totalDf 中r24h_usd和ska_revenue的相关性
+    correlation = totalDf['r24h_usd'].corr(totalDf['ska_revenue'])
+    print(f"Correlation between r24h_usd and ska_revenue: {correlation}")
+
+    totalGroupByWeekDf = totalDf.groupby(['install_week']).agg({
+        'r24h_usd': 'sum',
+        'ska_revenue': 'sum',
+        'cost': 'sum'
+    }).reset_index()
+    totalGroupByWeekDf = totalGroupByWeekDf.sort_values(by=['install_week'], ascending=[False])
+    totalGroupByWeekDf.to_csv('/src/data/lw_20250519_total_groupbyweek.csv', index=False)
+    correlation = totalGroupByWeekDf['r24h_usd'].corr(totalGroupByWeekDf['ska_revenue'])
+    print(f"Correlation between r24h_usd and ska_revenue (weekly): {correlation}")
+    
+def androidOrganic():
+    filename = '/src/data/lw_20250519_android_organic.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        sql = """
+SELECT
+    install_day,
+    SUM(
+        CASE
+            WHEN event_time - install_timestamp BETWEEN 0
+            AND 24 * 3600 THEN revenue_value_usd
+            ELSE 0
+        END
+    ) AS all_r24h_usd,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic'
+            AND event_time - install_timestamp BETWEEN 0
+            AND 24 * 3600 THEN revenue_value_usd
+            ELSE 0
+        END
+    ) AS o_r24h_usd
+FROM
+    dwd_overseas_revenue_allproject
+WHERE
+    zone = '0'
+    AND app = 502
+    AND app_package = 'com.fun.lastwar.gp'
+    AND day >= '20250101'
+    and install_day >= '20250101'
+GROUP BY
+    install_day
+;
+        """
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+
+    return df
+
 if __name__ == "__main__":
-    main()
+    # main()
+    androidOrganic()
