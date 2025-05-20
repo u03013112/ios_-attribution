@@ -149,14 +149,36 @@ GROUP BY
         df.to_csv(filename, index=False)
     return df
 
+# 大盘，不分国家
 def main():
+    mediaList = [
+        'googleadwords_int','Facebook Ads','applovin_int','tiktokglobal_int','other'
+    ]
+
     costDf = getCostData()
+    costDf.replace({
+        'mediasource': {
+            'bytedanceglobal_int':'tiktokglobal_int',
+        }
+    }, inplace=True)
+    costDf.loc[costDf['mediasource'].isin(mediaList) == False, 'mediasource'] = 'other'
+    costDf = costDf.groupby(['install_day', 'mediasource']).agg({'usd': 'sum'}).reset_index()
+    costDf = costDf.sort_values(by=['install_day', 'mediasource'], ascending=[False, True])
     print(costDf.head(10))
 
     revenueDf = getRevenueData()
+    revenueDf = revenueDf.groupby(['install_day']).agg({'r24h_usd': 'sum'}).reset_index()
+    revenueDf = revenueDf.sort_values(by=['install_day'], ascending=[False])
     print(revenueDf.head(10))
 
     skaRevenueDf = getSKARevenue()
+    # skaRevenueDf.replace({'media_source': {
+    #     ''
+    # }}, inplace=True)
+    skaRevenueDf.loc[skaRevenueDf['media_source'].isin(mediaList) == False, 'media_source'] = 'other'
+    skaRevenueDf = skaRevenueDf.groupby(['install_date', 'media_source']).agg({'ska_revenue': 'sum'}).reset_index()
+    skaRevenueDf = skaRevenueDf.sort_values(by=['install_date', 'media_source'], ascending=[False, True])
+    skaRevenueDf = skaRevenueDf.rename(columns={'install_date': 'install_day'})
     print(skaRevenueDf.head(10))
 
 if __name__ == "__main__":
