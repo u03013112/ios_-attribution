@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # 模拟数据
 np.random.seed(42)
-n_samples = 1000
+n_samples = 100
 media1_ad_spend = np.random.normal(1000, 200, n_samples)
 media2_ad_spend = np.random.normal(2000, 300, n_samples)
 
@@ -23,7 +23,7 @@ revenue = (beta_0_true +
 # 贝叶斯模型
 with pm.Model() as model:
     # 先验分布
-    beta_0 = pm.Normal('beta_0', mu=0, sigma=100)
+    beta_0 = pm.Normal('beta_0', mu=1000, sigma=100)
     beta_1 = pm.Normal('beta_1', mu=0, sigma=1)
     beta_2 = pm.Normal('beta_2', mu=0, sigma=1)
     epsilon = pm.HalfNormal('epsilon', sigma=50)
