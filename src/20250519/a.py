@@ -128,16 +128,15 @@ FROM
 		)
 		SELECT
 			install_date,
-			COALESCE(cdm_laswwar_country_map.countrygroup, 'OTHER') AS country,
+            CASE
+			WHEN t1.country IN ('T1', 'T2', 'T3', 'GCC') THEN t1.country
+                ELSE COALESCE(cdm_laswwar_country_map.countrygroup, 'OTHER')
+            END AS country,
 			media_source,
-			SUM(revenue) AS revenue
+			revenue
 		FROM
 			t1
 			left join cdm_laswwar_country_map on t1.country = cdm_laswwar_country_map.country
-		group by
-			install_date,
-			countrygroup,
-			media_source
 	)
 GROUP BY
 	install_date,
@@ -210,6 +209,44 @@ def main():
     totalGroupByWeekDf.to_csv('/src/data/lw_20250519_total_groupbyweek.csv', index=False)
     correlation = totalGroupByWeekDf['r24h_usd'].corr(totalGroupByWeekDf['ska_revenue'])
     print(f"Correlation between r24h_usd and ska_revenue (weekly): {correlation}")
+
+# 所有媒体都算上
+def bayesianTotalDataPrepare2():
+    mediaList = [
+        'googleadwords_int','Facebook Ads','applovin_int','tiktokglobal_int'
+    ]
+
+    revenueDf = getRevenueData()
+    revenueDf = revenueDf.groupby(['install_day']).agg({'r24h_usd': 'sum'}).reset_index()
+    revenueDf = revenueDf.sort_values(by=['install_day'], ascending=[False])
+
+    skaRevenueDf = getSKARevenue()
+    skaRevenueDf.loc[skaRevenueDf['media_source'].isin(mediaList) == False, 'media_source'] = 'other'
+    skaRevenueDf = skaRevenueDf.groupby(['install_date', 'media_source']).agg({'ska_revenue': 'sum'}).reset_index()
+    skaRevenueDf = skaRevenueDf.sort_values(by=['install_date', 'media_source'], ascending=[False, True])
+    skaRevenueDf = skaRevenueDf.rename(columns={'install_date': 'install_day'})
+    skaRevenueDf = skaRevenueDf[skaRevenueDf['install_day'] >= 20250101]
+    # # 只保留指定的media_source，其他媒体暂时不要
+    # skaRevenueDf = skaRevenueDf[skaRevenueDf['media_source'].isin(mediaList)]
+
+    # 将skaRevenueDf 转成 install_day，googleadwords_int revenue，Facebook Ads revenue，applovin_int revenue，tiktokglobal_int revenue的格式
+    skaRevenueDf = skaRevenueDf.pivot(index='install_day', columns='media_source', values='ska_revenue')
+
+    prepareDf = pd.merge(skaRevenueDf, revenueDf, how='left', left_on='install_day', right_on='install_day')
+
+    return prepareDf
+def bayesianTotalData2():
+    prepareDf = bayesianTotalDataPrepare2()
+    prepareDf = prepareDf[(prepareDf['install_day'] >= 20250106) & (prepareDf['install_day'] <= 20250323)]
+    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
+    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
+    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
+    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
+    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
+    print(prepareWeekDf.head(10))
+
+    prepareWeekDf.to_csv('/src/data/lw_20250519_bayesian_total_week2.csv', index=False)
+
 
 # 贝叶斯模型拟合大盘
 def bayesianTotalDataPrepare():
@@ -331,4 +368,5 @@ if __name__ == "__main__":
     # main()
     # androidOrganic()
     # bayesianTotalData()
-    bayesianGroupbyCountryData()
+    # bayesianGroupbyCountryData()
+    bayesianTotalData2()
