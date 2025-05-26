@@ -1,65 +1,23 @@
 # SKA校准版本 延长数据时间版本，之前是使用11周，改为更久从2024-07-28开始，避开2024-07-06更改CV Mapping影响
-
+# 改为周期版本，定期的更新数据
+# 另外使用新的docker container
+# 使用docker exec -it pymc python src/20250519/p20250512longNew.py
 
 import os
+import datetime
 import arviz as az
 import pandas as pd
 import pymc as pm
 import numpy as np
 import matplotlib.pyplot as plt
+
 import sys
-sys.path.append('../../')
+sys.path.append('/src')
+sys.path.append('../..')
 from src.maxCompute import execSql
 
-def getCostData():
-    filename = 'lw_20240729_costdata.csv'
-    if os.path.exists(filename):
-        df = pd.read_csv(filename)
-    else:
-        sql = """
-select
-	install_day,
-	mediasource,
-	country,
-	sum(usd) as usd
-from
-	(
-		select
-			install_day,
-			mediasource,
-			COALESCE(cdm_laswwar_country_map.countrygroup, 'OTHER') AS country,
-			sum(cost_value_usd) as usd
-		from
-			dws_overseas_public_roi
-			left join cdm_laswwar_country_map on dws_overseas_public_roi.country = cdm_laswwar_country_map.country
-		where
-			app = '502'
-			and facebook_segment in ('country', 'N/A')
-			and app_package = 'id6448786147'
-            and install_day >= '2024-07-01'
-		group by
-			install_day,
-			mediasource,
-			countrygroup
-	)
-group by
-	install_day,
-	mediasource,
-	country
-order by
-	install_day desc;
-        """
-        df = execSql(sql)
-        df.to_csv(filename, index=False)
-    
-    return df
-
 def getRevenueData():
-    filename = 'lw_20240729_revenuedata.csv'
-    if os.path.exists(filename):
-        df = pd.read_csv(filename)
-    else:
-        sql = """
+    sql = """
 SELECT
 	install_day,
 	SUM(r24h_usd) AS r24h_usd,
@@ -91,18 +49,14 @@ GROUP BY
 	install_day,
 	country
 ;
-        """
-        df = execSql(sql)
-        df.to_csv(filename, index=False)
+    """
+    df = execSql(sql)
 
+    df['install_day'] = df['install_day'].astype(str)
     return df
 
 def getSKARevenue():
-    filename = 'lw_20240729_ska_revenue.csv'
-    if os.path.exists(filename):
-        df = pd.read_csv(filename)
-    else:
-        sql = """
+    sql = """
 SELECT
 	install_date,
 	country,
@@ -148,9 +102,10 @@ GROUP BY
 	country,
 	media_source	
 ;
-        """
-        df = execSql(sql)
-        df.to_csv(filename, index=False)
+    """
+    df = execSql(sql)
+    df['install_date'] = df['install_date'].astype(str)
+
     return df
 
 def bayesianTotalDataPrepare():
@@ -167,11 +122,7 @@ def bayesianTotalDataPrepare():
     skaRevenueDf = skaRevenueDf.groupby(['install_date', 'media_source']).agg({'ska_revenue': 'sum'}).reset_index()
     skaRevenueDf = skaRevenueDf.sort_values(by=['install_date', 'media_source'], ascending=[False, True])
     skaRevenueDf = skaRevenueDf.rename(columns={'install_date': 'install_day'})
-    skaRevenueDf = skaRevenueDf[skaRevenueDf['install_day'] >= 20240729]
-    # # 只保留指定的media_source，其他媒体暂时不要
-    # skaRevenueDf = skaRevenueDf[skaRevenueDf['media_source'].isin(mediaList)]
-
-    # 将skaRevenueDf 转成 install_day，googleadwords_int revenue，Facebook Ads revenue，applovin_int revenue，tiktokglobal_int revenue的格式
+    
     skaRevenueDf = skaRevenueDf.pivot(index='install_day', columns='media_source', values='ska_revenue')
     skaRevenueDf.rename(
         columns={
@@ -182,49 +133,27 @@ def bayesianTotalDataPrepare():
             'other': 'other revenue'
         }, inplace=True
     )
-
     prepareDf = pd.merge(skaRevenueDf, revenueDf, how='left', left_on='install_day', right_on='install_day')
 
-    costDf = getCostData()
-    costDf.replace({
-        'mediasource': {
-            'bytedanceglobal_int':'tiktokglobal_int',
-        }
-    }, inplace=True)
-    costDf.loc[costDf['mediasource'].isin(mediaList) == False, 'mediasource'] = 'other'
-    costDf = costDf.groupby(['install_day','mediasource']).sum().reset_index()
-    costDf = costDf.pivot(index='install_day', columns='mediasource', values='usd')
-    costDf.rename(
-        columns={
-            'Facebook Ads': 'facebook cost',
-            'googleadwords_int': 'google cost',
-            'applovin_int': 'applovin cost',
-            'tiktokglobal_int': 'tiktok cost',
-            'other': 'other cost'
-        }, inplace=True
-    )
-
-    prepareDf = pd.merge(prepareDf, costDf, how='left', left_on='install_day', right_on='install_day')
-
     return prepareDf
+
 def bayesianTotalData():
-    filename = 'lw_20240729_bayesian_total_week.csv'
-    if os.path.exists(filename):
-        prepareDf = pd.read_csv(filename)
-    else:
-        prepareDf = bayesianTotalDataPrepare()
-        prepareDf = prepareDf[(prepareDf['install_day'] >= 20240729) & (prepareDf['install_day'] <= 20250323)]
-        prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
-        prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
-        prepareDf = prepareDf.drop(columns=['install_day'])
-        prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
-        prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
-        prepareWeekDf = prepareWeekDf.reset_index(drop=True)
-        # print(prepareWeekDf.head(10))
-        
-        prepareWeekDf.to_csv(filename, index=False)
+    prepareDf = bayesianTotalDataPrepare()
+    prepareDf = prepareDf[(prepareDf['install_day'] >= '20240729') & (prepareDf['install_day'] <= '20250323')]
     
-    return prepareDf
+    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
+    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
+    # print('prepareDf:')
+    # print(prepareDf[prepareDf['install_week'] == '2025-11'])
+
+    prepareDf = prepareDf.drop(columns=['install_day'])
+    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
+    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
+    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
+    # print('prepareWeekDf')
+    # print(prepareWeekDf.head(10))
+        
+    return prepareWeekDf
 
 def cc(summary, prepareDf):
     # 提取参数的均值作为估计值
@@ -285,30 +214,9 @@ def cc(summary, prepareDf):
     retDf = pd.DataFrame(data)
     return retDf,detailDf
 
-def aa(prepareDf):
-    df = prepareDf.copy()
-    # install_week,facebook revenue,applovin revenue,google revenue,other revenue,tiktok revenue,r24h_usd,facebook cost,applovin cost,google cost,other cost,tiktok cost
-    df['cost'] = df['facebook cost'] + df['applovin cost'] + df['google cost'] + df['other cost'] + df['tiktok cost']
-    df['roi24h'] = df['r24h_usd'] / df['cost']
-    df['facebook_roi'] = df['facebook revenue'] / df['facebook cost']
-    df['applovin_roi'] = df['applovin revenue'] / df['applovin cost']
-    df['google_roi'] = df['google revenue'] / df['google cost']
-    df['tiktok_roi'] = df['tiktok revenue'] / df['tiktok cost']
-    df['other_roi'] = df['other revenue'] / df['other cost']
-
-    kpi = 0.0184
-    # 达标周的各媒体roi均值
-    kpiDf = df[df['roi24h'] >= kpi].copy()
-    print('达标周/所有周：',f'{len(kpiDf)} / {len(df)}')
-    
-    return kpiDf[['facebook_roi', 'applovin_roi', 'google_roi', 'tiktok_roi', 'other_roi','roi24h']].mean()
-
 def bayesianTotalModel():
     prepareDf = bayesianTotalData()
-    kpiDf = aa(prepareDf)
-    print('达标周的各媒体roi均值：')
-    print(kpiDf)
-
+    prepareDf.to_csv('/src/data/prepareDf20250523.csv', index=False)
     organicRevenueConfigList = [
         {'mu':10000, 'sigma':2000},
         {'mu':20000, 'sigma':2000},
@@ -356,7 +264,7 @@ def bayesianTotalModel():
         
         resultDf = pd.concat([resultDf, retDf], ignore_index=True)
 
-    resultDf.to_csv('result.csv', index=False)
+    # resultDf.to_csv('result.csv', index=False)
     print(resultDf)
 
 def dd():
@@ -369,6 +277,43 @@ def dd():
     print(resultDf)
     resultDf.to_csv('result_kpi.csv', index=False)
 
+def main(dayStr = None):
+    if dayStr is None:
+        today = datetime.datetime.now()
+    else:
+        today = datetime.datetime.strptime(dayStr, '%Y%m%d')
+
+    # 如果不是周一，什么都不做
+    if today.weekday() != 0:
+        # print("今天不是周一，不执行数据准备。")
+        return
+    
+    todayStr = today.strftime('%Y%m%d')
+
+    prepareDf = bayesianTotalDataPrepare()
+    prepareDf = prepareDf[(prepareDf['install_day'] >= 20240729) & (prepareDf['install_day'] <= 20250323)]
+    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
+    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
+    prepareDf = prepareDf.drop(columns=['install_day'])
+    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
+    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
+    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
+
+# 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
+def historyData():
+    startDayStr = '20250101'
+    endDayStr = '20250430'
+
+    startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
+    endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
+
+    for i in range((endDay - startDay).days + 1):
+        day = startDay + datetime.timedelta(days=i)
+        dayStr = day.strftime('%Y%m%d')
+        # print(dayStr)
+        main(dayStr)
+
+
 if __name__ == '__main__':
     bayesianTotalModel()
-    dd()
+    # dd()

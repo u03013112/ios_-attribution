@@ -1,0 +1,16 @@
+# 使用 Python 3.11.3 的官方基础镜像
+FROM python:3.11.3-slim
+
+# 设置工作目录为 /app
+WORKDIR /app
+
+# 复制当前目录下的所有文件到容器的 /app 目录
+COPY requirements.txt /app
+
+# 安装项目依赖
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends g++ && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
