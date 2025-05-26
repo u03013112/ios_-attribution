@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append('/src')
 sys.path.append('../..')
-from src.maxCompute import execSql
+from src.maxCompute import execSql,getO
 
 def getRevenueData():
     sql = """
@@ -172,30 +172,25 @@ def cc(summary, prepareDf):
     })
 
     # 计算绝对百分比误差
-    absolute_percentage_error = np.abs((detailDf['actual_revenue'] - detailDf['predicted_revenue']) / detailDf['actual_revenue']) * 100
+    absolute_percentage_error = np.abs((detailDf['actual_revenue'] - detailDf['predicted_revenue']) / detailDf['actual_revenue'])
     
     # 计算 MAPE
     mape = np.mean(absolute_percentage_error)
     # print(f'MAPE: {mape:.2f}%')
 
     # 计算自然量占比
-    organicRatio = detailDf['organicRevenue_predicted'].sum() / detailDf['predicted_revenue'].sum() * 100
+    organicRatio = detailDf['organicRevenue_predicted'].sum() / detailDf['predicted_revenue'].sum()
     # print(f'Organic Ratio: {organicRatio:.2f}%')
 
     data = {
-        'organicRevenue_predicted': [f'{organicRevenue_mean:.2f}'],
-        # 'facebook X': [f'{facebookX_mean:.2f}'],
-        # 'applovin X': [f'{applovinX_mean:.2f}'],
-        # 'google X': [f'{googleX_mean:.2f}'],
-        # 'tiktok X': [f'{tiktokX_mean:.2f}'],
-        # 'other X': [f'{otherX_mean:.2f}'],
+        'organicRevenue_predicted': [organicRevenue_mean],
         'facebook X': [facebookX_mean],
         'applovin X': [applovinX_mean],
         'google X': [googleX_mean],
         'tiktok X': [tiktokX_mean],
         'other X': [otherX_mean],
-        'mape': [f'{mape:.2f}%'],
-        'organicRatio': [f'{organicRatio:.2f}%'],
+        'mape': [mape],
+        'organicRatio': [organicRatio],
     }
     
     retDf = pd.DataFrame(data)
@@ -313,6 +308,7 @@ def main(dayStr = None):
         summary = pm.summary(trace, hdi_prob=0.95)
 
         retDf,detailDf = cc(summary, prepareWeekDf)
+        retDf['organicRevenueMu'] = organicConfigRevenue['mu']
 
         detailDf.to_csv(f'detail_{organicConfigRevenue["mu"]}.csv', index=False)
         
@@ -326,18 +322,44 @@ def main(dayStr = None):
         print(f"No KPI found for {lastSundayStr}.")
         return
     
+    resultDf['kpi'] = kpi
     resultDf['facebook kpi'] = (kpi/resultDf['facebook X'])
     resultDf['applovin kpi'] = (kpi/resultDf['applovin X'])
     resultDf['google kpi'] = (kpi/resultDf['google X'])
     resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
+    resultDf['other kpi'] = (kpi/resultDf['other X'])
     print(resultDf)
     resultDf.to_csv('/src/data/result_{todayStr}_kpi.csv', index=False)
+
+
+    resultDf = resultDf.rename(
+        columns={
+            'organicRevenueMu': 'organic_revenue_mu',
+            'facebook X': 'facebook_x',
+            'applovin X': 'applovin_x',
+            'google X': 'google_x',
+            'tiktok X': 'tiktok_x',
+            'other X': 'other_x',
+            'mape': 'mape',
+            'organicRatio': 'organic_ratio',
+            'kpi': '24_hours_kpi',
+            'facebook kpi': 'facebook_kpi',
+            'applovin kpi': 'applovin_kpi',
+            'google kpi': 'google_kpi',
+            'tiktok kpi': 'tiktok_kpi',
+            'other kpi': 'other_kpi'
+        }
+    )
+    resultDf = resultDf[['organic_revenue_mu','applovin_x','facebook_x','google_x','tiktok_x','other_x','mape','organic_ratio','24_hours_kpi','applovin_kpi','facebook_kpi','google_kpi','tiktok_kpi','other_kpi']]
+    createTable()
+    deleteTable(todayStr)
+    writeTable(resultDf, todayStr)
 
 
 # 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
 def historyData():
     startDayStr = '20250101'
-    endDayStr = '20250430'
+    endDayStr = '20250526'
 
     startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
     endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
@@ -349,7 +371,45 @@ def historyData():
         main(dayStr)
 
 
+from odps.models import Schema, Column, Partition,TableSchema
+def createTable():
+    o = getO()
+    columns = [
+        Column(name='organic_revenue_mu', type='double', comment=''),
+        Column(name='applovin_x', type='double', comment=''),
+        Column(name='facebook_x', type='double', comment=''),
+        Column(name='google_x', type='double', comment=''),
+        Column(name='tiktok_x', type='double', comment=''),
+        Column(name='other_x', type='double', comment=''),
+        Column(name='mape', type='double', comment=''),
+        Column(name='organic_ratio', type='double', comment=''),
+        Column(name='24_hours_kpi', type='double', comment=''),
+        Column(name='applovin_kpi', type='double', comment=''),
+        Column(name='facebook_kpi', type='double', comment=''),
+        Column(name='google_kpi', type='double', comment=''),
+        Column(name='tiktok_kpi', type='double', comment=''),
+        Column(name='other_kpi', type='double', comment=''),
+    ]
+    
+    partitions = [
+        Partition(name='day', type='string', comment='')
+    ]
+    schema = Schema(columns=columns, partitions=partitions)
+    table = o.create_table('lastwar_ios_skan_kpi_table_20250526', schema, if_not_exists=True)
+    return table
+    
+def deleteTable(dayStr):
+    o = getO()
+    t = o.get_table('lastwar_ios_skan_kpi_table_20250526')
+    t.delete_partition('day=%s'%(dayStr), if_exists=True)
+
+def writeTable(df,dayStr):
+    o = getO()
+    t = o.get_table('lastwar_ios_skan_kpi_table_20250526')
+    t.delete_partition('day=%s'%(dayStr), if_exists=True)
+    with t.open_writer(partition='day=%s'%(dayStr), create_partition=True, arrow=True) as writer:
+        writer.write(df)
+
 if __name__ == '__main__':
-    # bayesianTotalModel()
-    # dd()
-    main()
+    historyData()  # 如果需要补充历史数据，取消注释
+    # main()

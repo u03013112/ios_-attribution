@@ -565,7 +565,7 @@ def prophet1FloorL(today = None,future_periods=90):
     
     # 最近3个月
     # last3Month = [yesterday - pd.offsets.MonthBegin(0), yesterday - pd.offsets.MonthBegin(1), yesterday - pd.offsets.MonthBegin(2)]
-    last3Month = [(yesterday - pd.DateOffset(months=i)).strftime('%Y-%m') for i in range(4, 1, -1)]
+    last3Month = [(yesterday - pd.DateOffset(months=i)).strftime('%Y-%m') for i in range(3, 0, -1)]
     # yyyy-mm格式,逗号分隔
     reportData['last3MonthStr'] = f'{last3Month[0]}，{last3Month[1]}和{last3Month[2]}'
     print('最近3个月:', reportData['last3MonthStr'])
