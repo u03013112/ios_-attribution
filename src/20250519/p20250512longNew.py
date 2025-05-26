@@ -184,17 +184,40 @@ def cc(summary, prepareDf):
 
     data = {
         'organicRevenue_predicted': [f'{organicRevenue_mean:.2f}'],
-        'facebook X': [f'{facebookX_mean:.2f}'],
-        'applovin X': [f'{applovinX_mean:.2f}'],
-        'google X': [f'{googleX_mean:.2f}'],
-        'tiktok X': [f'{tiktokX_mean:.2f}'],
-        'other X': [f'{otherX_mean:.2f}'],
+        # 'facebook X': [f'{facebookX_mean:.2f}'],
+        # 'applovin X': [f'{applovinX_mean:.2f}'],
+        # 'google X': [f'{googleX_mean:.2f}'],
+        # 'tiktok X': [f'{tiktokX_mean:.2f}'],
+        # 'other X': [f'{otherX_mean:.2f}'],
+        'facebook X': [facebookX_mean],
+        'applovin X': [applovinX_mean],
+        'google X': [googleX_mean],
+        'tiktok X': [tiktokX_mean],
+        'other X': [otherX_mean],
         'mape': [f'{mape:.2f}%'],
         'organicRatio': [f'{organicRatio:.2f}%'],
     }
     
     retDf = pd.DataFrame(data)
     return retDf,detailDf
+
+def getKPI(dayStr):
+    sql = f'''
+SELECT 
+    roi_h024_best
+FROM rg_bi.ads_predict_base_roi_day1_window_multkey
+    WHERE type = 'id6448786147'
+    AND country = 'ALL'
+    AND end_date = '{dayStr}'
+;
+    '''
+    df = execSql(sql)
+    if df.empty:
+        print(f"No ROI data found for {dayStr}.")
+        return None
+    kpi = df['roi_h024_best'].values[0]
+    print(f"KPI for {dayStr}: {kpi}")
+    return kpi
 
 def dd():
     resultDf = pd.read_csv('result.csv')
@@ -298,6 +321,17 @@ def main(dayStr = None):
     print(resultDf)
     resultDf.to_csv(f'/src/data/result_{todayStr}.csv', index=False)
 
+    kpi = getKPI(lastSundayStr)
+    if kpi is None:
+        print(f"No KPI found for {lastSundayStr}.")
+        return
+    
+    resultDf['facebook kpi'] = (kpi/resultDf['facebook X'])
+    resultDf['applovin kpi'] = (kpi/resultDf['applovin X'])
+    resultDf['google kpi'] = (kpi/resultDf['google X'])
+    resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
+    print(resultDf)
+    resultDf.to_csv('/src/data/result_{todayStr}_kpi.csv', index=False)
 
 
 # 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
