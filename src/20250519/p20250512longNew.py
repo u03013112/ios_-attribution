@@ -137,24 +137,6 @@ def bayesianTotalDataPrepare():
 
     return prepareDf
 
-def bayesianTotalData():
-    prepareDf = bayesianTotalDataPrepare()
-    prepareDf = prepareDf[(prepareDf['install_day'] >= '20240729') & (prepareDf['install_day'] <= '20250323')]
-    
-    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
-    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
-    # print('prepareDf:')
-    # print(prepareDf[prepareDf['install_week'] == '2025-11'])
-
-    prepareDf = prepareDf.drop(columns=['install_day'])
-    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
-    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
-    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
-    # print('prepareWeekDf')
-    # print(prepareWeekDf.head(10))
-        
-    return prepareWeekDf
-
 def cc(summary, prepareDf):
     # 提取参数的均值作为估计值
     organicRevenue_mean = summary.loc['organicRevenue', 'mean']
@@ -214,9 +196,58 @@ def cc(summary, prepareDf):
     retDf = pd.DataFrame(data)
     return retDf,detailDf
 
-def bayesianTotalModel():
-    prepareDf = bayesianTotalData()
-    prepareDf.to_csv('/src/data/prepareDf20250523.csv', index=False)
+def dd():
+    resultDf = pd.read_csv('result.csv')
+    kpi = 0.0184
+    resultDf['facebook kpi'] = (kpi/resultDf['facebook X'])
+    resultDf['applovin kpi'] = (kpi/resultDf['applovin X'])
+    resultDf['google kpi'] = (kpi/resultDf['google X'])
+    resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
+    print(resultDf)
+    resultDf.to_csv('result_kpi.csv', index=False)
+
+def main(dayStr = None):
+    if dayStr is None:
+        today = datetime.datetime.now()
+    else:
+        today = datetime.datetime.strptime(dayStr, '%Y%m%d')
+
+    # 如果不是周一，什么都不做
+    if today.weekday() != 0:
+        # print("今天不是周一，不执行数据准备。")
+        return
+    
+    todayStr = today.strftime('%Y%m%d')
+    # 由于SKA数据比较慢，在周一时上周数据并不完整，所以改为获取上上周数据。
+    lastSunday = today - datetime.timedelta(days=8)
+    lastSundayStr = lastSunday.strftime('%Y%m%d')
+    print(f"今天是周一，执行数据准备，今天日期：{todayStr}，上周日日期：{lastSundayStr}")
+
+    
+    prepareDf = bayesianTotalDataPrepare()
+    prepareDf = prepareDf[
+        (prepareDf['install_day'] >= '20240729') & 
+        (prepareDf['install_day'] <= lastSundayStr)
+    ]
+    # 排除一些SKAN数据不正常的时间段
+    exculdeList = [
+        {'start': '20250324', 'end': '20250701'},
+    ]
+    for exclude in exculdeList:
+        prepareDf = prepareDf[
+            (prepareDf['install_day'] < exclude['start']) | 
+            (prepareDf['install_day'] > exclude['end'])
+        ]
+
+    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
+    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
+    prepareDf = prepareDf.drop(columns=['install_day'])
+    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
+    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
+    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
+
+    prepareWeekDf.to_csv(f'/src/data/prepareWeekDf_{todayStr}.csv', index=False)
+
     organicRevenueConfigList = [
         {'mu':10000, 'sigma':2000},
         {'mu':20000, 'sigma':2000},
@@ -243,14 +274,14 @@ def bayesianTotalModel():
             otherX = pm.Normal('otherX', mu=1, sigma=0.1)
 
             mu = organicRevenue + \
-                facebookX * prepareDf['facebook revenue'] + \
-                applovinX * prepareDf['applovin revenue'] + \
-                googleX * prepareDf['google revenue'] + \
-                tiktokX * prepareDf['tiktok revenue'] + \
-                otherX * prepareDf['other revenue']
+                facebookX * prepareWeekDf['facebook revenue'] + \
+                applovinX * prepareWeekDf['applovin revenue'] + \
+                googleX * prepareWeekDf['google revenue'] + \
+                tiktokX * prepareWeekDf['tiktok revenue'] + \
+                otherX * prepareWeekDf['other revenue']
             
             # 似然函数
-            revenue_obs = pm.Normal('revenue_obs', mu=mu, sigma=3000, observed=prepareDf['r24h_usd'])
+            revenue_obs = pm.Normal('revenue_obs', mu=mu, sigma=3000, observed=prepareWeekDf['r24h_usd'])
 
             # 采样
             trace = pm.sample(1000)
@@ -258,46 +289,16 @@ def bayesianTotalModel():
         # 输出结果
         summary = pm.summary(trace, hdi_prob=0.95)
 
-        retDf,detailDf = cc(summary, prepareDf)
+        retDf,detailDf = cc(summary, prepareWeekDf)
 
         detailDf.to_csv(f'detail_{organicConfigRevenue["mu"]}.csv', index=False)
         
         resultDf = pd.concat([resultDf, retDf], ignore_index=True)
 
-    # resultDf.to_csv('result.csv', index=False)
     print(resultDf)
+    resultDf.to_csv(f'/src/data/result_{todayStr}.csv', index=False)
 
-def dd():
-    resultDf = pd.read_csv('result.csv')
-    kpi = 0.0184
-    resultDf['facebook kpi'] = (kpi/resultDf['facebook X'])
-    resultDf['applovin kpi'] = (kpi/resultDf['applovin X'])
-    resultDf['google kpi'] = (kpi/resultDf['google X'])
-    resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
-    print(resultDf)
-    resultDf.to_csv('result_kpi.csv', index=False)
 
-def main(dayStr = None):
-    if dayStr is None:
-        today = datetime.datetime.now()
-    else:
-        today = datetime.datetime.strptime(dayStr, '%Y%m%d')
-
-    # 如果不是周一，什么都不做
-    if today.weekday() != 0:
-        # print("今天不是周一，不执行数据准备。")
-        return
-    
-    todayStr = today.strftime('%Y%m%d')
-
-    prepareDf = bayesianTotalDataPrepare()
-    prepareDf = prepareDf[(prepareDf['install_day'] >= 20240729) & (prepareDf['install_day'] <= 20250323)]
-    prepareDf['install_day'] = pd.to_datetime(prepareDf['install_day'].astype(str), format='%Y%m%d')
-    prepareDf['install_week'] = prepareDf['install_day'].dt.strftime('%Y-%W')
-    prepareDf = prepareDf.drop(columns=['install_day'])
-    prepareWeekDf = prepareDf.groupby(['install_week']).sum().reset_index()
-    prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
-    prepareWeekDf = prepareWeekDf.reset_index(drop=True)
 
 # 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
 def historyData():
@@ -315,5 +316,6 @@ def historyData():
 
 
 if __name__ == '__main__':
-    bayesianTotalModel()
+    # bayesianTotalModel()
     # dd()
+    main()
