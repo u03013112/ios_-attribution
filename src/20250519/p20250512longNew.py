@@ -264,7 +264,7 @@ def main(dayStr = None):
     prepareWeekDf = prepareWeekDf.sort_values(by=['install_week'], ascending=[False])
     prepareWeekDf = prepareWeekDf.reset_index(drop=True)
 
-    prepareWeekDf.to_csv(f'/src/data/prepareWeekDf_{todayStr}.csv', index=False)
+    prepareWeekDf.to_csv(f'/src/data/prepareWeekDf_SKAN_{todayStr}.csv', index=False)
 
     organicRevenueConfigList = [
         {'mu':10000, 'sigma':2000},
@@ -329,7 +329,7 @@ def main(dayStr = None):
     resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
     resultDf['other kpi'] = (kpi/resultDf['other X'])
     print(resultDf)
-    resultDf.to_csv('/src/data/result_{todayStr}_kpi.csv', index=False)
+    resultDf.to_csv(f'/src/data/result_{todayStr}_kpi.csv', index=False)
 
 
     resultDf = resultDf.rename(
@@ -358,7 +358,7 @@ def main(dayStr = None):
 
 # 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
 def historyData():
-    startDayStr = '20250101'
+    startDayStr = '20250303'
     endDayStr = '20250526'
 
     startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
@@ -411,5 +411,5 @@ def writeTable(df,dayStr):
         writer.write(df)
 
 if __name__ == '__main__':
-    historyData()  # 如果需要补充历史数据，取消注释
-    # main()
+    # historyData()  # 如果需要补充历史数据，取消注释
+    main('20250526')
