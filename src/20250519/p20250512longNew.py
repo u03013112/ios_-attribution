@@ -232,7 +232,7 @@ def main(dayStr = None):
 
     # 如果不是周一，什么都不做
     if today.weekday() != 0:
-        # print("今天不是周一，不执行数据准备。")
+        print("今天不是周一，不执行数据准备。")
         return
     
     todayStr = today.strftime('%Y%m%d')
@@ -399,11 +399,13 @@ def createTable():
     return table
     
 def deleteTable(dayStr):
+    print(f"Deleting partition for day: {dayStr}")
     o = getO()
     t = o.get_table('lastwar_ios_skan_kpi_table_20250526')
     t.delete_partition('day=%s'%(dayStr), if_exists=True)
 
 def writeTable(df,dayStr):
+    print(f"Writing data to partition for day: {dayStr}")
     o = getO()
     t = o.get_table('lastwar_ios_skan_kpi_table_20250526')
     t.delete_partition('day=%s'%(dayStr), if_exists=True)
