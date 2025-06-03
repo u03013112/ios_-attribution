@@ -412,4 +412,5 @@ def writeTable(df,dayStr):
 
 if __name__ == '__main__':
     # historyData()  # 如果需要补充历史数据，取消注释
-    main('20250526')
+    # main('20250526')
+    main()
