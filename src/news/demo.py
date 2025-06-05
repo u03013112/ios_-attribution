@@ -50,7 +50,7 @@ newsapi = NewsApiClient(api_key=news_api_key)
 todayStr = datetime.datetime.now().strftime('%Y-%m-%d')
 yesterdayStr = (datetime.datetime.now() - datetime.timedelta(days=3)).strftime('%Y-%m-%d')
 
-q = 'AIGC OR ("machine learning") OR ("ai" OR "artificial intelligence") OR ("deep learning")'
+q = 'AIGC OR ("machine learning") OR ("deep learning")'
 
 # /v2/everything
 all_articles = newsapi.get_everything(
