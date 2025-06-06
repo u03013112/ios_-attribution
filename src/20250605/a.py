@@ -142,6 +142,9 @@ def hist():
 
 def main1(N=2):
     df = getData()
+    # 初始化一个空的 DataFrame 用于存储相关系数
+    corrDf = pd.DataFrame(columns=['ctr', 'cvr', 'cpm', 'group'])
+
     # 总体分析
     totalDf = df[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
     for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
@@ -151,14 +154,25 @@ def main1(N=2):
         # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
         group_means = totalDf.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
         
+        # 计算相关系数
+        correlation = group_means.corr(method='pearson')
+        
+        # 提取相关系数行并添加到 DataFrame
+        corrDf = corrDf.append({
+            'ctr': correlation.loc['ctr', col],
+            'cvr': correlation.loc['cvr', col],
+            'cpm': correlation.loc['cpm', col],
+            'group': f'total_{col}'
+        }, ignore_index=True)
+
         # 输出结果
         print(f"\n{col} 分组的均值:")
         for group, means in group_means.iterrows():
             print(f"{col} 第{group+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
+
     # 分组分析
     groupDf = df.groupby(['os', 'mediasource', 'inventory'])
     for name, group in groupDf:
-        print(f"\nGroup: {name}")
         group = group[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
         
         for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
@@ -168,11 +182,25 @@ def main1(N=2):
             # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
             group_means = group.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
             
+            # 计算相关系数
+            correlation = group_means.corr(method='pearson')
+            
+            # 提取相关系数行并添加到 DataFrame
+            corrDf = corrDf.append({
+                'ctr': correlation.loc['ctr', col],
+                'cvr': correlation.loc['cvr', col],
+                'cpm': correlation.loc['cpm', col],
+                'group': f'{str(name)}_{col}'
+            }, ignore_index=True)
+
             # 输出结果
             print(f"\n{col} 分组的均值在组 {name}:")
             for group_num, means in group_means.iterrows():
-                print(f"{col} 第{group_num+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.2f}, cvr mean: {means['cvr']:.2f}, cpm mean: {means['cpm']:.2f}")
+                print(f"{col} 第{group_num+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
 
+    # 保存相关系数 DataFrame 到 CSV
+    corrDf.to_csv('/src/data/correlation_results.csv', index=False)
+    print("Correlation results saved to /src/data/correlation_results.csv")
 
 
 if __name__ == "__main__":
