@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+from scipy.stats import pearsonr, spearmanr
 
 def getData():
     filename = '/src/data/a_processed.csv'
@@ -155,13 +156,20 @@ def main1(N=2):
         group_means = totalDf.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
         
         # 计算相关系数
-        correlation = group_means.corr(method='pearson')
+        correlation = group_means.corr(method='spearman')
+        ctr_r,ctr_p = spearmanr(group_means['ctr'], group_means[col])
+        cvr_r,cvr_p = spearmanr(group_means['cvr'], group_means[col])
+        cpm_r,cpm_p = spearmanr(group_means['cpm'], group_means[col])
+
         
         # 提取相关系数行并添加到 DataFrame
         corrDf = corrDf.append({
-            'ctr': correlation.loc['ctr', col],
-            'cvr': correlation.loc['cvr', col],
-            'cpm': correlation.loc['cpm', col],
+            'ctr': ctr_r,
+            'cvr': cvr_r,
+            'cpm': cpm_r,
+            'ctr_p': ctr_p,
+            'cvr_p': cvr_p,
+            'cpm_p': cpm_p,
             'group': f'total_{col}'
         }, ignore_index=True)
 
@@ -183,13 +191,19 @@ def main1(N=2):
             group_means = group.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
             
             # 计算相关系数
-            correlation = group_means.corr(method='pearson')
-            
+            correlation = group_means.corr(method='spearman')
+            ctr_r,ctr_p = spearmanr(group_means['ctr'], group_means[col])
+            cvr_r,cvr_p = spearmanr(group_means['cvr'], group_means[col])
+            cpm_r,cpm_p = spearmanr(group_means['cpm'], group_means[col])
+
             # 提取相关系数行并添加到 DataFrame
             corrDf = corrDf.append({
-                'ctr': correlation.loc['ctr', col],
-                'cvr': correlation.loc['cvr', col],
-                'cpm': correlation.loc['cpm', col],
+                'ctr': ctr_r,
+                'cvr': cvr_r,
+                'cpm': cpm_r,
+                'ctr_p': ctr_p,
+                'cvr_p': cvr_p,
+                'cpm_p': cpm_p,
                 'group': f'{str(name)}_{col}'
             }, ignore_index=True)
 
@@ -206,4 +220,4 @@ def main1(N=2):
 if __name__ == "__main__":
     # corr()
     # hist()
-    main1(N=4)
+    main1(N=8)
