@@ -84,6 +84,13 @@ def getDataStep2(getDataStep1Return):
 
 # 最小花费过滤，将花费过少的视频排除掉
 def getDataStep3(getDataStep2Return,minCost=10000):
+    # 整合一下标签
+    # 叫做tag_type,按照tag_level_2分组
+    # '营销类' -> '代言人';'测试类' -> '玩法类'; 其他 -> '其他'
+    getDataStep2Return['tag_type'] = getDataStep2Return['tag_level_2'].apply(
+        lambda x: '代言人' if x == '营销类' else ('玩法类' if x == '测试类' else '其他')
+    )
+
     df = getDataStep2Return[getDataStep2Return['cost_value_usd'] >= minCost].copy()
     print(f'最小花费：{minCost}过滤后剩余：{len(df)},原有占比{(len(df)/len(getDataStep2Return)):.2%}')
     return df
@@ -102,42 +109,48 @@ def getData(minCost):
     df3 = getDataStep3(df2,minCost=minCost)
     return df3
 
+def debug():
+    df = getData(10000)
+    groupDf = df.groupby(['tag_level_1','tag_level_2'])
+    for name, group in groupDf:
+        print(f"\nGroup: {name}")
+
 def corr(minCost):
     df = getData(minCost)
     totalDf = df[['cost_value_usd', 'click', 'impressions', 'install', 'ctr', 'cvr', 'cpm','Overall','Color','Noise','Artifact','Blur','Temporal']]
 
     
     # 计算'Overall','Color','Noise','Artifact','Blur','Temporal' vs 'cost_value_usd', 'click', 'impressions', 'install', 'ctr', 'cvr', 'cpm' 的相关性
-    correlation = totalDf.corr(method='pearson')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
+    correlation = totalDf.corr(method='spearman')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
         ['ctr', 'cvr', 'cpm']
     ]
 
     print("Correlation matrix:")
     print(correlation)
 
-    groupDf = df.groupby(['tag_level_1','tag_level_2'])
+    groupDf = df.groupby(['tag_type'])
     for name, group in groupDf:
         print(f"\nGroup: {name}")
         group = group[['cost_value_usd', 'click', 'impressions', 'install', 'ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']]
-        group_correlation = group.corr(method='pearson')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
+        group_correlation = group.corr(method='spearman')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
             ['ctr', 'cvr', 'cpm']
         ]
         print("Correlation matrix for group:")
         print(group_correlation)
 
 
-    groupDf = df.groupby(['os', 'mediasource', 'inventory','tag_level_1','tag_level_2'])
+    groupDf = df.groupby(['os', 'mediasource', 'inventory','tag_type'])
     for name, group in groupDf:
         print(f"\nGroup: {name}")
         group = group[['cost_value_usd', 'click', 'impressions', 'install', 'ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']]
-        group_correlation = group.corr(method='pearson')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
+        group_correlation = group.corr(method='spearman')[['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].loc[
             ['ctr', 'cvr', 'cpm']
         ]
         print("Correlation matrix for group:")
         print(group_correlation)
 
-def main1(N=2):
-    df = getData()
+def main1(N=2, minCost=1000):
+    df = getData(minCost)
     # 初始化一个空的 DataFrame 用于存储相关系数
     corrDf = pd.DataFrame(columns=['ctr', 'cvr', 'cpm', 'group'])
 
@@ -145,7 +158,7 @@ def main1(N=2):
     totalDf = df[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
     for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
         # 按照分位数分组
-        totalDf[f'{col}_group'] = pd.qcut(totalDf[col], N, labels=False)
+        totalDf[f'{col}_group'] = pd.qcut(totalDf[col], N, labels=False, duplicates='drop')
         
         # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
         group_means = totalDf.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
@@ -173,14 +186,14 @@ def main1(N=2):
         for group, means in group_means.iterrows():
             print(f"{col} 第{group+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
 
-    # 分组分析
-    groupDf = df.groupby(['os', 'mediasource', 'inventory'])
+    # 分组分析 - 首先按 'tag_level_1', 'tag_level_2' 分组
+    groupDf = df.groupby(['tag_type'])
     for name, group in groupDf:
         group = group[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
         
         for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
             # 按照分位数分组
-            group[f'{col}_group'] = pd.qcut(group[col], N, labels=False)
+            group[f'{col}_group'] = pd.qcut(group[col], N, labels=False, duplicates='drop')
             
             # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
             group_means = group.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
@@ -208,10 +221,53 @@ def main1(N=2):
                 print(f"{col} 第{group_num+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
 
     # 保存相关系数 DataFrame 到 CSV
-    corrDf.to_csv('/src/data/correlation_results.csv', index=False)
-    print("Correlation results saved to /src/data/correlation_results.csv")
+    corrDf.to_csv('/src/data/correlation_results_tag_level.csv', index=False)
+    print("Correlation results saved to /src/data/correlation_results_tag_level.csv")
+
+    # 分组分析 - 然后按 'os', 'mediasource', 'inventory', 'tag_level_1', 'tag_level_2' 分组
+    groupDf = df.groupby(['os', 'mediasource', 'inventory', 'tag_type'])
+    for name, group in groupDf:
+        group = group[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
+        
+        for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
+            # 按照分位数分组
+            group[f'{col}_group'] = pd.qcut(group[col], N, labels=False, duplicates='drop')
+            
+            # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
+            group_means = group.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
+            
+            # 计算相关系数
+            correlation = group_means.corr(method='spearman')
+            ctr_r,ctr_p = spearmanr(group_means['ctr'], group_means[col])
+            cvr_r,cvr_p = spearmanr(group_means['cvr'], group_means[col])
+            cpm_r,cpm_p = spearmanr(group_means['cpm'], group_means[col])
+
+            # 提取相关系数行并添加到 DataFrame
+            corrDf = corrDf.append({
+                'ctr': ctr_r,
+                'cvr': cvr_r,
+                'cpm': cpm_r,
+                'ctr_p': ctr_p,
+                'cvr_p': cvr_p,
+                'cpm_p': cpm_p,
+                'group': f'{str(name)}_{col}'
+            }, ignore_index=True)
+
+            # 输出结果
+            print(f"\n{col} 分组的均值在组 {name}:")
+            for group_num, means in group_means.iterrows():
+                print(f"{col} 第{group_num+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
+
+    # 保存相关系数 DataFrame 到 CSV
+    corrDf.to_csv(f'/src/data/correlation_results_os_mediasource_inventory{N}_{minCost}.csv', index=False)
+    print(f"Correlation results saved to /src/data/correlation_results_os_mediasource_inventory{N}_{minCost}.csv")
 
 
 
 if __name__ == "__main__":
-    corr(1000)
+    # debug()
+    # corr(10000)
+    main1(N=8,minCost=1000)
+    main1(N=16,minCost=1000)
+    main1(N=8,minCost=10000)
+    main1(N=16,minCost=10000)
