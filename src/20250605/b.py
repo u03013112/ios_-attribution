@@ -136,5 +136,82 @@ def corr(minCost):
         print("Correlation matrix for group:")
         print(group_correlation)
 
+def main1(N=2):
+    df = getData()
+    # 初始化一个空的 DataFrame 用于存储相关系数
+    corrDf = pd.DataFrame(columns=['ctr', 'cvr', 'cpm', 'group'])
+
+    # 总体分析
+    totalDf = df[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
+    for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
+        # 按照分位数分组
+        totalDf[f'{col}_group'] = pd.qcut(totalDf[col], N, labels=False)
+        
+        # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
+        group_means = totalDf.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
+        
+        # 计算相关系数
+        correlation = group_means.corr(method='spearman')
+        ctr_r,ctr_p = spearmanr(group_means['ctr'], group_means[col])
+        cvr_r,cvr_p = spearmanr(group_means['cvr'], group_means[col])
+        cpm_r,cpm_p = spearmanr(group_means['cpm'], group_means[col])
+
+        
+        # 提取相关系数行并添加到 DataFrame
+        corrDf = corrDf.append({
+            'ctr': ctr_r,
+            'cvr': cvr_r,
+            'cpm': cpm_r,
+            'ctr_p': ctr_p,
+            'cvr_p': cvr_p,
+            'cpm_p': cpm_p,
+            'group': f'total_{col}'
+        }, ignore_index=True)
+
+        # 输出结果
+        print(f"\n{col} 分组的均值:")
+        for group, means in group_means.iterrows():
+            print(f"{col} 第{group+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
+
+    # 分组分析
+    groupDf = df.groupby(['os', 'mediasource', 'inventory'])
+    for name, group in groupDf:
+        group = group[['ctr', 'cvr', 'cpm', 'Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']].copy()
+        
+        for col in ['Overall', 'Color', 'Noise', 'Artifact', 'Blur', 'Temporal']:
+            # 按照分位数分组
+            group[f'{col}_group'] = pd.qcut(group[col], N, labels=False)
+            
+            # 计算每个分组中 'ctr', 'cvr', 'cpm' 的均值以及指标自身的均值
+            group_means = group.groupby(f'{col}_group')[[col, 'ctr', 'cvr', 'cpm']].mean()
+            
+            # 计算相关系数
+            correlation = group_means.corr(method='spearman')
+            ctr_r,ctr_p = spearmanr(group_means['ctr'], group_means[col])
+            cvr_r,cvr_p = spearmanr(group_means['cvr'], group_means[col])
+            cpm_r,cpm_p = spearmanr(group_means['cpm'], group_means[col])
+
+            # 提取相关系数行并添加到 DataFrame
+            corrDf = corrDf.append({
+                'ctr': ctr_r,
+                'cvr': cvr_r,
+                'cpm': cpm_r,
+                'ctr_p': ctr_p,
+                'cvr_p': cvr_p,
+                'cpm_p': cpm_p,
+                'group': f'{str(name)}_{col}'
+            }, ignore_index=True)
+
+            # 输出结果
+            print(f"\n{col} 分组的均值在组 {name}:")
+            for group_num, means in group_means.iterrows():
+                print(f"{col} 第{group_num+1}组: {col} mean: {means[col]:.2f}, ctr mean: {means['ctr']:.4f}, cvr mean: {means['cvr']:.4f}, cpm mean: {means['cpm']:.2f}")
+
+    # 保存相关系数 DataFrame 到 CSV
+    corrDf.to_csv('/src/data/correlation_results.csv', index=False)
+    print("Correlation results saved to /src/data/correlation_results.csv")
+
+
+
 if __name__ == "__main__":
     corr(1000)
