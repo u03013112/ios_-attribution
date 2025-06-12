@@ -118,7 +118,7 @@ where
 
 
 def p1():
-    df = getSKANDataFromMC('20250510', 21)
+    df = getSKANDataFromMC('20250612', 60)
 
     df = df.groupby(['day', 'cv']).agg({'cnt': 'sum'}).reset_index()
 
@@ -132,6 +132,7 @@ def p1():
         df2['day'] = pd.to_datetime(df2['day'], format='%Y%m%d')
         df2.to_csv(f'/src/data/20250421_cv{cv}.csv', index=False)
         df2.plot(x='day', y='cnt', title=f'cv={cv}', kind='line')
+        plt.legend(loc='best')
         plt.savefig(f'/src/data/20250421_cv{cv}.png')
         plt.close()
 
@@ -222,7 +223,7 @@ day;
 
 # 尝试将20250404之前建立的campaign的CV == 32 的数据进行削弱，然后再和大盘收入金额做比较
 def func20250512():
-    filename = '/src/data/20250512_func20250512.csv'
+    filename = '/src/data/20250612_func20250512.csv'
 
     if os.path.exists(filename):
         df = pd.read_csv(filename)
@@ -239,7 +240,7 @@ FROM
     ods_platform_appsflyer_skad_details
 WHERE
     day between '20250428'
-    and '20250512'
+    and '20250612'
     AND app_id = 'id6448786147'
     AND event_name in ('af_purchase_update_skan_on')
 GROUP BY
@@ -252,7 +253,7 @@ GROUP BY
         df = execSql(sql)
         df.to_csv(filename, index=False)
 
-    df = df[df['install_date'] >= '2025-05-01']
+    df = df[df['install_date'] >= '2025-06-01']
 
     # 获得campaign的创建时间
     campaignNameList = df['ad_network_campaign_name'].unique()
@@ -264,6 +265,8 @@ GROUP BY
         date_pattern = re.compile(r'(\d{8})')
         unmatched_campaigns = []
         for campaignName in campaignNameList:
+            if not isinstance(campaignName, str):
+                continue
             # 使用正则表达式搜索匹配
             match = date_pattern.search(campaignName)
             if match:

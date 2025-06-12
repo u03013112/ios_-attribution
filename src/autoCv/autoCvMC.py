@@ -1,5 +1,6 @@
 import io
 import os
+import math
 import datetime
 import numpy as np
 import pandas as pd
@@ -28,7 +29,6 @@ def makeLevels(userDf, usd='r1usd', N=32):
     target_usd = total_usd / (N)
     df['sum'] = df['sumUsd'].cumsum()
     
-    
     for i in range(1,N):
         target = target_usd*(i)
         # 找到第一个大于target的行
@@ -44,6 +44,42 @@ def makeLevels(userDf, usd='r1usd', N=32):
         levels.remove(0)
     # levels 排序
     levels.sort()
+
+    return levels
+
+# 针对越南等数据不足的地区使用的一套方法
+def makeLevelsFix(userDf, usd='revenue', N=32):
+    userDf = userDf.copy()
+
+    # 如果userDf没有sumUsd列，就添加sumUsd列，值为usd列的值
+    if 'sumUsd' not in userDf.columns:
+        userDf['sumUsd'] = userDf[usd]
+
+    userDf = userDf.groupby([usd]).agg({'sumUsd':'sum'}).reset_index()
+    filtered_df = userDf[(userDf[usd] > 0) & (userDf['sumUsd'] > 0)]
+    df = filtered_df.sort_values([usd])
+    df['shifted'] = df['revenue'].shift(1, fill_value=0)
+
+    # 计算总收入和目标每组收入
+    total_usd = df['sumUsd'].sum()
+    target_usd = total_usd / N
+    print('total_usd:', total_usd, 'target_usd:', target_usd)
+
+    levels = []
+    cumulative_sum = 0
+
+    for _, row in df.iterrows():
+        cumulative_sum += row['sumUsd']
+        # print('debug: cumulative_sum:', cumulative_sum, 'row[usd]:', row[usd])
+        if cumulative_sum >= target_usd:
+            # 超过目标，回退一行，前一行为边界
+            levels.append(row['shifted'])
+            # print('debug: 添加边界值:', row['shifted'])
+            cumulative_sum = row['sumUsd']  # 当前行作为下一组的起始值
+            
+
+    # 去重、排序
+    levels = sorted(set(levels))
 
     return levels
 
@@ -108,7 +144,6 @@ def checkCv(userDf,cvMapDf,usd='r1usd',count='count',cv='cv',install_date='insta
 
     df = df.groupby(['install_date']).agg({'sumUsd':'sum','sumAvg':'sum'}).reset_index()
     df['mape'] = abs(df['sumUsd'] - df['sumAvg']) / df['sumUsd']
-    # print('mape:',df['mape'].mean())
     return df['mape'].mean()
 
 def checkLevels(df,levels,usd='payUsd',cv='cv'):
@@ -147,7 +182,7 @@ def init():
         from src.maxCompute import execSql as execSql_local
 
         execSql = execSql_local
-        dayStr = '20250225'
+        dayStr = '20250608'
 
     print('dayStr:', dayStr)
 
@@ -601,7 +636,7 @@ def lastwarMain():
 
 def getLastwarVNPayDataFromMC(todayStr):
     today = datetime.datetime.strptime(todayStr, '%Y%m%d')
-    oneMonthAgoStr = (today - datetime.timedelta(days=90)).strftime('%Y%m%d')
+    oneMonthAgoStr = (today - datetime.timedelta(days=30)).strftime('%Y%m%d')
     print('获得%s~%s的付费数据'%(oneMonthAgoStr,todayStr))
 
     sql = f'''
@@ -628,6 +663,7 @@ def getLastwarVNPayDataFromMC(todayStr):
     '''
     print(sql)
     df = execSql(sql)
+    df = df[df['install_date'] >= oneMonthAgoStr]
     return df
 
 lastwarVN20240708CvMapStr = '''
@@ -698,6 +734,32 @@ id6736925794,62,af_purchase_update_skan_on,0,1,1111.48,1443.86,0,24,2025-01-10 0
 id6736925794,63,af_purchase_update_skan_on,0,1,1443.86,2060.08,0,24,2025-01-10 03:37:50,0,,,
 '''
 
+
+def debug(userDf,cvMapDf, usd='r1usd'):
+    userDf = userDf.copy()
+    cvMapDf = cvMapDf.copy()
+    totalUsd = userDf[usd].sum()
+    for i in range(len(cvMapDf)):
+        cv = cvMapDf.iloc[i]['conversion_value']
+        min_revenue = cvMapDf.iloc[i]['min_event_revenue']
+        max_revenue = cvMapDf.iloc[i]['max_event_revenue']
+        avg = (min_revenue + max_revenue) / 2
+        userDf.loc[(userDf[usd] > min_revenue) & (userDf[usd] <= max_revenue), 'cv'] = cv
+        userDf.loc[(userDf[usd] > min_revenue) & (userDf[usd] <= max_revenue), 'avg'] = avg
+
+    userDf.loc[(userDf[usd] > cvMapDf['max_event_revenue'].max()), 'cv'] = cvMapDf['conversion_value'].max()
+    userDf.loc[(userDf[usd] > cvMapDf['max_event_revenue'].max()), 'avg'] = userDf['avg'].max()
+    userDf['cv'] = userDf['cv'].fillna(0)
+    userDf.loc[userDf['cv'] == 0, 'avg'] = 0
+    
+    df = userDf.groupby('cv').agg({'uid': 'count', usd: 'sum', 'avg':'mean'}).reset_index()
+    df['realAvg'] = df[usd] / df['uid']
+    df['usdRatio'] = df[usd] / totalUsd
+    df['diffUsd'] = (df['realAvg'] - df['avg']) * df['uid']
+    df['diffUsdRatio'] = df['diffUsd'] / totalUsd
+
+    print(df)
+
 def lastwarVNMain():
 
     N = 64
@@ -705,8 +767,8 @@ def lastwarVNMain():
     df = getLastwarVNPayDataFromMC(dayStr)
     print('获得了%d条数据'%len(df))
 
-    # 将收入3000以上的用户的收入设置为3000
-    df.loc[df['revenue']>3000,'revenue'] = 3000
+    # # 将收入3000以上的用户的收入设置为3000
+    # df.loc[df['revenue']>3000,'revenue'] = 3000
 
     # 计算旧版本的Mape
     csv_file_like_object = io.StringIO(lastwarVN20240708CvMapStr)    
@@ -727,8 +789,8 @@ def lastwarVNMain():
     
     # 生成新的 levels
     name = 'new_cv_map'
-    levels = makeLevels(df,usd='revenue',N=N)
-    levels = [round(x,2) for x in levels]
+    levels = makeLevelsFix(df,usd='revenue',N=N)
+    levels = [math.ceil(x * 100) / 100 for x in levels]
     # 将新的 levels 转换为 cvMap 并写入数据库
     newCvMapDf = levelsToCvMap(levels)
     deleteCvMapPartition(app_package,name)

@@ -27,7 +27,11 @@ with cc1101.CC1101() as transceiver:
     print(transceiver)  # 打印配置
     
     # 延长接收超时并改用标准API
-    packet = transceiver.receive(timeout=datetime.timedelta(seconds=30))
+    # packet = transceiver.receive(timeout=datetime.timedelta(seconds=30))
+    packet = transceiver._wait_for_packet(
+        timeout=datetime.timedelta(seconds=10),
+        gdo0_gpio_line_name = b"GPIO25"
+    )
     
     if not packet:
         print("No packet received within 30 seconds.")
