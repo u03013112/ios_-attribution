@@ -77,12 +77,105 @@ def makeLevelsFix(userDf, usd='revenue', N=32):
             # print('debug: 添加边界值:', row['shifted'])
             cumulative_sum = row['sumUsd']  # 当前行作为下一组的起始值
             
+    # levels 中如果有0，去掉0
+    if 0 in levels:
+        levels.remove(0)
 
     # 去重、排序
     levels = sorted(set(levels))
 
     return levels
 
+# 尝试将档位的diffUsdRatio最小化
+def makeLevels2(userDf, usd='r1usd', N=32):
+    userDf = userDf.copy()
+    if 'sumUsd' not in userDf.columns:
+        userDf['sumUsd'] = userDf[usd]
+
+    userDf = userDf.groupby([usd]).agg({'uid': 'count', 'sumUsd': 'sum'}).reset_index()
+    filtered_df = userDf[(userDf[usd] > 0)]
+    df = filtered_df.sort_values([usd])
+
+    # 手动做一个初始版本的levels
+    revenueList = df[usd].tolist()
+    revenueList = sorted(revenueList)
+    revenueList = [math.ceil(revenue * 100) / 100 for revenue in revenueList]
+    print('初始revenueList:', revenueList)
+    levels = []
+    for i in range(len(revenueList)-2):
+        r1 = revenueList[i]
+        r2 = revenueList[i+1]
+        r3 = revenueList[i+2]
+        r2_r1 = r2 - r1
+        r3_r2 = r3 - r2
+        if r2_r1 > r3_r2:
+            levels.append(r2 - r3_r2/2)
+            levels.append(r2 + r3_r2/2)
+        else:
+            levels.append(r2 - r2_r1/2)
+            levels.append(r2 + r2_r1/2)
+        
+    levels = sorted(set(levels))  # 去重并排序
+    d0 = levels[0] - revenueList[0]
+    levels.insert(0, revenueList[0] - d0)  # 在最前面插入一个小于第一个档位的值
+    d1 = revenueList[-1] - levels[-1]
+    levels.append(revenueList[-1] + d1)  # 在最后面插入一个大于最后一个档位的值
+    levels = [math.ceil(level * 100) / 100 for level in levels]
+    # print('初始levels:', levels)
+    
+    # 计算按照目前levels的临近组合并后的diffUsdRatio
+    def func1(df,levels):
+        df0 = df.copy()
+        cvMapDf = makeCvMap(levels)
+        cvMapDf = cvMapDf[cvMapDf['cv'] > 0]
+        cvMapDf['next_max_event_revenue'] = cvMapDf['max_event_revenue'].shift(-1, fill_value=0)
+        cvMapDf = cvMapDf[cvMapDf['next_max_event_revenue'] > 0]
+        # print('debug: cvMapDf:')
+        # print(cvMapDf.head(10))
+        for i in range(len(cvMapDf)):
+            cv = cvMapDf.iloc[i]['cv']
+            min_revenue = cvMapDf.iloc[i]['min_event_revenue']
+            max_revenue = cvMapDf.iloc[i]['next_max_event_revenue']
+            avg = (min_revenue + max_revenue) / 2
+            df0.loc[(df0[usd] > min_revenue) & (df0[usd] <= max_revenue), 'cv'] = cv
+            df0.loc[(df0[usd] > min_revenue) & (df0[usd] <= max_revenue), 'avg'] = avg
+
+        df0.loc[(df0[usd] > cvMapDf['max_event_revenue'].max()), 'cv'] = cvMapDf['cv'].max()
+        df0.loc[(df0[usd] > cvMapDf['max_event_revenue'].max()), 'avg'] = df0['avg'].max()
+        df0['cv'] = df0['cv'].fillna(0)
+        df0.loc[df0['cv'] == 0, 'avg'] = 0
+
+        df0 = df0.groupby(['cv']).agg({'uid': 'sum', 'sumUsd': 'sum', 'avg': 'mean'}).reset_index()
+        df0['diffUsd'] = np.abs(df0['sumUsd'] - df0['avg'] * df0['uid'])
+
+        df0 = df0.merge(cvMapDf[['cv','min_event_revenue','max_event_revenue','next_max_event_revenue']], on='cv', how='left')
+
+        # print('debug: df0:')
+        # print(df0.head(10))
+
+        # 找到最小的diffUsd对应的level
+        min_diffUsd = df0['diffUsd'].min()
+        min_diffUsd_index = df0[df0['diffUsd'] == min_diffUsd].index[0]
+        min_diffUsd_cv = df0[df0['diffUsd'] == min_diffUsd]['cv'].values[0].astype(int)
+        
+        # print('min_diffUsd:', min_diffUsd, 'min_diffUsd_index:', min_diffUsd_index)
+        # print(df0.iloc[min_diffUsd_index-2:min_diffUsd_index+2])
+
+        return min_diffUsd_cv - 2
+
+    while len(levels) > N-1:
+        levelsIndex = func1(df,levels)
+        levels.pop(levelsIndex)
+        # print(f'去除第{levelsIndex}个档位：',levels[levelsIndex])
+        # print('当前剩余档位数:', len(levels))
+        # print('当前levels:')
+        # print(levels)
+        
+
+    # print('最终档位数:', len(levels))
+    # print('最终档位:', levels)
+    return levels
+        
 from sklearn.cluster import KMeans
 def makeLevelsByKMeans(userDf, usd='r1usd', N=32):
     filtered_df = userDf[userDf[usd] > 0]
@@ -759,6 +852,9 @@ def debug(userDf,cvMapDf, usd='r1usd'):
     df['diffUsdRatio'] = df['diffUsd'] / totalUsd
 
     print(df)
+    print('diffUsdRatio mean:', df['diffUsdRatio'].mean())
+    print('diffUsdRatio std:', df['diffUsdRatio'].std())
+    print('diffUsdRatio max:', df['diffUsdRatio'].max())
 
 def lastwarVNMain():
 
@@ -789,7 +885,7 @@ def lastwarVNMain():
     
     # 生成新的 levels
     name = 'new_cv_map'
-    levels = makeLevelsFix(df,usd='revenue',N=N)
+    levels = makeLevels2(df,usd='revenue',N=N)
     levels = [math.ceil(x * 100) / 100 for x in levels]
     # 将新的 levels 转换为 cvMap 并写入数据库
     newCvMapDf = levelsToCvMap(levels)
