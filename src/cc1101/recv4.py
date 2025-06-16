@@ -10,7 +10,7 @@ with cc1101.CC1101() as transceiver:
     transceiver.set_base_frequency_hertz(433.92e6)
     transceiver._set_modulation_format(cc1101.ModulationFormat.ASK_OOK)  # ✅ ASK/OOK
     
-    transceiver.set_symbol_rate_baud(1200)  # ✅ 尝试4.8kbps
+    transceiver.set_symbol_rate_baud(1200)
 
     # 数据包模式设为原始流
     transceiver.set_packet_length_mode(cc1101.PacketLengthMode.FIXED)
