@@ -88,6 +88,28 @@ def getSKANDataFromMC(dayStr, days):
     return df
 
 
+def getSKANDataFromMC2(dayStr, days):
+    dayBeforeStr = (datetime.strptime(dayStr, '%Y%m%d') - timedelta(days=days)).strftime('%Y%m%d')
+
+    sql = f'''
+SELECT
+    skad_conversion_value as cv,
+    count(*) as cnt,
+    day
+FROM 
+    ods_platform_appsflyer_skad_postbacks_copy
+WHERE
+    day between '{dayBeforeStr}' and '{dayStr}'
+    AND app_id = '6448786147'
+GROUP BY
+    skad_conversion_value,
+    day
+;
+    '''
+
+    df = execSql(sql)
+    return df
+
 def forHaitao():
     sql = '''
 select
@@ -130,11 +152,32 @@ def p1():
         df2 = df[df['cv'] == cv]
         df2 = df2.sort_values(by=['day'])
         df2['day'] = pd.to_datetime(df2['day'], format='%Y%m%d')
-        df2.to_csv(f'/src/data/20250421_cv{cv}.csv', index=False)
+        df2.to_csv(f'/src/data/20250612_cv{cv}.csv', index=False)
         df2.plot(x='day', y='cnt', title=f'cv={cv}', kind='line')
         plt.legend(loc='best')
-        plt.savefig(f'/src/data/20250421_cv{cv}.png')
+        plt.savefig(f'/src/data/20250612_cv{cv}.png')
         plt.close()
+
+
+def p2():
+    df = getSKANDataFromMC2('20250612', 30)
+
+    df = df.groupby(['day', 'cv']).agg({'cnt': 'sum'}).reset_index()
+
+    # 按照day，cv排序
+    # 画图，day为x轴，cnt为y轴，每个cv一张图
+    # 保存到文件 /src/data/20250407_cv{cv}.png
+    cvList = df['cv'].unique()
+    for cv in cvList:
+        df2 = df[df['cv'] == cv]
+        df2 = df2.sort_values(by=['day'])
+        df2['day'] = pd.to_datetime(df2['day'], format='%Y%m%d')
+        df2.to_csv(f'/src/data/20250612_cv2_{cv}.csv', index=False)
+        df2.plot(x='day', y='cnt', title=f'cv={cv}', kind='line')
+        plt.legend(loc='best')
+        plt.savefig(f'/src/data/20250612_cv2_{cv}.png')
+        plt.close()
+
 
 
 def af20250415():
@@ -441,10 +484,11 @@ if __name__ == "__main__":
     # forHaitao()
     # forHaitao2()
     # p1()
+    p2()
     # af20250415()
 
     # debugDf = debug()
 
     # debug2()
 
-    func20250512()
+    # func20250512()
