@@ -95,7 +95,7 @@ def bayesianCountryDataPrepare(startDayStr, endDayStr):
     }, inplace=True)
 
     prepareDf = pd.merge(revenueTotalDf, revenue7dMediaDf, on=['install_day','country'], how='left')
-    # prepareDf = pd.merge(prepareDf, costMediaDf, on=['install_day','country'], how='left')
+    prepareDf = pd.merge(prepareDf, costMediaDf, on=['install_day','country'], how='left')
     prepareDf = prepareDf.sort_values(by=['install_day','country'], ascending=[False, True])
     prepareDf.fillna(0, inplace=True)
 
@@ -114,11 +114,11 @@ def ccByDay(summary, prepareDf):
 
     # 使用参数估计值计算预测值
     predicted_revenue = organicRevenue_mean + \
-                        facebookX_mean * prepareDf['facebook 7d revenue'] + \
-                        applovinX_mean * prepareDf['applovin 7d revenue'] + \
-                        tiktokX_mean * prepareDf['tiktok 7d revenue'] + \
-                        molocoX_mean * prepareDf['moloco 7d revenue'] + \
-                        snapchatX_mean * prepareDf['snapchat 7d revenue']
+                        prepareDf['facebook 7d revenue']/facebookX_mean + \
+                        prepareDf['applovin 7d revenue']/applovinX_mean + \
+                        prepareDf['tiktok 7d revenue']/tiktokX_mean + \
+                        prepareDf['moloco 7d revenue']/molocoX_mean + \
+                        prepareDf['snapchat 7d revenue']/snapchatX_mean
     
     detailDf = pd.DataFrame({
         'install_day': prepareDf['install_day'],
@@ -239,7 +239,8 @@ def main(dayStr = None):
     prepareWeekDf.to_csv(f'/src/data/countryMain_{startDayStr}_{endDayStr}.csv', index=False)
 
     # countryList = prepareDf['country'].unique()
-    countryList = ['US', 'JP', 'GCC', 'KR', 'OTHER']
+    # countryList = ['US', 'JP', 'GCC', 'KR', 'OTHER']
+    countryList = ['JP']
     # prepareWeekDf 中 country 不属于 countryList 的数据 统一为 OTHER
     prepareWeekDf['country'] = prepareWeekDf['country'].apply(lambda x: x if x in countryList else 'OTHER')
     prepareWeekDf = prepareWeekDf.groupby(['install_week', 'country']).sum().reset_index()
@@ -318,25 +319,48 @@ def main(dayStr = None):
             basic_model = pm.Model()
             with basic_model as model:
                 organicRevenue = pm.Normal('organicRevenue', mu=organicConfigRevenue['mu'], sigma=organicConfigRevenue['sigma'])
-                facebookX = pm.Normal('facebookX', mu=1, sigma=0.05)
-                applovinX = pm.Normal('applovinX', mu=1, sigma=0.05)
-                tiktokX = pm.Normal('tiktokX', mu=1, sigma=0.05)
-                molocoX = pm.Normal('molocoX', mu=1, sigma=0.05)
-                snapchatX = pm.Normal('snapchatX', mu=1, sigma=0.05)
+                
+                facebookX = pm.Normal('facebookX', mu=1, sigma=0.1)
+                applovinX = pm.Normal('applovinX', mu=1, sigma=0.1)
+                tiktokX = pm.Normal('tiktokX', mu=1, sigma=0.1)
+                molocoX = pm.Normal('molocoX', mu=1, sigma=0.1)
+                snapchatX = pm.Normal('snapchatX', mu=1, sigma=0.1)
         
-                mu = organicRevenue + \
-                facebookX * countryDf['facebook 7d revenue'] + \
-                applovinX * countryDf['applovin 7d revenue'] + \
-                molocoX * countryDf['moloco 7d revenue'] + \
-                tiktokX * countryDf['tiktok 7d revenue'] + \
-                snapchatX * countryDf['snapchat 7d revenue']
-            
-                revenue_obs = pm.Normal('revenue_obs', mu=mu, sigma=500, observed=countryDf['total 7d revenue'])
-                trace = pm.sample(1000)
+
+                facebookROI = pm.Normal('facebookROI', mu=0.08, sigma=0.005)
+                applovinROI = pm.Normal('applovinROI', mu=0.08, sigma=0.005)
+                tiktokROI = pm.Normal('tiktokROI', mu=0.08, sigma=0.005)
+                molocoROI = pm.Normal('molocoROI', mu=0.08, sigma=0.005)
+                snapchatROI = pm.Normal('snapchatROI', mu=0.08, sigma=0.005)
+
+                facebookRealRevenue = facebookROI * countryDf['facebook cost']
+                applovinRealRevenue = applovinROI * countryDf['applovin cost']
+                tiktokRealRevenue = tiktokROI * countryDf['tiktok cost']
+                molocoRealRevenue = molocoROI * countryDf['moloco cost']
+                snapchatRealRevenue = snapchatROI * countryDf['snapchat cost']
+
+                # 观测节点1：媒体归因收入观测数据
+                facebookRevenue = pm.Normal('facebookRevenue', mu=facebookX * facebookRealRevenue, sigma=500, observed=countryDf['facebook 7d revenue'])
+                applovinRevenue = pm.Normal('applovinRevenue', mu=applovinX * applovinRealRevenue, sigma=500, observed=countryDf['applovin 7d revenue'])
+                tiktokRevenue = pm.Normal('tiktokRevenue', mu=tiktokX * tiktokRealRevenue, sigma=500, observed=countryDf['tiktok 7d revenue'])
+                molocoRevenue = pm.Normal('molocoRevenue', mu=molocoX * molocoRealRevenue, sigma=500, observed=countryDf['moloco 7d revenue'])
+                snapchatRevenue = pm.Normal('snapchatRevenue', mu=snapchatX * snapchatRealRevenue, sigma=500, observed=countryDf['snapchat 7d revenue'])
+                
+                # 观测节点2：总收入观测数据
+                total_revenue_obs = pm.Normal(
+                    'total_revenue_obs',
+                    mu = organicRevenue + facebookRealRevenue + applovinRealRevenue + tiktokRealRevenue + molocoRealRevenue + snapchatRealRevenue,
+                    sigma=500,
+                    observed=countryDf['total 7d revenue']
+                )
+                
+                trace = pm.sample(1000, tune=1000, target_accept=0.95)
 
                 # 输出结果
                 summary = pm.summary(trace, hdi_prob=0.95)
 
+                print(summary)
+                
                 countryDf.rename(columns={'install_week': 'install_day'}, inplace=True)
 
                 retDf,detailDf = ccByDay(summary, countryDf)
@@ -353,11 +377,11 @@ def main(dayStr = None):
         kpi = kpiMap[country]
         resultDf['kpi'] = kpi
 
-        resultDf['facebook kpi'] = (kpi/resultDf['facebook X'])
-        resultDf['applovin kpi'] = (kpi/resultDf['applovin X'])
-        resultDf['tiktok kpi'] = (kpi/resultDf['tiktok X'])
-        resultDf['moloco kpi'] = (kpi/resultDf['moloco X'])
-        resultDf['snapchat kpi'] = (kpi/resultDf['snapchat X'])
+        resultDf['facebook kpi'] = (kpi*resultDf['facebook X'])
+        resultDf['applovin kpi'] = (kpi*resultDf['applovin X'])
+        resultDf['tiktok kpi'] = (kpi*resultDf['tiktok X'])
+        resultDf['moloco kpi'] = (kpi*resultDf['moloco X'])
+        resultDf['snapchat kpi'] = (kpi*resultDf['snapchat X'])
 
         resultDf = resultDf.rename(
             columns={
@@ -385,12 +409,12 @@ def main(dayStr = None):
         resultDfTotal = pd.concat([resultDfTotal, resultDf], ignore_index=True)
 
 
-    resultDfTotal = resultDfTotal[['country','organic_revenue_mu','applovin_x','facebook_x','tiktok_x','moloco_x','snapchat_x','mape','organic_ratio','7d_kpi','applovin_kpi','facebook_kpi','tiktok_kpi','moloco_kpi','snapchat_kpi']]
+    resultDfTotal = resultDfTotal[['country','organic_revenue_mu','organicRevenue_predicted','applovin_x','facebook_x','tiktok_x','moloco_x','snapchat_x','mape','organic_ratio','7d_kpi','applovin_kpi','facebook_kpi','tiktok_kpi','moloco_kpi','snapchat_kpi']]
     resultDfTotal.to_csv(f'/src/data/mohuByDayCountry_result_total_{startDayStr}_{endDayStr}.csv', index=False)
     
-    createTable()
-    deleteTable(todayStr)
-    writeTable(resultDfTotal, todayStr)
+    # createTable()
+    # deleteTable(todayStr)
+    # writeTable(resultDfTotal, todayStr)
 
 # 历史数据补充，如果有需要补充的历史数据，调佣这个函数，并且调整时间范围
 def historyData():
@@ -410,5 +434,5 @@ def historyData():
 
 if __name__ == '__main__':
     # historyData()  # 如果需要补充历史数据，取消注释
-    # main('20250602')
-    main()
+    main('20250602')
+    # main()

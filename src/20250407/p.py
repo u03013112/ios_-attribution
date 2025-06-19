@@ -66,6 +66,7 @@ def getSKANDataFromMC(dayStr, days):
         SELECT
             skad_conversion_value as cv,
             media_source,
+            sum(skad_revenue) as skad_revenue,
             count(*) as cnt,
             day
         FROM 
@@ -74,8 +75,7 @@ def getSKANDataFromMC(dayStr, days):
             day between '{dayBeforeStr}' and '{dayStr}'
             AND app_id = 'id6448786147'
             AND event_name in (
-                'af_skad_install',
-                'af_skad_redownload'
+                'af_purchase_update_skan_on'
             )
         GROUP BY
             skad_conversion_value,
@@ -140,7 +140,7 @@ where
 
 
 def p1():
-    df = getSKANDataFromMC('20250612', 60)
+    df = getSKANDataFromMC('20250618', 60)
 
     df = df.groupby(['day', 'cv']).agg({'cnt': 'sum'}).reset_index()
 
@@ -152,10 +152,10 @@ def p1():
         df2 = df[df['cv'] == cv]
         df2 = df2.sort_values(by=['day'])
         df2['day'] = pd.to_datetime(df2['day'], format='%Y%m%d')
-        df2.to_csv(f'/src/data/20250612_cv{cv}.csv', index=False)
+        df2.to_csv(f'/src/data/20250618_cv{cv}.csv', index=False)
         df2.plot(x='day', y='cnt', title=f'cv={cv}', kind='line')
         plt.legend(loc='best')
-        plt.savefig(f'/src/data/20250612_cv{cv}.png')
+        plt.savefig(f'/src/data/20250618_cv{cv}.png')
         plt.close()
 
 
@@ -478,13 +478,91 @@ id6448786147,63,af_purchase_update_skan_on,0,1,3006.72,3814.71,0,24,2025-04-03 0
     # 保存最终的合并结果到 CSV
     final_df.to_csv('/src/data/20250512_final_nerfRate.csv', index=False)
 
+def getRevenueData(startDayStr, endDayStr):
+    filename = f'/src/data/lw_revenue_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        sql = f"""
+select
+    install_day,
+    sum(revenue_h24) as revenue_h24
+from
+    dws_overseas_public_roi
+where
+    app = '502'
+    and app_package = 'id6448786147'
+    and facebook_segment in ('country', 'N/A')
+    and install_day between '{startDayStr}' and '{endDayStr}'
+group by
+    install_day
+;
+        """
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+
+        df.to_csv(filename, index=False)
+
+    return df
+
+def getSKANRevenueDataFromMC(startDayStr, endDayStr):
+    filename = f'/src/data/lw_skan_revenue_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        dayBeforeStr = (datetime.strptime(startDayStr, '%Y%m%d') - timedelta(days=7)).strftime('%Y%m%d')
+        sql = f"""
+SELECT
+    sum(skad_revenue) as skad_revenue,
+    install_date
+FROM 
+    ods_platform_appsflyer_skad_details
+WHERE
+    day between '{dayBeforeStr}' and '{endDayStr}'
+    AND app_id = 'id6448786147'
+    AND event_name in (
+        'af_purchase_update_skan_on'
+    )
+GROUP BY
+    install_date
+;
+        """
+
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+
+    return df
+
+def yuanzhong():
+    skanDf = getSKANRevenueDataFromMC('20250101', '20250617')
+    skanDf.rename(columns={'install_date': 'day'}, inplace=True)
+    # day 从 类似 2025-01-01 转换为 20250101
+    skanDf['day'] = skanDf['day'].apply(lambda x: x.replace('-', ''))
+
+    df = getRevenueData('20250101', '20250617')
+    df.rename(columns={'install_day': 'day'}, inplace=True)
+    df['day'] = df['day'].astype(str)
+
+    df = df.merge(skanDf, on='day', how='left')
+    df = df.sort_values(by=['day'])
+    
+    print(df.head())
+    df.to_csv('/src/data/lwRevenueAndskanRevenueDay.csv', index=False)
+
+    df['day'] = pd.to_datetime(df['day'], format='%Y%m%d')
+    # 新增week列，yyyy-mm-dd 转换为 yyyy-week
+    df['week'] = df['day'].dt.strftime('%Y-%W')
+
+    df = df.groupby(['week']).sum().reset_index()
+    print(df.head())
+    df.to_csv('/src/data/lwRevenueAndskanRevenueWeek.csv', index=False)
 
 if __name__ == "__main__":
     # main()
     # forHaitao()
     # forHaitao2()
     # p1()
-    p2()
+    # p2()
     # af20250415()
 
     # debugDf = debug()
@@ -492,3 +570,4 @@ if __name__ == "__main__":
     # debug2()
 
     # func20250512()
+    yuanzhong()

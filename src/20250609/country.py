@@ -20,11 +20,19 @@ select
     install_day,
     app_package,
     country,
+    mediasource,
+    campaign_name,
     sum(cost_value_usd) as cost,
     sum(revenue_h24) as revenue_h24,
     sum(revenue_d1) as revenue_d1,
+    sum(revenue_d3) as revenue_d3,
     sum(revenue_d7) as revenue_d7,
-    sum(revenue_d30) as revenue_d30
+    sum(revenue_d14) as revenue_d14,
+    sum(revenue_d30) as revenue_d30,
+    sum(revenue_d60) as revenue_d60,
+    sum(revenue_d90) as revenue_d90,
+    sum(revenue_d120) as revenue_d120,
+    sum(revenue_d150) as revenue_d150
 from
     dws_overseas_public_roi
 where
@@ -34,7 +42,9 @@ where
 group by
     install_day,
     app_package,
-    country
+    country,
+    mediasource,
+    campaign_name
 ;
         """
         print(f"Executing SQL: {sql}")
@@ -45,31 +55,8 @@ group by
     return df
 
 def main():
-    df = getRevenueData('20250101', '20250501')
-    # print(df.head())
-
-    iOSDf = df[df['app_package'] == 'id6448786147'].copy()
-    # 计算 30 日收入/7 日收入的比率
-    iOSDf['ratio'] = iOSDf['revenue_d30'] / iOSDf['revenue_d7']
-    # print(iOSDf[iOSDf['country'] == 'US'].head())
-    iOSDf_clean = iOSDf.dropna(subset=['ratio']).copy()
-    # 按国家分组，计算平均值和标准差
-    grouped = iOSDf_clean.groupby('country')['ratio'].agg(['mean', 'std']).reset_index()
-    # print(grouped[grouped['country'] == 'US'])
-    # 清理数据，去除 NaN 值
-    grouped_clean = grouped.dropna().copy()
-    # 使用 KMeans 聚类
-    n_clusters = 10
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-    grouped_clean['cluster'] = kmeans.fit_predict(grouped_clean[['mean', 'std']])
+    df = getRevenueData('20240101', '20250501')
     
-    clusters = grouped_clean.groupby('cluster')
-    for cluster_id, group in clusters:
-        mean = group['mean'].mean()
-        std = group['std'].mean()
-        countries = ', '.join(group['country'].tolist())
-        print(f"Cluster {cluster_id}: mean={mean:.2f}, std={std:.2f}")
-        print(f"Countries: {countries}\n")
     
 
 
