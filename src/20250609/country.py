@@ -3,6 +3,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/src')
@@ -209,6 +210,25 @@ def step2():
             'iqr_r120/r90': iqr_values[6],
             'iqr_r150/r120': iqr_values[7]
         }, ignore_index=True)
+
+        # 绘图
+        group['install_day'] = pd.to_datetime(group['install_day'], format='%Y-%m-%d')
+        plt.figure(figsize=(36, 6))
+        for col in ['r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120']:
+            plt.plot(group['install_day'], group[col], label=col)
+        plt.xlabel('Install Day')
+        plt.ylabel('Revenue Ratios')
+        plt.title(f'Ratios over time\n{name[0]} | {name[1]} | {name[2]} | {name[3]}')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        # 文件名处理
+        safe_name = "_".join([str(n).replace(" ", "_") for n in name])
+        img_path = os.path.join('/src/data/', f"{safe_name}.png")
+        plt.savefig(img_path)
+        plt.close()
+        print(f"Plot saved to {img_path}")
+
 
     resaultDf = resaultDf.sort_values(by=['app_package', 'mediasource', 'country_group', 'ad_type'])
     resaultDf.to_csv('/src/data/lw_20250619_step2.csv', index=False)
