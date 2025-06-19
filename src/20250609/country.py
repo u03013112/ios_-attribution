@@ -244,6 +244,96 @@ def step2():
     print('CV计算完成，结果已保存到 /src/data/lw_20250619_step2.csv')
 
 # 按天汇总，分析'r30/r7', 'r150/r30'
+def step2_f():
+    df = pd.read_csv('/src/data/lw_20250619_step1.csv')
+    # print(df.head())  
+    # 暂时只看安卓
+    df = df[df['app_package'] == 'com.fun.lastwar.gp'].copy()
+
+    # 过滤掉收入较低的媒体
+    mediaDf = df.groupby(['mediasource']).agg({'revenue_d7':'sum'}).reset_index()
+    mediaDf = mediaDf.sort_values(by='revenue_d7', ascending=False)
+    mediaDf = mediaDf[mediaDf['revenue_d7'] > 10000]
+    mediaList = mediaDf['mediasource'].tolist()
+    df = df[df['mediasource'].isin(mediaList)].copy()
+    
+
+    # 计算收入比率
+    df = df[[
+        'app_package', 'mediasource', 'country_group', 'ad_type', 'install_day',
+        'revenue_d1', 'revenue_d3', 'revenue_d7', 'revenue_d14', 'revenue_d30', 
+        'revenue_d60', 'revenue_d90', 'revenue_d120', 'revenue_d150'
+    ]].copy()
+
+    df['r30/r7'] = df['revenue_d30'] / df['revenue_d7']
+    df['r150/r30'] = df['revenue_d150'] / df['revenue_d30']
+    
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    resaultDf = pd.DataFrame(columns=[
+        'app_package', 'mediasource', 'country_group', 'ad_type',
+        'std_r30/r7', 'std_r150/r30',
+        'mean_r30/r7', 'mean_r150/r30',
+        'cv_r30/r7', 'cv_r150/r30',
+        'iqr_r30/r7', 'iqr_r150/r30'
+    ])
+    group_cols = ['app_package', 'mediasource', 'country_group', 'ad_type']
+    groupedDf = df.groupby(group_cols)
+    for name, group in groupedDf:
+        print(f"Processing group: {name}")
+        # # for debug
+        # if name[0] == 'com.fun.lastwar.gp' and name[1] == 'Facebook Ads' and name[2] == 'GCC' and name[3] == 'AAA':
+        #     group.to_csv('/src/data/lw_debug_group.csv', index=False)
+        #     break
+            
+
+        df0 = group[['r30/r7', 'r150/r30']].copy()
+
+        std_values = df0.std(skipna=True).tolist()
+        mean_values = df0.mean(skipna=True).tolist()
+        cv_values = (df0.std(skipna=True) / df0.mean(skipna=True)).tolist()
+        iqr_values = df0.quantile(0.75) - df0.quantile(0.25)
+        iqr_values = iqr_values.tolist()
+
+        # 将结果添加到resaultDf
+        resaultDf = resaultDf.append({
+            'app_package': name[0],
+            'mediasource': name[1],
+            'country_group': name[2],
+            'ad_type': name[3],
+            'std_r30/r7': std_values[0],
+            'std_r150/r30': std_values[1],
+            'mean_r30/r7': mean_values[0],
+            'mean_r150/r30': mean_values[1],
+            'cv_r30/r7': cv_values[0],
+            'cv_r150/r30': cv_values[1],
+            'iqr_r30/r7': iqr_values[0],
+            'iqr_r150/r30': iqr_values[1]
+        }, ignore_index=True)
+
+        # 绘图
+        group['install_day'] = pd.to_datetime(group['install_day'], format='%Y-%m-%d')
+        plt.figure(figsize=(36, 6))
+        for col in ['r30/r7', 'r150/r30']:
+            plt.plot(group['install_day'], group[col], label=col)
+        plt.xlabel('Install Day')
+        plt.ylabel('Revenue Ratios')
+        plt.title(f'Ratios over time\n{name[0]} | {name[1]} | {name[2]} | {name[3]}')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        # 文件名处理
+        safe_name = "_".join([str(n).replace(" ", "_") for n in name])
+        img_path = os.path.join('/src/data/', f"{safe_name}_f.png")
+        plt.savefig(img_path)
+        plt.close()
+        print(f"Plot saved to {img_path}")
+
+
+    resaultDf = resaultDf.sort_values(by=['app_package', 'mediasource', 'country_group', 'ad_type'])
+    resaultDf.to_csv('/src/data/lw_20250619_step2f.csv', index=False)
+    print('CV计算完成，结果已保存到 /src/data/lw_20250619_step2f.csv')
+
 
 # 按周汇总，分析'r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120'
 def step3():
@@ -433,8 +523,9 @@ def step4():
 
 
 if __name__ == "__main__":
-    step1()
-    step2()
-    step3()
-    step4()
+    # step1()
+    # step2()
+    step2_f()
+    # step3()
+    # step4()
     print("Script executed successfully.")
