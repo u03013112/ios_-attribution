@@ -55,6 +55,7 @@ group by
 
     return df
 
+
 def step1():
     df = getRevenueData('20240101', '20250501')
     print(df.head())
@@ -117,8 +118,7 @@ def step1():
 
     df.to_csv('/src/data/lw_20250619_step1.csv', index=False)
 
-
-
+# 按天汇总，分析'r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120'
 def step2():
     df = pd.read_csv('/src/data/lw_20250619_step1.csv')
     # print(df.head())  
@@ -242,7 +242,10 @@ def step2():
     resaultDf = resaultDf.sort_values(by=['app_package', 'mediasource', 'country_group', 'ad_type'])
     resaultDf.to_csv('/src/data/lw_20250619_step2.csv', index=False)
     print('CV计算完成，结果已保存到 /src/data/lw_20250619_step2.csv')
-        
+
+# 按天汇总，分析'r30/r7', 'r150/r30'
+
+# 按周汇总，分析'r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120'
 def step3():
     df = pd.read_csv('/src/data/lw_20250619_step1.csv')
     # 暂时只看安卓
@@ -338,7 +341,7 @@ def step3():
     print('Weekly CV计算完成，结果已保存到 /src/data/lw_20250619_step3.csv')
     print(f'所有分组图表已保存至 {img_dir}')
 
-
+# 按月汇总，分析'r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120'     
 def step4():
     df = pd.read_csv('/src/data/lw_20250619_step1.csv')
     # 暂时只看安卓
