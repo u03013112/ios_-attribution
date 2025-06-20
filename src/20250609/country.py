@@ -1,3 +1,4 @@
+from fileinput import filename
 import os
 import datetime
 import numpy as np
@@ -55,6 +56,296 @@ group by
 
     return df
 
+# 在getRevenueData基础上直接在sql中将step1的部分逻辑完成
+def getRevenueData2(startDayStr, endDayStr):
+    filename = f'/src/data/lw_cost_revenue_country2_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+    else:
+        sql = f"""
+SELECT
+	install_date,
+	mediasource,
+	country_group,
+	campaign_id,
+	campaign_name,
+	ad_type,
+	SUM(revenue_1d) AS revenue_1d,
+	SUM(revenue_3d) AS revenue_3d,
+	SUM(revenue_7d) AS revenue_7d,
+	SUM(revenue_14d) AS revenue_14d,
+	SUM(revenue_28d) AS revenue_28d,
+	SUM(revenue_60d) AS revenue_60d,
+	SUM(revenue_90d) AS revenue_90d,
+	SUM(revenue_120d) AS revenue_120d,
+	SUM(revenue_150d) AS revenue_150d
+FROM
+	(
+		SELECT
+			a.install_date,
+			a.mediasource,
+			CASE
+				WHEN a.country IN (
+					'AD',
+					'AT',
+					'AU',
+					'BE',
+					'CA',
+					'CH',
+					'DE',
+					'DK',
+					'FI',
+					'FR',
+					'HK',
+					'IE',
+					'IS',
+					'IT',
+					'LI',
+					'LU',
+					'MC',
+					'NL',
+					'NO',
+					'NZ',
+					'SE',
+					'SG',
+					'UK',
+					'MO',
+					'IL'
+				) THEN 'T1'
+				WHEN a.country IN (
+					'BG',
+					'BV',
+					'BY',
+					'ES',
+					'GR',
+					'HU',
+					'ID',
+					'KZ',
+					'LT',
+					'MA',
+					'MY',
+					'PH',
+					'PL',
+					'PT',
+					'RO',
+					'RS',
+					'SI',
+					'SK',
+					'TH',
+					'TM',
+					'TR',
+					'UZ',
+					'ZA'
+				) THEN 'T2'
+				WHEN a.country IN (
+					'AL',
+					'AR',
+					'BA',
+					'BO',
+					'BR',
+					'CL',
+					'CO',
+					'CR',
+					'CZ',
+					'DZ',
+					'EC',
+					'EE',
+					'EG',
+					'FO',
+					'GG',
+					'GI',
+					'GL',
+					'GT',
+					'HR',
+					'IM',
+					'IN',
+					'IQ',
+					'JE',
+					'LV',
+					'MD',
+					'ME',
+					'MK',
+					'MT',
+					'MX',
+					'PA',
+					'PE',
+					'PY',
+					'SM',
+					'SR',
+					'UA',
+					'UY',
+					'XK'
+				) THEN 'T3'
+				WHEN a.country = 'US' THEN 'US'
+				WHEN a.country = 'JP' THEN 'JP'
+				WHEN a.country = 'KR' THEN 'KR'
+				WHEN a.country = 'TW' THEN 'TW'
+				WHEN a.country IN ('SA', 'AE', 'QA', 'KW', 'BH', 'OM') THEN 'GCC'
+				ELSE 'T3'
+			END AS country_group,
+			CASE
+				WHEN a.mediasource = 'Facebook Ads' THEN CASE
+					WHEN b.campaign_name LIKE '%BAU%' THEN 'BAU'
+					WHEN b.campaign_name LIKE '%AAA%'
+					OR b.campaign_name LIKE '%3A%' THEN 'AAA'
+					ELSE ' '
+				END
+				WHEN a.mediasource = 'googleadwords_int' THEN CASE
+					WHEN b.campaign_name LIKE '%3.0%' THEN '3.0'
+					WHEN b.campaign_name LIKE '%2.5%' THEN '2.5'
+					WHEN b.campaign_name LIKE '%1.0%' THEN '1.0'
+					WHEN LOWER(b.campaign_name) LIKE '%smart%' THEN 'smart'
+					ELSE ' '
+				END
+				ELSE ' '
+			END AS ad_type,
+			a.campaign_id,
+			b.campaign_name as campaign_name,
+			revenue_1d,
+			revenue_3d,
+			revenue_7d,
+			revenue_14d,
+			revenue_28d,
+			revenue_60d,
+			revenue_90d,
+			revenue_120d,
+			revenue_150d
+		FROM
+			(
+				SELECT
+					install_day AS install_date,
+					mediasource,
+					campaign_id,
+					country,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 0 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_1d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 2 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_3d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 6 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_7d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 13 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_14d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 27 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_28d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 59 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_60d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 89 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_90d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 119 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_120d,
+					SUM(
+						CASE
+							WHEN datediff(
+								to_date(event_day, 'yyyymmdd'),
+								to_date(install_day, 'yyyymmdd'),
+								'dd'
+							) <= 149 THEN revenue_value_usd
+							ELSE 0
+						END
+					) AS revenue_150d
+				FROM
+					rg_bi.dwd_overseas_revenue_allproject
+				WHERE
+					zone = '0'
+					AND app = '502'
+					AND app_package = 'com.fun.lastwar.gp'
+					AND day BETWEEN '{startDayStr}' AND '{endDayStr}'
+				GROUP BY
+					install_day,
+					mediasource,
+					campaign_id,
+					country
+			) a
+			LEFT JOIN (
+				select
+					mediasource,
+					campaign_id,
+					campaign_name
+				from
+					dwb_overseas_mediasource_campaign_map
+				group by
+					mediasource,
+					campaign_id,
+					campaign_name
+			) b ON a.mediasource = b.mediasource
+			AND a.campaign_id = b.campaign_id
+	) final_table
+GROUP BY
+	install_date,
+	mediasource,
+	country_group,
+	campaign_id,
+	campaign_name,
+	ad_type;
+        """
+        df = execSql(sql)
+        print(f"Executing SQL: {sql}")
+        df.to_csv(filename, index=False)
+        return df
 
 def step1():
     df = getRevenueData('20240101', '20250501')
@@ -431,6 +722,85 @@ def step3():
     print('Weekly CV计算完成，结果已保存到 /src/data/lw_20250619_step3.csv')
     print(f'所有分组图表已保存至 {img_dir}')
 
+# 按周汇总，分析'r30/r7', 'r150/r30'
+def step3_f():
+    df = pd.read_csv('/src/data/lw_20250619_step1.csv')
+    # 暂时只看安卓
+    df = df[df['app_package'] == 'com.fun.lastwar.gp'].copy()
+    # 过滤掉收入较低的媒体
+    mediaDf = df.groupby(['mediasource']).agg({'revenue_d7':'sum'}).reset_index()
+    mediaDf = mediaDf.sort_values(by='revenue_d7', ascending=False)
+    mediaDf = mediaDf[mediaDf['revenue_d7'] > 10000]
+    mediaList = mediaDf['mediasource'].tolist()
+    df = df[df['mediasource'].isin(mediaList)].copy()
+    # 日期转为周
+    df['install_day'] = pd.to_datetime(df['install_day'])
+    df['install_week'] = df['install_day'].dt.to_period('W').apply(lambda r: r.start_time)
+    # 按周汇总数据
+    group_cols = ['app_package', 'mediasource', 'country_group', 'ad_type', 'install_week']
+    agg_cols = [
+        'revenue_d7', 'revenue_d30', 'revenue_d150'
+    ]
+    df_weekly = df.groupby(group_cols, as_index=False)[agg_cols].sum()
+    # 计算收入比率
+    df_weekly['r30/r7'] = df_weekly['revenue_d30'] / df_weekly['revenue_d7']
+    df_weekly['r150/r30'] = df_weekly['revenue_d150'] / df_weekly['revenue_d30']
+    df_weekly.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # 存放结果的DataFrame
+    resaultDf = pd.DataFrame(columns=[
+        'app_package', 'mediasource', 'country_group', 'ad_type',
+        'std_r30/r7', 'std_r150/r30',
+        'mean_r30/r7', 'mean_r150/r30',
+        'cv_r30/r7', 'cv_r150/r30',
+        'iqr_r30/r7', 'iqr_r150/r30'
+    ])
+    # 创建目录保存图片
+    img_dir = '/src/data/group_weekly_plots_f'
+    os.makedirs(img_dir, exist_ok=True)
+    group_cols = ['app_package', 'mediasource', 'country_group', 'ad_type']
+    groupedDf = df_weekly.groupby(group_cols)
+    for name, group in groupedDf:
+        print(f"Processing weekly group: {name}")
+        df0 = group[['install_week', 'r30/r7', 'r150/r30']].copy()
+        df0.replace([np.inf, -np.inf], np.nan, inplace=True)
+        # 计算统计指标
+        std_values = df0.iloc[:, 1:].std(skipna=True).tolist()
+        mean_values = df0.iloc[:, 1:].mean(skipna=True).tolist()
+        cv_values = (df0.iloc[:, 1:].std(skipna=True) / df0.iloc[:, 1:].mean(skipna=True)).tolist()
+        iqr_values = (df0.iloc[:, 1:].quantile(0.75) - df0.iloc[:, 1:].quantile(0.25)).tolist()
+        # 追加到结果DataFrame
+        resaultDf = resaultDf.append({
+            'app_package': name[0],
+            'mediasource': name[1],
+            'country_group': name[2],
+            'ad_type': name[3],
+            'std_r30/r7': std_values[0], 'std_r150/r30': std_values[1],
+            'mean_r30/r7': mean_values[0], 'mean_r150/r30': mean_values[1],
+            'cv_r30/r7': cv_values[0], 'cv_r150/r30': cv_values[1],
+            'iqr_r30/r7': iqr_values[0], 'iqr_r150/r30': iqr_values[1]
+        }, ignore_index=True)
+        # 绘图
+        plt.figure(figsize=(24, 6))
+        for col in ['r30/r7', 'r150/r30']:
+            plt.plot(df0['install_week'].astype(str), df0[col], marker='o', label=col)
+        plt.xlabel('Install Week')
+        plt.ylabel('Revenue Ratios')
+        plt.title(f'Weekly Ratios - {name[0]} | {name[1]} | {name[2]} | {name[3]}')
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        # 文件名处理
+        safe_name = "_".join([str(n).replace(" ", "_") for n in name])
+        img_path = os.path.join(img_dir, f"{safe_name}_weekly_f.png")
+        plt.savefig(img_path)
+        plt.close()
+        print(f"Weekly plot saved to {img_path}")
+    resaultDf = resaultDf.sort_values(by=['app_package', 'mediasource', 'country_group', 'ad_type'])
+    resaultDf.to_csv('/src/data/lw_20250619_step3f_weekly.csv', index=False)
+    print('Weekly CV计算完成，结果已保存到 /src/data/lw_20250619_step3f_weekly.csv')
+    print(f'所有分组图表已保存至 {img_dir}')
+
 # 按月汇总，分析'r3/r1', 'r7/r3', 'r14/r7', 'r30/r14', 'r60/r30', 'r90/r60', 'r120/r90', 'r150/r120'     
 def step4():
     df = pd.read_csv('/src/data/lw_20250619_step1.csv')
@@ -521,11 +891,162 @@ def step4():
     print('Monthly CV计算完成，结果已保存到 /src/data/lw_20250619_step4_monthly.csv')
     print(f'所有分组图表已保存至 {img_dir}')
 
+# 按月汇总，分析'r30/r7', 'r150/r30'
+def step4_f():
+    df = pd.read_csv('/src/data/lw_20250619_step1.csv')
+    # 暂时只看安卓
+    df = df[df['app_package'] == 'com.fun.lastwar.gp'].copy()
+    # 过滤掉收入较低的媒体
+    mediaDf = df.groupby(['mediasource']).agg({'revenue_d7':'sum'}).reset_index()
+    mediaDf = mediaDf.sort_values(by='revenue_d7', ascending=False)
+    mediaDf = mediaDf[mediaDf['revenue_d7'] > 10000]
+    mediaList = mediaDf['mediasource'].tolist()
+    df = df[df['mediasource'].isin(mediaList)].copy()
+    # 日期转为月（每月第一天）
+    df['install_day'] = pd.to_datetime(df['install_day'])
+    df['install_month'] = df['install_day'].dt.to_period('M').apply(lambda r: r.start_time)
+    # 按月汇总数据（仅需revenue_d7, revenue_d30, revenue_d150）
+    group_cols = ['app_package', 'mediasource', 'country_group', 'ad_type', 'install_month']
+    agg_cols = ['revenue_d7', 'revenue_d30', 'revenue_d150']
+    df_monthly = df.groupby(group_cols, as_index=False)[agg_cols].sum()
+    # 计算收入比率
+    df_monthly['r30/r7'] = df_monthly['revenue_d30'] / df_monthly['revenue_d7']
+    df_monthly['r150/r30'] = df_monthly['revenue_d150'] / df_monthly['revenue_d30']
+    df_monthly.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # 存放结果的DataFrame
+    resaultDf = pd.DataFrame(columns=[
+        'app_package', 'mediasource', 'country_group', 'ad_type',
+        'std_r30/r7', 'std_r150/r30',
+        'mean_r30/r7', 'mean_r150/r30',
+        'cv_r30/r7', 'cv_r150/r30',
+        'iqr_r30/r7', 'iqr_r150/r30'
+    ])
+    # 创建目录保存图片
+    img_dir = '/src/data/group_monthly_plots_f'
+    os.makedirs(img_dir, exist_ok=True)
+    group_cols = ['app_package', 'mediasource', 'country_group', 'ad_type']
+    groupedDf = df_monthly.groupby(group_cols)
+    for name, group in groupedDf:
+        print(f"Processing monthly group: {name}")
+        df0 = group[['install_month', 'r30/r7', 'r150/r30']].copy()
+        df0.replace([np.inf, -np.inf], np.nan, inplace=True)
+        # 计算统计指标
+        std_values = df0.iloc[:, 1:].std(skipna=True).tolist()
+        mean_values = df0.iloc[:, 1:].mean(skipna=True).tolist()
+        cv_values = (df0.iloc[:, 1:].std(skipna=True) / df0.iloc[:, 1:].mean(skipna=True)).tolist()
+        iqr_values = (df0.iloc[:, 1:].quantile(0.75) - df0.iloc[:, 1:].quantile(0.25)).tolist()
+        # 追加到结果DataFrame
+        resaultDf = resaultDf.append({
+            'app_package': name[0],
+            'mediasource': name[1],
+            'country_group': name[2],
+            'ad_type': name[3],
+            'std_r30/r7': std_values[0], 'std_r150/r30': std_values[1],
+            'mean_r30/r7': mean_values[0], 'mean_r150/r30': mean_values[1],
+            'cv_r30/r7': cv_values[0], 'cv_r150/r30': cv_values[1],
+            'iqr_r30/r7': iqr_values[0], 'iqr_r150/r30': iqr_values[1]
+        }, ignore_index=True)
+        # 绘图
+        plt.figure(figsize=(36, 6))
+        for col in ['r30/r7', 'r150/r30']:
+            plt.plot(df0['install_month'].astype(str), df0[col], marker='o', label=col)
+        plt.xlabel('Install Month')
+        plt.ylabel('Revenue Ratios')
+        plt.title(f'Monthly Ratios - {name[0]} | {name[1]} | {name[2]} | {name[3]}')
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        # 保存图片
+        safe_name = "_".join([str(n).replace(" ", "_") for n in name])
+        img_path = os.path.join(img_dir, f"{safe_name}_monthly_f.png")
+        plt.savefig(img_path)
+        plt.close()
+        print(f"Monthly plot saved to {img_path}")
+    resaultDf = resaultDf.sort_values(by=['app_package', 'mediasource', 'country_group', 'ad_type'])
+    resaultDf.to_csv('/src/data/lw_20250619_step4f_monthly.csv', index=False)
+    print('Monthly CV计算完成，结果已保存到 /src/data/lw_20250619_step4f_monthly.csv')
+    print(f'所有分组图表已保存至 {img_dir}')
+
+
+def getRevenueDataNerf(startDayStr, endDayStr):
+    filename = f'/src/data/lw_revenue_nerf_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        return pd.read_csv(filename)
+    else:
+        sql1 = f'''
+            SELECT
+                game_uid as customer_user_id,
+                install_timestamp,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r1usd,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 2 * 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r2usd,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 7 * 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r7usd,
+                COALESCE(
+                    SUM(
+                    CASE
+                        WHEN event_time - install_timestamp between 0
+                        and 30 * 24 * 3600 THEN revenue_value_usd
+                        ELSE 0
+                    END
+                    ),
+                    0
+                ) as r30usd,
+                TO_CHAR(
+                    from_unixtime(cast (install_timestamp as bigint)),
+                    "yyyy-mm-dd"
+                ) as install_date,
+                mediasource
+            FROM
+                rg_bi.dwd_overseas_revenue_allproject
+            WHERE
+                zone = '0'
+                and app = 502
+                and app_package = 'com.fun.lastwar.gp'
+                and day BETWEEN {startDayStr}
+                AND {endDayStr}
+                AND game_uid IS NOT NULL
+            GROUP BY
+                game_uid,
+                install_timestamp,
+                mediasource
+            ;
+        '''
+
+
 
 if __name__ == "__main__":
     # step1()
     # step2()
-    step2_f()
+    # step2_f()
     # step3()
+    # step3_f()
     # step4()
+    step4_f()
     print("Script executed successfully.")
