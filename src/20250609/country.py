@@ -1,6 +1,7 @@
 from fileinput import filename
 import os
 import datetime
+from tracemalloc import start
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
@@ -1078,6 +1079,11 @@ def getRevenueData0Raw(startDayStr, endDayStr):
         # install_date 按照字符串读取
         return pd.read_csv(filename, dtype={'install_date': str})
     else:
+        startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
+        endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
+        # 由于需要135天的数据，所以endDay需要加上135天，保守起见，加140天
+        endDay += datetime.timedelta(days=140)
+        endDayStr135 = endDay.strftime('%Y%m%d')
         sql = f'''
 SELECT
     install_date,
@@ -1166,7 +1172,8 @@ FROM
             a.zone = '0'
             AND a.app = '502'
             AND a.app_package = 'com.fun.lastwar.gp'
-            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr135}'
+            AND a.install_day BETWEEN '{startDayStr}' AND '{endDayStr}'
             AND a.game_uid IS NOT NULL
 
         GROUP BY
@@ -1203,6 +1210,12 @@ def getRevenueData1Percentile(startDayStr, endDayStr,percentile=0.99):
     if os.path.exists(filename):
         return pd.read_csv(filename)
     else:
+        startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
+        endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
+        # 由于需要135天的数据，所以endDay需要加上135天，保守起见，加140天
+        endDay += datetime.timedelta(days=140)
+        endDayStr135 = endDay.strftime('%Y%m%d')
+
         percentileStr = str(percentile).replace('.', '_')
         sql = f'''
 SELECT
@@ -1280,7 +1293,8 @@ FROM
             a.zone = '0'
             AND a.app = '502'
             AND a.app_package = 'com.fun.lastwar.gp'
-            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr135}'
+            AND a.install_day BETWEEN '{startDayStr}' AND '{endDayStr}'
             AND a.game_uid IS NOT NULL
 
         GROUP BY
@@ -1350,6 +1364,12 @@ def getRevenueData2Nerf(startDayStr, endDayStr, mediasourceList = [],percentile=
         revenue_7d_case = generate_case_when('revenue_7d', f'revenue_7d_{str(percentile).replace(".","_")}')
         revenue_120d_case = generate_case_when('revenue_120d', f'revenue_120d_{str(percentile).replace(".","_")}')
         revenue_135d_case = generate_case_when('revenue_135d', f'revenue_135d_{str(percentile).replace(".","_")}')
+
+        startDay = datetime.datetime.strptime(startDayStr, '%Y%m%d')
+        endDay = datetime.datetime.strptime(endDayStr, '%Y%m%d')
+        # 由于需要135天的数据，所以endDay需要加上135天，保守起见，加140天
+        endDay += datetime.timedelta(days=140)
+        endDayStr135 = endDay.strftime('%Y%m%d')
 
         # Step3: 拼接完整SQL
         sql = f'''
@@ -1428,7 +1448,8 @@ FROM
             a.zone = '0'
             AND a.app = '502'
             AND a.app_package = 'com.fun.lastwar.gp'
-            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr135}'
+            AND a.install_day BETWEEN '{startDayStr}' AND '{endDayStr}'
             AND a.game_uid IS NOT NULL
 
         GROUP BY
@@ -1462,7 +1483,7 @@ GROUP BY
 
 
 def main():
-    startDayStr, endDayStr = '20240101', '20250201'
+    startDayStr, endDayStr = '20240101', '20250228'
 
     df = getRevenueData0Raw(startDayStr, endDayStr)
     # 简单处理
@@ -1476,7 +1497,7 @@ def main():
         'revenue_1d', 'revenue_7d', 'revenue_120d', 'revenue_135d']].copy()
 
 
-    percentileList = [0.99]
+    percentileList = [0.99,0.995,0.999]
     for percentile in percentileList:
         nerfDf = getRevenueData2Nerf(startDayStr, endDayStr, mediasourceList, percentile)
         nerfDf = df.merge(nerfDf, on=['install_date', 'mediasource', 'country_group', 'ad_type'], how='left')
@@ -1556,8 +1577,45 @@ def main():
             'nerf_r7', 'nerf_r120'
             ]]
         nerfWeekDfResult.to_csv(f'/src/data/lw_revenue_week_result_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
-        
 
+        # 按月统计
+        nerfMonthDf = nerfDf.copy()
+        # install_date 转成 datetime 类型
+        nerfMonthDf['install_date'] = pd.to_datetime(nerfMonthDf['install_date'], format='%Y%m%d')
+        nerfMonthDf['install_month'] = nerfMonthDf['install_date'].dt.to_period('M').astype(str)
+        nerfMonthDf = nerfMonthDf.groupby(['install_month', 'mediasource', 'country_group', 'ad_type']).sum().reset_index()
+        # 过滤，排除r7小于等于0的记录，排除r7或者r120为空
+        nerfMonthDf = nerfMonthDf[
+            (nerfMonthDf['revenue_7d'] > 0) &
+            (nerfMonthDf['revenue_120d'] > 0) &
+            (nerfMonthDf['revenue_7d_nerf'] > 0) &
+            (nerfMonthDf['revenue_120d_nerf'] > 0)].copy()
+        nerfMonthDf['r120/r7'] = nerfMonthDf['revenue_120d'] / nerfMonthDf['revenue_7d']
+        nerfMonthDf['r120/r7_mean'] = nerfMonthDf.groupby(['mediasource', 'country_group', 'ad_type'])['r120/r7'].transform('mean')
+        nerfMonthDf['mape_r120/r7'] = abs(nerfMonthDf['r120/r7'] - nerfMonthDf['r120/r7_mean']) / nerfMonthDf['r120/r7_mean']
+        nerfMonthDf['nerf_r120/r7'] = nerfMonthDf['revenue_120d_nerf'] / nerfMonthDf['revenue_7d_nerf']
+        nerfMonthDf['nerf_r120/r7_mean'] = nerfMonthDf.groupby(['mediasource', 'country_group', 'ad_type'])['nerf_r120/r7'].transform('mean')
+        nerfMonthDf['mape_nerf_r120/r7'] = abs(nerfMonthDf['nerf_r120/r7'] - nerfMonthDf['nerf_r120/r7_mean']) / nerfMonthDf['nerf_r120/r7_mean']
+        nerfMonthDf.to_csv(f'/src/data/lw_revenue_month_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
+        # 保存结果，记录所有分组的Mape均值
+        nerfMonthDfResult = nerfMonthDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'r120/r7_mean': 'mean',
+            'nerf_r120/r7_mean': 'mean',
+            'mape_r120/r7': 'mean',
+            'mape_nerf_r120/r7': 'mean',
+            'revenue_7d': 'sum',
+            'revenue_120d': 'sum',
+            'revenue_7d_nerf': 'sum',
+            'revenue_120d_nerf': 'sum'
+        }).reset_index()
+        nerfMonthDfResult['nerf_r7'] = 1 - nerfMonthDfResult['revenue_7d_nerf'] / nerfMonthDfResult['revenue_7d']
+        nerfMonthDfResult['nerf_r120'] = 1 - nerfMonthDfResult['revenue_120d_nerf'] / nerfMonthDfResult['revenue_120d']
+        nerfMonthDfResult = nerfMonthDfResult[[
+            'mediasource', 'country_group', 'ad_type',
+            'mape_r120/r7', 'mape_nerf_r120/r7',
+            'nerf_r7', 'nerf_r120'
+            ]]
+        nerfMonthDfResult.to_csv(f'/src/data/lw_revenue_month_result_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
 
 if __name__ == "__main__":
     # step1()
