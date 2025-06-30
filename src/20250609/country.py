@@ -1072,6 +1072,491 @@ GROUP BY
         df.to_csv(filename, index=False)
     return df
 
+def getRevenueData0Raw(startDayStr, endDayStr):
+    filename = f'/src/data/lw_revenue_0_raw_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        # install_date 按照字符串读取
+        return pd.read_csv(filename, dtype={'install_date': str})
+    else:
+        sql = f'''
+SELECT
+    install_date,
+    mediasource,
+    country_group,
+    ad_type,
+
+    SUM(revenue_1d) AS revenue_1d,
+    COUNT(DISTINCT CASE WHEN revenue_1d > 0 THEN game_uid ELSE NULL END) AS puser_count_1d,
+    MAX(revenue_1d) AS max_one_user_revenue_1d,
+
+    SUM(revenue_7d) AS revenue_7d,
+    COUNT(DISTINCT CASE WHEN revenue_7d > 0 THEN game_uid ELSE NULL END) AS puser_count_7d,
+    MAX(revenue_7d) AS max_one_user_revenue_7d,
+
+    SUM(revenue_120d) AS revenue_120d,
+    COUNT(DISTINCT CASE WHEN revenue_120d > 0 THEN game_uid ELSE NULL END) AS puser_count_120d,
+    MAX(revenue_120d) AS max_one_user_revenue_120d,
+
+    SUM(revenue_135d) AS revenue_135d,
+    COUNT(DISTINCT CASE WHEN revenue_135d > 0 THEN game_uid ELSE NULL END) AS puser_count_135d,
+    MAX(revenue_135d) AS max_one_user_revenue_135d
+
+FROM
+(
+    SELECT
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid,
+
+        SUM(revenue_1d) AS revenue_1d,
+        SUM(revenue_7d) AS revenue_7d,
+        SUM(revenue_120d) AS revenue_120d,
+        SUM(revenue_135d) AS revenue_135d
+    FROM
+    (
+        SELECT
+            a.install_day AS install_date,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            CASE
+                WHEN a.country IN ('AD','AT','AU','BE','CA','CH','DE','DK','FI','FR','HK','IE','IS','IT','LI','LU','MC','NL','NO','NZ','SE','SG','UK','MO','IL') THEN 'T1'
+                WHEN a.country IN ('BG','BV','BY','ES','GR','HU','ID','KZ','LT','MA','MY','PH','PL','PT','RO','RS','SI','SK','TH','TM','TR','UZ','ZA') THEN 'T2'
+                WHEN a.country IN ('AL','AR','BA','BO','BR','CL','CO','CR','CZ','DZ','EC','EE','EG','FO','GG','GI','GL','GT','HR','IM','IN','IQ','JE','LV','MD','ME','MK','MT','MX','PA','PE','PY','SM','SR','UA','UY','XK') THEN 'T3'
+                WHEN a.country = 'US' THEN 'US'
+                WHEN a.country = 'JP' THEN 'JP'
+                WHEN a.country = 'KR' THEN 'KR'
+                WHEN a.country = 'TW' THEN 'TW'
+                WHEN a.country IN ('SA','AE','QA','KW','BH','OM') THEN 'GCC'
+                ELSE 'T3'
+            END AS country_group,
+
+            CASE
+                WHEN a.mediasource = 'Facebook Ads' THEN CASE
+                    WHEN b.campaign_name LIKE '%BAU%' THEN 'BAU'
+                    WHEN b.campaign_name LIKE '%AAA%' OR b.campaign_name LIKE '%3A%' THEN 'AAA'
+                    ELSE 'other'
+                END
+                WHEN a.mediasource = 'googleadwords_int' THEN CASE
+                    WHEN b.campaign_name LIKE '%3.0%' THEN '3.0'
+                    WHEN b.campaign_name LIKE '%2.5%' THEN '2.5'
+                    WHEN b.campaign_name LIKE '%1.0%' THEN '1.0'
+                    WHEN LOWER(b.campaign_name) LIKE '%smart%' THEN 'smart'
+                    ELSE 'other'
+                END
+                ELSE 'other'
+            END AS ad_type,
+
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 0 THEN revenue_value_usd ELSE 0 END) AS revenue_1d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 6 THEN revenue_value_usd ELSE 0 END) AS revenue_7d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 119 THEN revenue_value_usd ELSE 0 END) AS revenue_120d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 134 THEN revenue_value_usd ELSE 0 END) AS revenue_135d
+
+        FROM rg_bi.dwd_overseas_revenue_allproject a
+        LEFT JOIN (
+            SELECT mediasource, campaign_id, campaign_name
+            FROM dwb_overseas_mediasource_campaign_map
+            GROUP BY mediasource, campaign_id, campaign_name
+        ) b
+        ON a.mediasource = b.mediasource AND a.campaign_id = b.campaign_id
+
+        WHERE
+            a.zone = '0'
+            AND a.app = '502'
+            AND a.app_package = 'com.fun.lastwar.gp'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.game_uid IS NOT NULL
+
+        GROUP BY
+            a.install_day,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            b.campaign_name
+    ) user_level_revenue
+
+    GROUP BY
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid
+) grouped_user_revenue
+
+GROUP BY
+    install_date,
+    mediasource,
+    country_group,
+    ad_type
+;
+        '''
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+
+    return df
+
+def getRevenueData1Percentile(startDayStr, endDayStr,percentile=0.99):
+    filename = f'/src/data/lw_revenue_1_percentile_{startDayStr}_{endDayStr}_{percentile}.csv'
+    if os.path.exists(filename):
+        return pd.read_csv(filename)
+    else:
+        percentileStr = str(percentile).replace('.', '_')
+        sql = f'''
+SELECT
+    mediasource,
+    country_group,
+    ad_type,
+
+    percentile_approx(revenue_1d, {percentile}) AS revenue_1d_{percentileStr},
+    percentile_approx(revenue_7d, {percentile}) AS revenue_7d_{percentileStr},
+    percentile_approx(revenue_120d, {percentile}) AS revenue_120d_{percentileStr},
+    percentile_approx(revenue_135d, {percentile}) AS revenue_135d_{percentileStr}
+
+FROM
+(
+    SELECT
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid,
+
+        SUM(revenue_1d) AS revenue_1d,
+        SUM(revenue_7d) AS revenue_7d,
+        SUM(revenue_120d) AS revenue_120d,
+        SUM(revenue_135d) AS revenue_135d
+    FROM
+    (
+        SELECT
+            a.install_day AS install_date,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            CASE
+                WHEN a.country IN ('AD','AT','AU','BE','CA','CH','DE','DK','FI','FR','HK','IE','IS','IT','LI','LU','MC','NL','NO','NZ','SE','SG','UK','MO','IL') THEN 'T1'
+                WHEN a.country IN ('BG','BV','BY','ES','GR','HU','ID','KZ','LT','MA','MY','PH','PL','PT','RO','RS','SI','SK','TH','TM','TR','UZ','ZA') THEN 'T2'
+                WHEN a.country IN ('AL','AR','BA','BO','BR','CL','CO','CR','CZ','DZ','EC','EE','EG','FO','GG','GI','GL','GT','HR','IM','IN','IQ','JE','LV','MD','ME','MK','MT','MX','PA','PE','PY','SM','SR','UA','UY','XK') THEN 'T3'
+                WHEN a.country = 'US' THEN 'US'
+                WHEN a.country = 'JP' THEN 'JP'
+                WHEN a.country = 'KR' THEN 'KR'
+                WHEN a.country = 'TW' THEN 'TW'
+                WHEN a.country IN ('SA','AE','QA','KW','BH','OM') THEN 'GCC'
+                ELSE 'T3'
+            END AS country_group,
+
+            CASE
+                WHEN a.mediasource = 'Facebook Ads' THEN CASE
+                    WHEN b.campaign_name LIKE '%BAU%' THEN 'BAU'
+                    WHEN b.campaign_name LIKE '%AAA%' OR b.campaign_name LIKE '%3A%' THEN 'AAA'
+                    ELSE 'other'
+                END
+                WHEN a.mediasource = 'googleadwords_int' THEN CASE
+                    WHEN b.campaign_name LIKE '%3.0%' THEN '3.0'
+                    WHEN b.campaign_name LIKE '%2.5%' THEN '2.5'
+                    WHEN b.campaign_name LIKE '%1.0%' THEN '1.0'
+                    WHEN LOWER(b.campaign_name) LIKE '%smart%' THEN 'smart'
+                    ELSE 'other'
+                END
+                ELSE 'other'
+            END AS ad_type,
+
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 0 THEN revenue_value_usd ELSE 0 END) AS revenue_1d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 6 THEN revenue_value_usd ELSE 0 END) AS revenue_7d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 119 THEN revenue_value_usd ELSE 0 END) AS revenue_120d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 134 THEN revenue_value_usd ELSE 0 END) AS revenue_135d
+
+        FROM rg_bi.dwd_overseas_revenue_allproject a
+        LEFT JOIN (
+            SELECT mediasource, campaign_id, campaign_name
+            FROM dwb_overseas_mediasource_campaign_map
+            GROUP BY mediasource, campaign_id, campaign_name
+        ) b
+        ON a.mediasource = b.mediasource AND a.campaign_id = b.campaign_id
+
+        WHERE
+            a.zone = '0'
+            AND a.app = '502'
+            AND a.app_package = 'com.fun.lastwar.gp'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.game_uid IS NOT NULL
+
+        GROUP BY
+            a.install_day,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            b.campaign_name
+    ) user_level_revenue
+
+    GROUP BY
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid
+) grouped_user_revenue
+
+GROUP BY
+    mediasource,
+    country_group,
+    ad_type
+;
+        '''
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+    return df
+
+def getRevenueData2Nerf(startDayStr, endDayStr, mediasourceList = [],percentile=0.99):
+    filename = f'/src/data/lw_revenue_2_nerf_{startDayStr}_{endDayStr}_{percentile}.csv'
+    if os.path.exists(filename):
+        return pd.read_csv(filename, dtype={'install_date': str})
+    else:
+        # Step1: 获取分位数阈值
+        percentile_df = getRevenueData1Percentile(startDayStr, endDayStr, percentile)
+        if len(mediasourceList) == 0:
+            # mediasourceList = percentile_df['mediasource'].unique().tolist()
+            mediasourceList = ['Facebook Ads', 'googleadwords_int']
+        percentile_df = percentile_df[percentile_df['mediasource'].isin(mediasourceList)].copy()
+    
+        # percentile_df = percentile_df[percentile_df['country_group'].isin([
+        #     'T1', 
+        #     # 'T2', 'T3', 'US', 'JP', 'KR', 'TW', 'GCC'
+        #     ])].copy()
+
+        # Step2: 将阈值拼接到SQL中，构造CASE WHEN语句
+        def generate_case_when(field, percentile_field):
+            case_when = f'''
+            CASE
+            '''
+            for _, row in percentile_df.iterrows():
+                mediasource, country_group, ad_type, threshold = row['mediasource'], row['country_group'], row['ad_type'], row[percentile_field]
+                # 防止阈值为null
+                if pd.isnull(threshold):
+                    continue
+                case_when += f'''
+                WHEN mediasource='{mediasource}' AND country_group='{country_group}' AND ad_type='{ad_type}' AND {field} > {threshold} THEN {threshold}
+                '''
+            case_when += f'''
+                ELSE {field}
+            END
+            '''
+            return case_when
+
+        revenue_1d_case = generate_case_when('revenue_1d', f'revenue_1d_{str(percentile).replace(".","_")}')
+        revenue_7d_case = generate_case_when('revenue_7d', f'revenue_7d_{str(percentile).replace(".","_")}')
+        revenue_120d_case = generate_case_when('revenue_120d', f'revenue_120d_{str(percentile).replace(".","_")}')
+        revenue_135d_case = generate_case_when('revenue_135d', f'revenue_135d_{str(percentile).replace(".","_")}')
+
+        # Step3: 拼接完整SQL
+        sql = f'''
+SELECT
+    install_date,
+    mediasource,
+    country_group,
+    ad_type,
+
+    SUM(revenue_1d) AS revenue_1d_nerf,
+    SUM(revenue_7d) AS revenue_7d_nerf,
+    SUM(revenue_120d) AS revenue_120d_nerf,
+    SUM(revenue_135d) AS revenue_135d_nerf
+FROM
+(
+    SELECT
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid,
+
+        SUM({revenue_1d_case}) AS revenue_1d,
+        SUM({revenue_7d_case}) AS revenue_7d,
+        SUM({revenue_120d_case}) AS revenue_120d,
+        SUM({revenue_135d_case}) AS revenue_135d
+    FROM
+    (
+        SELECT
+            a.install_day AS install_date,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            CASE
+                WHEN a.country IN ('AD','AT','AU','BE','CA','CH','DE','DK','FI','FR','HK','IE','IS','IT','LI','LU','MC','NL','NO','NZ','SE','SG','UK','MO','IL') THEN 'T1'
+                WHEN a.country IN ('BG','BV','BY','ES','GR','HU','ID','KZ','LT','MA','MY','PH','PL','PT','RO','RS','SI','SK','TH','TM','TR','UZ','ZA') THEN 'T2'
+                WHEN a.country IN ('AL','AR','BA','BO','BR','CL','CO','CR','CZ','DZ','EC','EE','EG','FO','GG','GI','GL','GT','HR','IM','IN','IQ','JE','LV','MD','ME','MK','MT','MX','PA','PE','PY','SM','SR','UA','UY','XK') THEN 'T3'
+                WHEN a.country = 'US' THEN 'US'
+                WHEN a.country = 'JP' THEN 'JP'
+                WHEN a.country = 'KR' THEN 'KR'
+                WHEN a.country = 'TW' THEN 'TW'
+                WHEN a.country IN ('SA','AE','QA','KW','BH','OM') THEN 'GCC'
+                ELSE 'T3'
+            END AS country_group,
+
+            CASE
+                WHEN a.mediasource = 'Facebook Ads' THEN CASE
+                    WHEN b.campaign_name LIKE '%BAU%' THEN 'BAU'
+                    WHEN b.campaign_name LIKE '%AAA%' OR b.campaign_name LIKE '%3A%' THEN 'AAA'
+                    ELSE 'other'
+                END
+                WHEN a.mediasource = 'googleadwords_int' THEN CASE
+                    WHEN b.campaign_name LIKE '%3.0%' THEN '3.0'
+                    WHEN b.campaign_name LIKE '%2.5%' THEN '2.5'
+                    WHEN b.campaign_name LIKE '%1.0%' THEN '1.0'
+                    WHEN LOWER(b.campaign_name) LIKE '%smart%' THEN 'smart'
+                    ELSE 'other'
+                END
+                ELSE 'other'
+            END AS ad_type,
+
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 0 THEN revenue_value_usd ELSE 0 END) AS revenue_1d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 6 THEN revenue_value_usd ELSE 0 END) AS revenue_7d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 119 THEN revenue_value_usd ELSE 0 END) AS revenue_120d,
+            SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 134 THEN revenue_value_usd ELSE 0 END) AS revenue_135d
+
+        FROM rg_bi.dwd_overseas_revenue_allproject a
+        LEFT JOIN (
+            SELECT mediasource, campaign_id, campaign_name
+            FROM dwb_overseas_mediasource_campaign_map
+            GROUP BY mediasource, campaign_id, campaign_name
+        ) b
+        ON a.mediasource = b.mediasource AND a.campaign_id = b.campaign_id
+
+        WHERE
+            a.zone = '0'
+            AND a.app = '502'
+            AND a.app_package = 'com.fun.lastwar.gp'
+            AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+            AND a.game_uid IS NOT NULL
+
+        GROUP BY
+            a.install_day,
+            a.mediasource,
+            a.country,
+            a.game_uid,
+            b.campaign_name
+    ) user_level_revenue
+
+    GROUP BY
+        install_date,
+        mediasource,
+        country_group,
+        ad_type,
+        game_uid
+) grouped_user_revenue
+
+GROUP BY
+    install_date,
+    mediasource,
+    country_group,
+    ad_type
+;
+        '''
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+
+    return df
+
+
+def main():
+    startDayStr, endDayStr = '20240101', '20250201'
+
+    df = getRevenueData0Raw(startDayStr, endDayStr)
+    # 简单处理
+    df = df[df['install_date'] >= startDayStr]
+    mediaDf = df.groupby(['mediasource']).agg({'revenue_7d':'sum'}).reset_index()
+    mediaDf = mediaDf.sort_values(by='revenue_7d', ascending=False)
+    mediasourceList = mediaDf[mediaDf['revenue_7d'] > 10000]['mediasource'].tolist()
+    df = df[df['mediasource'].isin(mediasourceList)]
+    df = df[[
+        'install_date', 'mediasource', 'country_group', 'ad_type',
+        'revenue_1d', 'revenue_7d', 'revenue_120d', 'revenue_135d']].copy()
+
+
+    percentileList = [0.99]
+    for percentile in percentileList:
+        nerfDf = getRevenueData2Nerf(startDayStr, endDayStr, mediasourceList, percentile)
+        nerfDf = df.merge(nerfDf, on=['install_date', 'mediasource', 'country_group', 'ad_type'], how='left')
+        
+        # 按天统计
+        nerfDayDf = nerfDf.copy()
+        # 过滤，排除r7小于等于0的记录，排除r7或者r120为空
+        nerfDayDf = nerfDayDf[(nerfDayDf['revenue_7d'] > 0) &
+                                (nerfDayDf['revenue_120d'] > 0) &
+                                (nerfDayDf['revenue_7d_nerf'] > 0) &
+                                (nerfDayDf['revenue_120d_nerf'] > 0)].copy()
+        nerfDayDf['r120/r7'] = nerfDayDf['revenue_120d'] / nerfDayDf['revenue_7d']
+        nerfDayDf['r120/r7_mean'] = nerfDayDf.groupby(['mediasource', 'country_group', 'ad_type'])['r120/r7'].transform('mean')
+        nerfDayDf['mape_r120/r7'] = abs(nerfDayDf['r120/r7'] - nerfDayDf['r120/r7_mean']) / nerfDayDf['r120/r7_mean']
+        
+        nerfDayDf['nerf_r120/r7'] = nerfDayDf['revenue_120d_nerf'] / nerfDayDf['revenue_7d_nerf']
+        nerfDayDf['nerf_r120/r7_mean'] = nerfDayDf.groupby(['mediasource', 'country_group', 'ad_type'])['nerf_r120/r7'].transform('mean')
+        nerfDayDf['mape_nerf_r120/r7'] = abs(nerfDayDf['nerf_r120/r7'] - nerfDayDf['nerf_r120/r7_mean']) / nerfDayDf['nerf_r120/r7_mean']
+        nerfDayDf.to_csv(f'/src/data/lw_revenue_day_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
+
+        # 保存结果，记录所有分组的Mape均值
+        nerfDayDfResult = nerfDayDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'r120/r7_mean': 'mean',
+            'nerf_r120/r7_mean': 'mean',
+            'mape_r120/r7': 'mean',
+            'mape_nerf_r120/r7': 'mean',
+            'revenue_7d': 'sum',
+            'revenue_120d': 'sum',
+            'revenue_7d_nerf': 'sum',
+            'revenue_120d_nerf': 'sum'
+        }).reset_index()
+        nerfDayDfResult['nerf_r7'] = 1 - nerfDayDfResult['revenue_7d_nerf'] / nerfDayDfResult['revenue_7d']
+        nerfDayDfResult['nerf_r120'] = 1 - nerfDayDfResult['revenue_120d_nerf'] / nerfDayDfResult['revenue_120d']
+
+        nerfDayDfResult = nerfDayDfResult[[
+            'mediasource', 'country_group', 'ad_type',
+            'mape_r120/r7', 'mape_nerf_r120/r7',
+            'nerf_r7', 'nerf_r120'
+            ]]
+        nerfDayDfResult.to_csv(f'/src/data/lw_revenue_day_result_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
+
+        # 按周统计
+        nerfWeekDf = nerfDf.copy()
+        # install_date 转成 datetime 类型
+        nerfWeekDf['install_date'] = pd.to_datetime(nerfWeekDf['install_date'], format='%Y%m%d')
+        nerfWeekDf['install_week'] = nerfWeekDf['install_date'].dt.to_period('W').astype(str)
+        nerfWeekDf = nerfWeekDf.groupby(['install_week', 'mediasource', 'country_group', 'ad_type']).sum().reset_index()
+
+        # 过滤，排除r7小于等于0的记录，排除r7或者r120为空
+        nerfWeekDf = nerfWeekDf[(nerfWeekDf['revenue_7d'] > 0) &
+                                (nerfWeekDf['revenue_120d'] > 0) &
+                                (nerfWeekDf['revenue_7d_nerf'] > 0) &
+                                (nerfWeekDf['revenue_120d_nerf'] > 0)].copy()
+        nerfWeekDf['r120/r7'] = nerfWeekDf['revenue_120d'] / nerfWeekDf['revenue_7d']
+        nerfWeekDf['r120/r7_mean'] = nerfWeekDf.groupby(['mediasource', 'country_group', 'ad_type'])['r120/r7'].transform('mean')
+        nerfWeekDf['mape_r120/r7'] = abs(nerfWeekDf['r120/r7'] - nerfWeekDf['r120/r7_mean']) / nerfWeekDf['r120/r7_mean']
+        nerfWeekDf['nerf_r120/r7'] = nerfWeekDf['revenue_120d_nerf'] / nerfWeekDf['revenue_7d_nerf']
+        nerfWeekDf['nerf_r120/r7_mean'] = nerfWeekDf.groupby(['mediasource', 'country_group', 'ad_type'])['nerf_r120/r7'].transform('mean')
+        nerfWeekDf['mape_nerf_r120/r7'] = abs(nerfWeekDf['nerf_r120/r7'] - nerfWeekDf['nerf_r120/r7_mean']) / nerfWeekDf['nerf_r120/r7_mean']
+        nerfWeekDf.to_csv(f'/src/data/lw_revenue_week_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
+        # 保存结果，记录所有分组的Mape均值
+        nerfWeekDfResult = nerfWeekDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'r120/r7_mean': 'mean',
+            'nerf_r120/r7_mean': 'mean',
+            'mape_r120/r7': 'mean',
+            'mape_nerf_r120/r7': 'mean',
+            'revenue_7d': 'sum',
+            'revenue_120d': 'sum',
+            'revenue_7d_nerf': 'sum',
+            'revenue_120d_nerf': 'sum'
+        }).reset_index()
+        nerfWeekDfResult['nerf_r7'] = 1 - nerfWeekDfResult['revenue_7d_nerf'] / nerfWeekDfResult['revenue_7d']
+        nerfWeekDfResult['nerf_r120'] = 1 - nerfWeekDfResult['revenue_120d_nerf'] / nerfWeekDfResult['revenue_120d']
+        nerfWeekDfResult = nerfWeekDfResult[[
+            'mediasource', 'country_group', 'ad_type',
+            'mape_r120/r7', 'mape_nerf_r120/r7',
+            'nerf_r7', 'nerf_r120'
+            ]]
+        nerfWeekDfResult.to_csv(f'/src/data/lw_revenue_week_result_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
+        
 
 
 if __name__ == "__main__":
@@ -1082,5 +1567,9 @@ if __name__ == "__main__":
     # step3_f()
     # step4()
     # step4_f()
-    getRevenueDataNerf('20240101', '20250201')
+    # getRevenueDataNerf('20240101', '20250201')
+    # getRevenueData0Raw('20240101', '20250201')
+    # getRevenueData1Percentile('20240101', '20250201', 0.99)
+    # getRevenueData2Nerf('20240101', '20250201', 0.99)
+    main()
     print("Script executed successfully.")
