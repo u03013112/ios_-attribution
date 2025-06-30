@@ -975,69 +975,102 @@ def getRevenueDataNerf(startDayStr, endDayStr):
         return pd.read_csv(filename)
     else:
         sql1 = f'''
-            SELECT
-                game_uid as customer_user_id,
-                install_timestamp,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN event_time - install_timestamp between 0
-                        and 24 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r1usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN event_time - install_timestamp between 0
-                        and 2 * 24 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r2usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN event_time - install_timestamp between 0
-                        and 7 * 24 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r7usd,
-                COALESCE(
-                    SUM(
-                    CASE
-                        WHEN event_time - install_timestamp between 0
-                        and 30 * 24 * 3600 THEN revenue_value_usd
-                        ELSE 0
-                    END
-                    ),
-                    0
-                ) as r30usd,
-                TO_CHAR(
-                    from_unixtime(cast (install_timestamp as bigint)),
-                    "yyyy-mm-dd"
-                ) as install_date,
-                mediasource
-            FROM
-                rg_bi.dwd_overseas_revenue_allproject
-            WHERE
-                zone = '0'
-                and app = 502
-                and app_package = 'com.fun.lastwar.gp'
-                and day BETWEEN {startDayStr}
-                AND {endDayStr}
-                AND game_uid IS NOT NULL
-            GROUP BY
-                game_uid,
-                install_timestamp,
-                mediasource
-            ;
+SELECT
+    install_date,
+    mediasource,
+    country_group,
+    ad_type,
+
+    SUM(revenue_7d) AS revenue_7d,
+    COUNT(DISTINCT CASE WHEN revenue_7d > 0 THEN game_uid ELSE NULL END) AS puser_count_7d,
+    MAX(revenue_7d) AS max_one_user_revenue_7d,
+
+    SUM(revenue_28d) AS revenue_28d,
+    COUNT(DISTINCT CASE WHEN revenue_28d > 0 THEN game_uid ELSE NULL END) AS puser_count_28d,
+    MAX(revenue_28d) AS max_one_user_revenue_28d,
+
+    SUM(revenue_150d) AS revenue_150d,
+    COUNT(DISTINCT CASE WHEN revenue_150d > 0 THEN game_uid ELSE NULL END) AS puser_count_150d,
+    MAX(revenue_150d) AS max_one_user_revenue_150d
+
+FROM
+(
+    SELECT
+        a.install_day AS install_date,
+        a.mediasource,
+        a.campaign_id,
+        a.country,
+        a.game_uid,
+        b.campaign_name,
+
+        CASE
+            WHEN a.country IN ('AD','AT','AU','BE','CA','CH','DE','DK','FI','FR','HK','IE','IS','IT','LI','LU','MC','NL','NO','NZ','SE','SG','UK','MO','IL') THEN 'T1'
+            WHEN a.country IN ('BG','BV','BY','ES','GR','HU','ID','KZ','LT','MA','MY','PH','PL','PT','RO','RS','SI','SK','TH','TM','TR','UZ','ZA') THEN 'T2'
+            WHEN a.country IN ('AL','AR','BA','BO','BR','CL','CO','CR','CZ','DZ','EC','EE','EG','FO','GG','GI','GL','GT','HR','IM','IN','IQ','JE','LV','MD','ME','MK','MT','MX','PA','PE','PY','SM','SR','UA','UY','XK') THEN 'T3'
+            WHEN a.country = 'US' THEN 'US'
+            WHEN a.country = 'JP' THEN 'JP'
+            WHEN a.country = 'KR' THEN 'KR'
+            WHEN a.country = 'TW' THEN 'TW'
+            WHEN a.country IN ('SA','AE','QA','KW','BH','OM') THEN 'GCC'
+            ELSE 'T3'
+        END AS country_group,
+
+        CASE
+            WHEN a.mediasource = 'Facebook Ads' THEN CASE
+                WHEN b.campaign_name LIKE '%BAU%' THEN 'BAU'
+                WHEN b.campaign_name LIKE '%AAA%' OR b.campaign_name LIKE '%3A%' THEN 'AAA'
+                ELSE ' '
+            END
+            WHEN a.mediasource = 'googleadwords_int' THEN CASE
+                WHEN b.campaign_name LIKE '%3.0%' THEN '3.0'
+                WHEN b.campaign_name LIKE '%2.5%' THEN '2.5'
+                WHEN b.campaign_name LIKE '%1.0%' THEN '1.0'
+                WHEN LOWER(b.campaign_name) LIKE '%smart%' THEN 'smart'
+                ELSE ' '
+            END
+            ELSE ' '
+        END AS ad_type,
+
+        SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 6 THEN revenue_value_usd ELSE 0 END) AS revenue_7d,
+        SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 27 THEN revenue_value_usd ELSE 0 END) AS revenue_28d,
+        SUM(CASE WHEN datediff(to_date(event_day,'yyyymmdd'), to_date(install_day,'yyyymmdd'),'dd') <= 149 THEN revenue_value_usd ELSE 0 END) AS revenue_150d
+
+    FROM
+        rg_bi.dwd_overseas_revenue_allproject a
+    LEFT JOIN (
+        SELECT mediasource, campaign_id, campaign_name
+        FROM dwb_overseas_mediasource_campaign_map
+        GROUP BY mediasource, campaign_id, campaign_name
+    ) b
+    ON a.mediasource = b.mediasource AND a.campaign_id = b.campaign_id
+
+    WHERE
+        a.zone = '0'
+        AND a.app = '502'
+        AND a.app_package = 'com.fun.lastwar.gp'
+        AND a.day BETWEEN '{startDayStr}' AND '{endDayStr}'
+        AND a.game_uid IS NOT NULL
+
+    GROUP BY
+        a.install_day,
+        a.mediasource,
+        a.campaign_id,
+        a.country,
+        a.game_uid,
+        b.campaign_name
+) user_level_revenue
+
+GROUP BY
+    install_date,
+    mediasource,
+    country_group,
+    ad_type
+;
         '''
+        print(f"Executing SQL: {sql1}")
+        df = execSql(sql1)
+        df.to_csv(filename, index=False)
+    return df
 
 
 
@@ -1048,5 +1081,6 @@ if __name__ == "__main__":
     # step3()
     # step3_f()
     # step4()
-    step4_f()
+    # step4_f()
+    getRevenueDataNerf('20240101', '20250201')
     print("Script executed successfully.")
