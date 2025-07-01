@@ -1,7 +1,5 @@
-from fileinput import filename
 import os
 import datetime
-from tracemalloc import start
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
@@ -1481,9 +1479,66 @@ GROUP BY
 
     return df
 
+def getCostData(startDayStr, endDayStr):
+    filename = f'/src/data/lw_cost_{startDayStr}_{endDayStr}.csv'
+    if os.path.exists(filename):
+        return pd.read_csv(filename, dtype={'install_date': str})
+    else:
+        sql = f'''
+SELECT
+    install_day AS install_date,
+    app_package,
+    CASE
+        WHEN country IN ('AD','AT','AU','BE','CA','CH','DE','DK','FI','FR','HK','IE','IS','IT','LI','LU','MC','NL','NO','NZ','SE','SG','UK','MO','IL') THEN 'T1'
+        WHEN country IN ('BG','BV','BY','ES','GR','HU','ID','KZ','LT','MA','MY','PH','PL','PT','RO','RS','SI','SK','TH','TM','TR','UZ','ZA') THEN 'T2'
+        WHEN country IN ('AL','AR','BA','BO','BR','CL','CO','CR','CZ','DZ','EC','EE','EG','FO','GG','GI','GL','GT','HR','IM','IN','IQ','JE','LV','MD','ME','MK','MT','MX','PA','PE','PY','SM','SR','UA','UY','XK') THEN 'T3'
+        WHEN country = 'US' THEN 'US'
+        WHEN country = 'JP' THEN 'JP'
+        WHEN country = 'KR' THEN 'KR'
+        WHEN country = 'TW' THEN 'TW'
+        WHEN country IN ('SA','AE','QA','KW','BH','OM') THEN 'GCC'
+        ELSE 'T3'
+    END AS country_group,
+    mediasource,
+    CASE
+        WHEN mediasource = 'Facebook Ads' THEN CASE
+            WHEN campaign_name LIKE '%BAU%' THEN 'BAU'
+            WHEN campaign_name LIKE '%AAA%' OR campaign_name LIKE '%3A%' THEN 'AAA'
+            ELSE 'other'
+        END
+        WHEN mediasource = 'googleadwords_int' THEN CASE
+            WHEN campaign_name LIKE '%3.0%' THEN '3.0'
+            WHEN campaign_name LIKE '%2.5%' THEN '2.5'
+            WHEN campaign_name LIKE '%1.0%' THEN '1.0'
+            WHEN LOWER(campaign_name) LIKE '%smart%' THEN 'smart'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END AS ad_type,
+    SUM(cost_value_usd) AS cost
+FROM
+    dws_overseas_public_roi
+WHERE
+    app = '502'
+    AND facebook_segment IN ('country', ' ')
+    AND install_day BETWEEN '{startDayStr}' AND '{endDayStr}'
+GROUP BY
+    install_day,
+    app_package,
+    country_group,
+    mediasource,
+    ad_type
+;
+        '''
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+    return df
 
 def main():
     startDayStr, endDayStr = '20240101', '20250228'
+
+    costDf = getCostData(startDayStr, endDayStr)
 
     df = getRevenueData0Raw(startDayStr, endDayStr)
     # 简单处理
@@ -1496,6 +1551,8 @@ def main():
         'install_date', 'mediasource', 'country_group', 'ad_type',
         'revenue_1d', 'revenue_7d', 'revenue_120d', 'revenue_135d']].copy()
 
+    df = df.merge(costDf, on=['install_date', 'mediasource', 'country_group', 'ad_type'], how='left')
+    df['cost'] = df['cost'].fillna(0)
 
     percentileList = [0.99,0.995,0.999]
     for percentile in percentileList:
@@ -1520,6 +1577,7 @@ def main():
 
         # 保存结果，记录所有分组的Mape均值
         nerfDayDfResult = nerfDayDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'cost': 'sum',
             'r120/r7_mean': 'mean',
             'nerf_r120/r7_mean': 'mean',
             'mape_r120/r7': 'mean',
@@ -1560,6 +1618,7 @@ def main():
         nerfWeekDf.to_csv(f'/src/data/lw_revenue_week_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
         # 保存结果，记录所有分组的Mape均值
         nerfWeekDfResult = nerfWeekDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'cost': 'sum',
             'r120/r7_mean': 'mean',
             'nerf_r120/r7_mean': 'mean',
             'mape_r120/r7': 'mean',
@@ -1599,6 +1658,7 @@ def main():
         nerfMonthDf.to_csv(f'/src/data/lw_revenue_month_{startDayStr}_{endDayStr}_{percentile}.csv', index=False)
         # 保存结果，记录所有分组的Mape均值
         nerfMonthDfResult = nerfMonthDf.groupby(['mediasource', 'country_group', 'ad_type']).agg({
+            'cost': 'sum',
             'r120/r7_mean': 'mean',
             'nerf_r120/r7_mean': 'mean',
             'mape_r120/r7': 'mean',
