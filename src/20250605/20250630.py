@@ -52,14 +52,20 @@ def getDataStep3(getDataStep2Return):
 
 
 def main():
+    # 数据加载与预处理
     df = getDataStep1()
     df2 = getDataStep2(df)
+    
+    # 检查标签缺失情况
     missing_tags_df = df2[df2['tag_level_1'].isnull() | df2['tag_level_2'].isnull()]
     missing_ratio = len(missing_tags_df) / len(df2)
     print(f"Missing tags ratio: {missing_ratio:.2%}")
+    
+    # 标签分类整合
     df = getDataStep3(df2)
     print(df.head())
 
+    # 保存预处理后的数据
     df.to_csv('/src/data/vqa_score_processed.csv', index=False)
 
     # 定义花费范围
@@ -68,8 +74,6 @@ def main():
     # 定义要计算相关性的列
     score_columns = ['vqa_score']
     index_columns = ['ctr', 'cvr', 'cpm']
-    
-    tag_type = df['tag_type'].unique().tolist()
 
     # 存储所有结果的列表
     all_results = []
@@ -77,67 +81,64 @@ def main():
     # 分组并计算相关性
     for spend_range in spend_ranges:
         filtered_df = df[df['cost_value_usd'] >= spend_range]
-        for group_values, group_df in filtered_df.groupby(['mediasource', 'os', 'inventory']):
-            mediasource, os, inventory = group_values
+        
+        # 直接将tag_type合并到groupby中，避免二次筛选
+        grouped = filtered_df.groupby(['mediasource', 'os', 'inventory', 'tag_type'])
+        
+        for group_values, df0 in grouped:
+            mediasource, os, inventory, tag = group_values
+
+            # 初始化结果字典
+            result_dict_base = {
+                'Spend Range': spend_range,
+                'Mediasource': mediasource,
+                'Os': os,
+                'Inventory': inventory,
+                'Tag Type': tag,
+                'Video Count': len(df0)
+            }
             
-            for tag in tag_type:
-                df0 = group_df[group_df['tag_type'] == tag]
+            # 计算每个指标与评分的相关性
+            for index_col in index_columns:
+                result_dict_corr = result_dict_base.copy()
+                result_dict_corr['Index'] = index_col
+                result_dict_corr['corrOrP'] = 'Correlation'
 
-                # 初始化结果字典
-                result_dict_t = {
-                    'Spend Range': spend_range,
-                    'Mediasource': mediasource,
-                    'Os': os,
-                    'Inventory': inventory,
-                    'Tag Type': tag,
-                    'Video Count': len(df0)
-                }
+                result_dict_p = result_dict_base.copy()
+                result_dict_p['Index'] = index_col
+                result_dict_p['corrOrP'] = 'P Value'
+
+                for score_col in score_columns:
+                    # 检查数据有效性
+                    valid_data = df0[[index_col, score_col]].dropna()
+                    x = valid_data[index_col]
+                    y = valid_data[score_col]
+                    
+                    if len(x) > 1 and len(y) > 1 and not (x.nunique() == 1 or y.nunique() == 1):
+                        # 数据有效，计算相关性
+                        pearson_corr, pearson_p = pearsonr(x, y)
+                        spearman_corr, spearman_p = spearmanr(x, y)
+                    else:
+                        # 数据无效或不足，设为NaN
+                        pearson_corr, pearson_p = float('nan'), float('nan')
+                        spearman_corr, spearman_p = float('nan'), float('nan')
+
+                    # 存储相关性系数
+                    result_dict_corr[f'{score_col}_pearson'] = pearson_corr
+                    result_dict_corr[f'{score_col}_spearman'] = spearman_corr
+                    
+                    # 存储p值
+                    result_dict_p[f'{score_col}_pearson'] = pearson_p
+                    result_dict_p[f'{score_col}_spearman'] = spearman_p
                 
-                # 计算每个 index_column 与 score_columns 的相关性
-                for index_col in index_columns:
-                    result_dict = result_dict_t.copy()
-                    result_dict[f'Index'] = index_col
-                    result_dict_corr = result_dict.copy()
-                    result_dict_corr[f'corrOrP'] = 'Correlation'
-                    result_dict_p = result_dict.copy()
-                    result_dict_p[f'corrOrP'] = 'P Value'
-
-                    for score_col in score_columns:
-                        # 检查数据有效性
-                        valid_data = df0[[index_col, score_col]].dropna()
-                        x = valid_data[index_col]
-                        y = valid_data[score_col]
-                        
-                        if len(x) > 1 and len(y) > 1 and not (x.nunique() == 1 or y.nunique() == 1):
-                            # 确保数据不含 NaN/Inf 且不是常数
-                            pearson_corr, pearson_p = pearsonr(x, y)
-                            spearman_corr, spearman_p = spearmanr(x, y)
-                        else:
-                            pearson_corr, pearson_p = float('nan'), float('nan')
-                            spearman_corr, spearman_p = float('nan'), float('nan')
-                        
-                        # 整理结果
-                        result_dict_corr[f'{score_col}_pearson'] = pearson_corr
-                        result_dict_corr[f'{score_col}_spearman'] = spearman_corr
-                        
-                        
-                        
-                        result_dict_p[f'{score_col}_pearson'] = pearson_p
-                        result_dict_p[f'{score_col}_spearman'] = spearman_p
-                        
-                        
-                
-                    result_corr_df = pd.DataFrame([result_dict_corr])
-                    result_p_df = pd.DataFrame([result_dict_p])
-
-                    all_results.append(result_corr_df)
-                    all_results.append(result_p_df)
+                # 将结果加入到列表中
+                all_results.append(pd.DataFrame([result_dict_corr]))
+                all_results.append(pd.DataFrame([result_dict_p]))
     
-    # 使用 pd.concat 将所有结果 DataFrame 合并为一个
+    # 合并所有结果
     final_results = pd.concat(all_results, ignore_index=True)
 
-    # 简单易读处理
-    # 将 Spend Range 列转换为字符串格式，并将100000转换为 '100K+', 10000转换为 '10K+', 3000转换为 '3K+', 1000转换为 '1K+'
+    # 调整花费范围显示格式
     final_results['Spend Range'] = final_results['Spend Range'].replace({
         100000: '100K+',
         10000: '10K+',
@@ -145,8 +146,10 @@ def main():
         1000: '1K+'
     })
 
+    # 过滤掉没有视频的数据
     final_results = final_results[final_results['Video Count'] > 0]
-    # 保存结果到 CSV 文件
+
+    # 保存结果到CSV文件
     final_results.to_csv('/src/data/correlation_results2.csv', index=False)
     print("Correlation results saved to /src/data/correlation_results2.csv")
 
@@ -172,5 +175,5 @@ def debug():
     print(valid_data.corr(method='spearman'))
 
 if __name__ == '__main__':
-    # main()
-    debug()
+    main()
+    # debug()
