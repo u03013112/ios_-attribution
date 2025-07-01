@@ -167,7 +167,8 @@ group by
     execSql2(sql)
     return
 
-# 收入增长率
+# 收入增长率计算，目前使用比较简单的方法
+# 每个分组最近3个月的收入增长率的均值作为预测值
 def createRevenueRiseRatioView():
     sql = """
 CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_ad_type_month_view_by_j AS
@@ -217,7 +218,7 @@ ratios_with_rownum AS (
 	FROM
 		ratios
 ),
-predict_ratios AS (
+last3month_ratios AS (
 	SELECT
 		cur.install_month,
 		cur.country_group,
@@ -237,7 +238,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r3_r1,
+		) AS last3month_r3_r1,
 		COALESCE(
 			AVG(
 				CASE
@@ -245,7 +246,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r7_r3,
+		) AS last3month_r7_r3,
 		COALESCE(
 			AVG(
 				CASE
@@ -253,7 +254,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r30_r7,
+		) AS last3month_r30_r7,
 		COALESCE(
 			AVG(
 				CASE
@@ -261,7 +262,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r60_r30,
+		) AS last3month_r60_r30,
 		COALESCE(
 			AVG(
 				CASE
@@ -269,7 +270,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r90_r60,
+		) AS last3month_r90_r60,
 		COALESCE(
 			AVG(
 				CASE
@@ -277,7 +278,7 @@ predict_ratios AS (
 				END
 			),
 			0
-		) AS predict_r120_r90
+		) AS last3month_r120_r90
 	FROM
 		ratios_with_rownum cur
 		LEFT JOIN ratios_with_rownum prev ON cur.country_group = prev.country_group
@@ -308,14 +309,14 @@ SELECT
 	r60_r30,
 	r90_r60,
 	r120_r90,
-	predict_r3_r1,
-	predict_r7_r3,
-	predict_r30_r7,
-	predict_r60_r30,
-	predict_r90_r60,
-	predict_r120_r90
+	last3month_r3_r1,
+	last3month_r7_r3,
+	last3month_r30_r7,
+	last3month_r60_r30,
+	last3month_r90_r60,
+	last3month_r120_r90
 FROM
-	predict_ratios
+	last3month_ratios
 ORDER BY
 	country_group,
 	mediasource,
@@ -327,13 +328,169 @@ ORDER BY
     execSql2(sql)
     return
 
+# 由于满日数据问题，当月数据不完整，需要使用之前数据完成预测。
+def createPredictRevenueRiseRatioView():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_ad_type_month_predict_view_by_j AS
+WITH base AS (
+	SELECT
+		country_group,
+		mediasource,
+		ad_type,
+		install_month,
+		r3_r1,
+		r7_r3,
+		r30_r7,
+		r60_r30,
+		r90_r60,
+		r120_r90,
+		last3month_r3_r1,
+		last3month_r7_r3,
+		last3month_r30_r7,
+		last3month_r60_r30,
+		last3month_r90_r60,
+		last3month_r120_r90,
+		ROW_NUMBER() OVER (
+			PARTITION BY country_group,
+			mediasource,
+			ad_type
+			ORDER BY
+				install_month
+		) AS row_num
+	FROM
+		lw_revenue_rise_ratio_country_group_ad_type_month_view_by_j
+)
+SELECT
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.install_month,
+	cur.r3_r1,
+	cur.r7_r3,
+	cur.r30_r7,
+	cur.r60_r30,
+	cur.r90_r60,
+	cur.r120_r90,
+	-- 本行的预测值
+	cur.last3month_r3_r1 AS predict_r3_r1,
+	cur.last3month_r7_r3 AS predict_r7_r3,
+	cur.last3month_r30_r7 AS predict_r30_r7,
+	-- 上一行的预测值
+	COALESCE(prev1.last3month_r60_r30, 0) AS predict_r60_r30,
+	-- 上两行的预测值
+	COALESCE(prev2.last3month_r90_r60, 0) AS predict_r90_r60,
+	-- 上三行的预测值
+	COALESCE(prev3.last3month_r120_r90, 0) AS predict_r120_r90
+FROM
+	base cur
+	LEFT JOIN base prev1 ON cur.country_group = prev1.country_group
+	AND cur.mediasource = prev1.mediasource
+	AND cur.ad_type = prev1.ad_type
+	AND cur.row_num = prev1.row_num + 1
+	LEFT JOIN base prev2 ON cur.country_group = prev2.country_group
+	AND cur.mediasource = prev2.mediasource
+	AND cur.ad_type = prev2.ad_type
+	AND cur.row_num = prev2.row_num + 2
+	LEFT JOIN base prev3 ON cur.country_group = prev3.country_group
+	AND cur.mediasource = prev3.mediasource
+	AND cur.ad_type = prev3.ad_type
+	AND cur.row_num = prev3.row_num + 3
+ORDER BY
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.install_month;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+# 针对 lw_revenue_rise_ratio_country_group_ad_type_month_predict_view_by_j 视图创建 MAPE 视图
+def createMapeView():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_view_by_j AS
+SELECT
+    install_month,
+    country_group,
+    mediasource,
+    ad_type,
+    -- MAPE1计算 (real vs predict)
+    CASE
+        WHEN (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+        ELSE ABS(
+            (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+                predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+            )
+        ) / (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
+    END AS MAPE1,
+    -- MAPE3计算 (real vs predict)
+    CASE
+        WHEN (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+        ELSE ABS(
+            (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+                predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+            )
+        ) / (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
+    END AS MAPE3,
+    -- MAPE7计算 (real vs predict)
+    CASE
+        WHEN (r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+        ELSE ABS(
+            (r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+                predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+            )
+        ) / (r30_r7 * r60_r30 * r90_r60 * r120_r90)
+    END AS MAPE7
+FROM
+    lw_revenue_rise_ratio_country_group_ad_type_month_predict_view_by_j
+ORDER BY
+    country_group,
+    mediasource,
+    ad_type,
+    install_month;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
+def getMapeData(startMonthStr, endMonthStr):
+    sql = f"""
+SELECT
+    install_month,
+    country_group,
+    mediasource,
+    ad_type,
+    avg(MAPE1) as MAPE1,
+    avg(MAPE3) as MAPE3,
+    avg(MAPE7) as MAPE7
+FROM
+    lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_view_by_j
+WHERE
+    install_month BETWEEN '{startMonthStr}' AND '{endMonthStr}'
+GROUP BY
+    install_month,
+    country_group,
+    mediasource,
+    ad_type
+;
+    """
+    print(f"Executing SQL: {sql}")
+    df = execSql(sql)
+    print(df)
+    return df
+    
 def main():
     # # 创建每月数据视图
-    createRealMonthyView()
+    # createRealMonthyView()
 
-    # 创建收入增长率视图
+    # # 创建收入增长率视图
     # createRevenueRiseRatioView()
 
+    # createPredictRevenueRiseRatioView()
+    # createMapeView()
+
+    getMapeData('202410', '202502')
 
 
 if __name__ == "__main__":
