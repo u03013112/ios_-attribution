@@ -77,7 +77,7 @@ from
 where
 	app = '502'
 	and app_package = 'com.fun.lastwar.gp'
-	and facebook_segment in ('country', ' ')
+	and facebook_segment in ('country', 'N/A')
 group by
 	install_day,
 	country_group,
@@ -156,7 +156,7 @@ from
 where
 	app = '502'
 	and app_package = 'com.fun.lastwar.gp'
-	and facebook_segment in ('country', ' ')
+	and facebook_segment in ('country', 'N/A')
 group by
 	install_month,
 	country_group,
@@ -329,10 +329,10 @@ ORDER BY
 
 def main():
     # # 创建每月数据视图
-    # createRealMonthyView()
+    createRealMonthyView()
 
     # 创建收入增长率视图
-    createRevenueRiseRatioView()
+    # createRevenueRiseRatioView()
 
 
 
