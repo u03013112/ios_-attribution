@@ -88,6 +88,7 @@ group by
     execSql2(sql)
     return
 
+# 直接使用bi数据，注意这是AF归因，不是GPIR
 def createRealMonthyView():
     sql = """
 CREATE VIEW IF NOT EXISTS lw_real_cost_roi_country_group_ad_type_month_view_by_j AS
@@ -453,7 +454,6 @@ ORDER BY
     execSql2(sql)
     return
 
-
 def getMapeData(startMonthStr, endMonthStr):
     sql = f"""
 SELECT
@@ -480,6 +480,240 @@ GROUP BY
     print(df)
     return df
     
+# 创建 KPI 视图
+# 其中回本是按照佳玥给出的表格进行计算的
+def createKpiView():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_kpi_country_group_ad_type_month_view_by_j AS
+SELECT
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	CASE
+		WHEN (
+			predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+		) = 0 THEN NULL
+		ELSE ROUND(
+			kpi_target / (
+				predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			),
+			4
+		)
+	END AS kpi1,
+	CASE
+		WHEN (
+			predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+		) = 0 THEN NULL
+		ELSE ROUND(
+			kpi_target / (
+				predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			),
+			4
+		)
+	END AS kpi3,
+	CASE
+		WHEN (
+			predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+		) = 0 THEN NULL
+		ELSE ROUND(
+			kpi_target / (
+				predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			),
+			4
+		)
+	END AS kpi7
+FROM
+	(
+		SELECT
+			*,
+			CASE
+				WHEN country_group = 'US' THEN 1.45
+				WHEN country_group = 'KR' THEN 1.58
+				WHEN country_group = 'JP' THEN 1.66
+				WHEN country_group = 'GCC' THEN 1.45
+				WHEN country_group = 'T1' THEN 1.65
+				ELSE 1.56
+			END AS kpi_target
+		FROM
+			lw_revenue_rise_ratio_country_group_ad_type_month_predict_view_by_j
+	) t
+ORDER BY
+	country_group,
+	mediasource,
+	ad_type,
+	install_month;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+# 创建 KPI2 视图
+# 动态KPI，是根据30日、60日、90日的ROI来计算的
+def createKpi2View():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_kpi2_country_group_ad_type_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90
+	FROM
+		lw_real_cost_roi_country_group_ad_type_month_view_by_j
+),
+predict_base AS (
+	SELECT
+		*,
+		CASE
+			WHEN country_group = 'US' THEN 1.45
+			WHEN country_group = 'KR' THEN 1.58
+			WHEN country_group = 'JP' THEN 1.66
+			WHEN country_group = 'GCC' THEN 1.45
+			ELSE 1.65
+		END AS kpi_target
+	FROM
+		lw_revenue_rise_ratio_country_group_ad_type_month_predict_view_by_j
+)
+SELECT
+	r.install_month,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	-- kpi_30
+	CASE
+		WHEN r.roi30 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi1_30,
+	CASE
+		WHEN r.roi30 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi3_30,
+	CASE
+		WHEN r.roi30 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi7_30,
+	-- kpi_60
+	CASE
+		WHEN r.roi60 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi1_60,
+	CASE
+		WHEN r.roi60 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi3_60,
+	CASE
+		WHEN r.roi60 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi7_60,
+	-- kpi_90
+	CASE
+		WHEN r.roi90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi1_90,
+	CASE
+		WHEN r.roi90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi3_90,
+	CASE
+		WHEN r.roi90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi7_90
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON r.install_month = p.install_month
+	AND r.country_group = p.country_group
+	AND r.mediasource = p.mediasource
+	AND r.ad_type = p.ad_type
+ORDER BY
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.install_month;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 def main():
     # # 创建每月数据视图
     # createRealMonthyView()
@@ -490,7 +724,11 @@ def main():
     # createPredictRevenueRiseRatioView()
     # createMapeView()
 
-    getMapeData('202410', '202502')
+    # getMapeData('202410', '202502')
+
+    # createKpiView()
+
+    createKpi2View()
 
 
 if __name__ == "__main__":
