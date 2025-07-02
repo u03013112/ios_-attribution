@@ -478,7 +478,7 @@ SELECT
     avg(MAPE3) as MAPE3,
     avg(MAPE7) as MAPE7
 FROM
-    lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_view_by_j
+    lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_fix_view_by_j
 WHERE
     install_month BETWEEN '{startMonthStr}' AND '{endMonthStr}'
 GROUP BY
@@ -490,7 +490,7 @@ GROUP BY
     """
     print(f"Executing SQL: {sql}")
     df = execSql(sql)
-    print(df)
+    # print(df)
     return df
     
 # 创建 KPI 视图
@@ -891,24 +891,25 @@ def main(dayStr=None):
     # createKpi2View()
     # createKpi2ViewFix()
 
-    allInOne()
 
-    # # 每月的7日执行一次，如果不是7日，则不执行
-    # if dayStr:
-    #     today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
-    # else:
-    #     today = datetime.date.today()
-    # if today.day == 7:
-    #     print(f"Today is {today}, executing the monthly tasks.")
-    #     # main function logic here
-    #     # 将需要的数据组合到一起，并进行一定的数据过滤
-    #     # monthStr 是上个月
-    #     monthStr = (today - datetime.timedelta(days=30)).strftime('%Y%m')
-    #     print(f"month: {monthStr}")
-        
-    # else:
-    #     print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
+    # 每月的7日执行一次，如果不是7日，则不执行
+    if dayStr:
+        today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
+    else:
+        today = datetime.date.today()
+    if today.day == 7:
+        print(f"Today is {today}, executing the monthly tasks.")
+        allInOne()
+    else:
+        print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    mapeDf = getMapeData('202406', '202506')
+    mapeDf = mapeDf.groupby(['country_group', 'mediasource', 'ad_type']).mean().reset_index()
+    mediaList = ['Facebook Ads', 'googleadwords_int','moloco_int','bytedanceglobal_int','applovin_int']
+    mapeDf = mapeDf[mapeDf['mediasource'].isin(mediaList)]
+    # print(mapeDf)
+    mapeDf.to_csv('/src/data/lw_revenue_month_mape.csv', index=False)
