@@ -120,6 +120,7 @@ group by
     execSql2(sql)
     return
 
+# 基于createRealMonthyView，过滤了本月不算，另外计算了ROI
 def createRealCostAndRoiMonthyView():
     sql = """
 CREATE VIEW IF NOT EXISTS lw_real_cost_roi2_country_group_ad_type_month_view_by_j AS
@@ -442,6 +443,30 @@ ORDER BY
     execSql2(sql)
     return
 
+# 由于误差需要有了完整120天的数据才能计算
+# 所以将不满120天的数据过滤掉
+def createMapeViewFix():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_fix_view_by_j AS
+SELECT
+    a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+    a.MAPE1,
+    a.MAPE3,
+    a.MAPE7
+FROM
+    lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_view_by_j a
+    INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+WHERE
+    b.month_diff >= 5
+;
+	"""
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 def getMapeData(startMonthStr, endMonthStr):
     sql = f"""
 SELECT
@@ -701,20 +726,152 @@ ORDER BY
     execSql2(sql)
     return
 
-
-def getAllData(monthStr):
-    sql = f"""
+# 动态KPI，修正，将不完整数据的月份过滤掉
+# 这里的逻辑是基于 lw_kpi_country_group_ad_type_month_view_by_j 视图进行修正
+def createKpi2ViewFix():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_kpi2_fix_country_group_ad_type_month_view_by_j AS
+SELECT
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	CASE
+		WHEN b.month_diff >= 4 THEN a.kpi1_90
+		WHEN b.month_diff = 3 THEN a.kpi1_60
+		WHEN b.month_diff = 2 THEN a.kpi1_30
+		ELSE NULL
+	END AS d_kpi1,
+	CASE
+		WHEN b.month_diff >= 4 THEN a.kpi3_90
+		WHEN b.month_diff = 3 THEN a.kpi3_60
+		WHEN b.month_diff = 2 THEN a.kpi3_30
+		ELSE NULL
+	END AS d_kpi3,
+	CASE
+		WHEN b.month_diff >= 4 THEN a.kpi7_90
+		WHEN b.month_diff = 3 THEN a.kpi7_60
+		WHEN b.month_diff = 2 THEN a.kpi7_30
+		ELSE NULL
+	END AS d_kpi7
+FROM
+	lw_kpi2_country_group_ad_type_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+ORDER BY
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type;
     """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
+def allInOne():
+    o = getO()
+
+    table_name = 'lw_android_kpi_country_group_ad_type_month_view_by_j_20250702'
+
+    # 判断表是否存在
+    if not o.exist_table(table_name):
+        # 不存在则创建表
+        sql = '''
+        CREATE TABLE {0} AS
+        SELECT
+            a.install_month,
+            a.country_group,
+            a.mediasource,
+            a.ad_type,
+            a.cost,
+            a.roi1,
+            a.roi3,
+            a.roi7,
+            b.kpi1,
+            b.kpi3,
+            b.kpi7,
+            c.d_kpi1,
+            c.d_kpi3,
+            c.d_kpi7,
+            d.MAPE1,
+            d.MAPE3,
+            d.MAPE7
+        FROM lw_real_cost_roi2_country_group_ad_type_month_view_by_j a
+        LEFT JOIN lw_kpi_country_group_ad_type_month_view_by_j b
+            ON a.install_month = b.install_month
+            AND a.country_group = b.country_group
+            AND a.mediasource = b.mediasource
+            AND a.ad_type = b.ad_type
+        LEFT JOIN lw_kpi2_fix_country_group_ad_type_month_view_by_j c
+            ON a.install_month = c.install_month
+            AND a.country_group = c.country_group
+            AND a.mediasource = c.mediasource
+            AND a.ad_type = c.ad_type
+        LEFT JOIN lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_fix_view_by_j d
+            ON a.install_month = d.install_month
+            AND a.country_group = d.country_group
+            AND a.mediasource = d.mediasource
+            AND a.ad_type = d.ad_type;
+        '''.format(table_name)
+    else:
+        # 存在则更新表
+        sql = '''
+        INSERT OVERWRITE TABLE {0}
+        SELECT
+            a.install_month,
+            a.country_group,
+            a.mediasource,
+            a.ad_type,
+            a.cost,
+            a.roi1,
+            a.roi3,
+            a.roi7,
+            b.kpi1,
+            b.kpi3,
+            b.kpi7,
+            c.d_kpi1,
+            c.d_kpi3,
+            c.d_kpi7,
+            d.MAPE1,
+            d.MAPE3,
+            d.MAPE7
+        FROM lw_real_cost_roi2_country_group_ad_type_month_view_by_j a
+        LEFT JOIN lw_kpi_country_group_ad_type_month_view_by_j b
+            ON a.install_month = b.install_month
+            AND a.country_group = b.country_group
+            AND a.mediasource = b.mediasource
+            AND a.ad_type = b.ad_type
+        LEFT JOIN lw_kpi2_fix_country_group_ad_type_month_view_by_j c
+            ON a.install_month = c.install_month
+            AND a.country_group = c.country_group
+            AND a.mediasource = c.mediasource
+            AND a.ad_type = c.ad_type
+        LEFT JOIN lw_revenue_rise_ratio_country_group_ad_type_month_predict_mape_fix_view_by_j d
+            ON a.install_month = d.install_month
+            AND a.country_group = d.country_group
+            AND a.mediasource = d.mediasource
+            AND a.ad_type = d.ad_type;
+        '''.format(table_name)
+
+    # 执行SQL
+    instance = o.execute_sql(sql)
+    instance.wait_for_success()
+
+
 
 def main(dayStr=None):
     # createMonthView()
     # createRealMonthyView()
-    createRealCostAndRoiMonthyView()
+    # createRealCostAndRoiMonthyView()
     # createRevenueRiseRatioView()
     # createPredictRevenueRiseRatioView()
     # createMapeView()
+    # createMapeViewFix()
     # createKpiView()
     # createKpi2View()
+    # createKpi2ViewFix()
+
+    allInOne()
 
     # # 每月的7日执行一次，如果不是7日，则不执行
     # if dayStr:
