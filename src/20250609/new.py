@@ -9,80 +9,32 @@ import sys
 sys.path.append('/src')
 from src.maxCompute import execSql,execSql2,getO
 
-def createRealDailyView():
+# 创建月视图，动态的计算目前的月份和安装月份之间的差值，方便后面过滤数据
+def createMonthView():
     sql = """
-CREATE VIEW IF NOT EXISTS lw_real_cost_roi_country_group_ad_type_view_by_j AS
-select
-	install_day,
-	CASE
-		WHEN country IN (
-			'AD',
-			'AT',
-			'AU',
-			'BE',
-			'CA',
-			'CH',
-			'DE',
-			'DK',
-			'FI',
-			'FR',
-			'HK',
-			'IE',
-			'IS',
-			'IT',
-			'LI',
-			'LU',
-			'MC',
-			'NL',
-			'NO',
-			'NZ',
-			'SE',
-			'SG',
-			'UK',
-			'MO',
-			'IL',
-			'TW'
-		) THEN 'T1'
-		WHEN country = 'US' THEN 'US'
-		WHEN country = 'JP' THEN 'JP'
-		WHEN country = 'KR' THEN 'KR'
-		WHEN country IN ('SA', 'AE', 'QA', 'KW', 'BH', 'OM') THEN 'GCC'
-		ELSE 'other'
-	END AS country_group,
-	mediasource,
-	CASE
-		WHEN mediasource = 'Facebook Ads' THEN CASE
-			WHEN campaign_name LIKE '%BAU%' THEN 'BAU'
-			WHEN campaign_name LIKE '%AAA%'
-			OR campaign_name LIKE '%3A%' THEN 'AAA'
-			ELSE 'other'
-		END
-		WHEN mediasource = 'googleadwords_int' THEN CASE
-			WHEN campaign_name LIKE '%3.0%' THEN '3.0'
-			WHEN campaign_name LIKE '%2.5%' THEN '2.5'
-			ELSE 'other'
-		END
-		ELSE 'other'
-	END AS ad_type,
-	sum(cost_value_usd) as cost,
-	sum(revenue_d1) as revenue_d1,
-	sum(revenue_d3) as revenue_d3,
-	sum(revenue_d7) as revenue_d7,
-	sum(revenue_d30) as revenue_d30,
-	sum(revenue_d60) as revenue_d60,
-	sum(revenue_d90) as revenue_d90,
-	sum(revenue_d120) as revenue_d120
-from
-	dws_overseas_public_roi
-where
-	app = '502'
-	and app_package = 'com.fun.lastwar.gp'
-	and facebook_segment in ('country', 'N/A')
-group by
-	install_day,
-	country_group,
-	mediasource,
-	ad_type;
+CREATE OR REPLACE VIEW month_view_by_j AS
+SELECT
+	install_month,
+	(
+		CAST(
+			SUBSTR(TO_CHAR(getdate(), 'yyyymm'), 1, 4) AS BIGINT
+		) * 12 + CAST(
+			SUBSTR(TO_CHAR(getdate(), 'yyyymm'), 5, 2) AS BIGINT
+		)
+	) - (
+		CAST(SUBSTR(install_month, 1, 4) AS BIGINT) * 12 + CAST(SUBSTR(install_month, 5, 2) AS BIGINT)
+	) AS month_diff
+FROM
+	(
+		SELECT
+			DISTINCT SUBSTR(install_day, 1, 6) AS install_month
+		FROM
+			dws_overseas_public_roi
+		WHERE
+			app = '502'
+	) t
+ORDER BY
+	install_month;
     """
     print(f"Executing SQL: {sql}")
     execSql2(sql)
@@ -163,6 +115,42 @@ group by
 	country_group,
 	mediasource,
 	ad_type;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createRealCostAndRoiMonthyView():
+    sql = """
+CREATE VIEW IF NOT EXISTS lw_real_cost_roi2_country_group_ad_type_month_view_by_j AS
+SELECT
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.cost,
+	CASE
+		WHEN a.cost = 0 THEN 0
+		ELSE a.revenue_d1 / a.cost
+	END AS roi1,
+	CASE
+		WHEN a.cost = 0 THEN 0
+		ELSE a.revenue_d3 / a.cost
+	END AS roi3,
+	CASE
+		WHEN a.cost = 0 THEN 0
+		ELSE a.revenue_d7 / a.cost
+	END AS roi7
+FROM
+	lw_real_cost_roi_country_group_ad_type_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+WHERE
+	b.month_diff > 0
+ORDER BY
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type;
     """
     print(f"Executing SQL: {sql}")
     execSql2(sql)
@@ -714,21 +702,35 @@ ORDER BY
     return
 
 
-def main():
-    # # 创建每月数据视图
+def getAllData(monthStr):
+    sql = f"""
+    """
+
+def main(dayStr=None):
+    # createMonthView()
     # createRealMonthyView()
-
-    # # 创建收入增长率视图
+    createRealCostAndRoiMonthyView()
     # createRevenueRiseRatioView()
-
     # createPredictRevenueRiseRatioView()
     # createMapeView()
-
-    # getMapeData('202410', '202502')
-
     # createKpiView()
+    # createKpi2View()
 
-    createKpi2View()
+    # # 每月的7日执行一次，如果不是7日，则不执行
+    # if dayStr:
+    #     today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
+    # else:
+    #     today = datetime.date.today()
+    # if today.day == 7:
+    #     print(f"Today is {today}, executing the monthly tasks.")
+    #     # main function logic here
+    #     # 将需要的数据组合到一起，并进行一定的数据过滤
+    #     # monthStr 是上个月
+    #     monthStr = (today - datetime.timedelta(days=30)).strftime('%Y%m')
+    #     print(f"month: {monthStr}")
+        
+    # else:
+    #     print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
 
 
 if __name__ == "__main__":
