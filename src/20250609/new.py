@@ -565,8 +565,7 @@ ORDER BY
 # 动态KPI，是根据30日、60日、90日的ROI来计算的
 def createKpi2View():
     sql = """
-CREATE VIEW IF NOT EXISTS lw_kpi2_country_group_ad_type_month_view_by_j AS
-WITH roi_base AS (
+CREATE VIEW IF NOT EXISTS lw_kpi2_country_group_ad_type_month_view_by_j AS WITH roi_base AS (
 	SELECT
 		install_month,
 		country_group,
@@ -604,7 +603,11 @@ WITH roi_base AS (
 		CASE
 			WHEN cost = 0 THEN 0
 			ELSE revenue_d90 / cost
-		END AS roi90
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120
 	FROM
 		lw_real_cost_roi_country_group_ad_type_month_view_by_j
 ),
@@ -709,7 +712,20 @@ SELECT
 			r.roi7 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
 			4
 		)
-	END AS kpi7_90
+	END AS kpi7_90,
+	-- 【新增】kpi_120（直接用120日ROI与kpi_target做比较）
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi1 * (p.kpi_target / r.roi120), 4)
+	END AS kpi1_120,
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi3 * (p.kpi_target / r.roi120), 4)
+	END AS kpi3_120,
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi7 * (p.kpi_target / r.roi120), 4)
+	END AS kpi7_120
 FROM
 	roi_base r
 	LEFT JOIN predict_base p ON r.install_month = p.install_month
@@ -720,7 +736,8 @@ ORDER BY
 	r.country_group,
 	r.mediasource,
 	r.ad_type,
-	r.install_month;
+	r.install_month
+;
     """
     print(f"Executing SQL: {sql}")
     execSql2(sql)
@@ -737,19 +754,22 @@ SELECT
 	a.mediasource,
 	a.ad_type,
 	CASE
-		WHEN b.month_diff >= 4 THEN a.kpi1_90
+        WHEN b.month_diff >= 5 THEN a.kpi1_120
+		WHEN b.month_diff = 4 THEN a.kpi1_90
 		WHEN b.month_diff = 3 THEN a.kpi1_60
 		WHEN b.month_diff = 2 THEN a.kpi1_30
 		ELSE NULL
 	END AS d_kpi1,
 	CASE
-		WHEN b.month_diff >= 4 THEN a.kpi3_90
+        WHEN b.month_diff >= 5 THEN a.kpi3_120
+		WHEN b.month_diff = 4 THEN a.kpi3_90
 		WHEN b.month_diff = 3 THEN a.kpi3_60
 		WHEN b.month_diff = 2 THEN a.kpi3_30
 		ELSE NULL
 	END AS d_kpi3,
 	CASE
-		WHEN b.month_diff >= 4 THEN a.kpi7_90
+        WHEN b.month_diff >= 5 THEN a.kpi7_120
+		WHEN b.month_diff = 4 THEN a.kpi7_90
 		WHEN b.month_diff = 3 THEN a.kpi7_60
 		WHEN b.month_diff = 2 THEN a.kpi7_30
 		ELSE NULL
