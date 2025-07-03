@@ -1146,7 +1146,7 @@ def createViews():
 # 这种方式更加灵活，后续的工作流都保持这个方式
 def createTables():
 	# createCountryGroupTable()
-	
+
 	createRealCostAndRoiMonthyTable()
 	createKpiTable()
 	createKpi2FixTable()
@@ -1155,6 +1155,8 @@ def createTables():
 	createGPIRMonthyTable()
 	createGPIROrganicMonthTable()
 		
+
+# 生成一些计算指标
 
 # 针对 lw_revenue_rise_ratio_country_group_month_predict_view_by_j 视图创建 MAPE 视图
 def createMapeView():
