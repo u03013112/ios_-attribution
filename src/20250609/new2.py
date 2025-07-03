@@ -1,6 +1,7 @@
 # new修改，去掉广告类型，剩下的一切一样
 import os
 import datetime
+from venv import create
 import numpy as np
 import pandas as pd
 
@@ -10,7 +11,7 @@ from src.maxCompute import execSql,execSql2,getO
 
 # 创建月视图，动态的计算目前的月份和安装月份之间的差值，方便后面过滤数据
 def createMonthView():
-    sql = """
+	sql = """
 CREATE OR REPLACE VIEW month_view_by_j AS
 SELECT
 	install_month,
@@ -34,14 +35,14 @@ FROM
 	) t
 ORDER BY
 	install_month;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 自然量收入占比
 def createOrganicMonthView():
-    sql = """
+	sql = """
 CREATE OR REPLACE VIEW lw_organic_revenue_ratio_country_group_month_view_by_j AS
 WITH base_data AS (
 	SELECT
@@ -184,22 +185,182 @@ ORDER BY
 	install_month
 ;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # lw_organic_revenue_ratio_country_group_month_view_by_j -> 固定成一个table
 def createOrganicMonthTable():
-    sql = """
+	sql = """
 CREATE TABLE IF NOT EXISTS lw_organic_revenue_ratio_country_group_month_table_by_j AS
 SELECT * FROM lw_organic_revenue_ratio_country_group_month_view_by_j;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+# 自然量收入占比，与createOrganicMonthView类似，但是取满日数据，所以要向前取更久
+def createOrganic2MonthView():
+	sql = """
+CREATE OR REPLACE VIEW lw_organic_revenue_ratio2_country_group_month_view_by_j AS
+WITH base_data AS (
+	SELECT
+		SUBSTR(install_day, 1, 6) AS install_month,
+		CASE
+			WHEN country IN (
+				'AD',
+				'AT',
+				'AU',
+				'BE',
+				'CA',
+				'CH',
+				'DE',
+				'DK',
+				'FI',
+				'FR',
+				'HK',
+				'IE',
+				'IS',
+				'IT',
+				'LI',
+				'LU',
+				'MC',
+				'NL',
+				'NO',
+				'NZ',
+				'SE',
+				'SG',
+				'UK',
+				'MO',
+				'IL',
+				'TW'
+			) THEN 'T1'
+			WHEN country = 'US' THEN 'US'
+			WHEN country = 'JP' THEN 'JP'
+			WHEN country = 'KR' THEN 'KR'
+			WHEN country IN ('SA', 'AE', 'QA', 'KW', 'BH', 'OM') THEN 'GCC'
+			ELSE 'other'
+		END AS country_group,
+		SUM(cost_value_usd) AS cost,
+		SUM(
+			CASE
+				WHEN mediasource = 'Organic' THEN revenue_d120
+				ELSE 0
+			END
+		) AS organic_revenue_d120,
+		SUM(revenue_d120) AS revenue_d120
+	FROM
+		dws_overseas_public_roi
+	WHERE
+		app = '502'
+		AND app_package = 'com.fun.lastwar.gp'
+		AND facebook_segment IN ('country', 'N/A')
+	GROUP BY
+		install_month,
+		country_group
+),
+ordered_data AS (
+	SELECT
+		install_month,
+		country_group,
+		organic_revenue_d120,
+		revenue_d120,
+		ROW_NUMBER() OVER (
+			PARTITION BY country_group
+			ORDER BY
+				install_month
+		) AS rn
+	FROM
+		base_data
+)
+SELECT
+	install_month,
+	country_group,
+	CASE
+		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+		ELSE ROUND(
+			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+			4
+		)
+	END AS last456month_organic_revenue_ratio
+FROM
+	(
+		SELECT
+			install_month,
+			country_group,
+			COALESCE(
+				LAG(organic_revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_organic_revenue_d120,
+			COALESCE(
+				LAG(revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_revenue_d120
+		FROM
+			ordered_data
+	) t
+group by
+	install_month,
+	country_group
+ORDER BY
+	country_group,
+	install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+def createOrganic2MonthTable():
+	sql = """
+DROP TABLE IF EXISTS lw_organic_revenue_ratio2_country_group_month_table_by_j;
+CREATE TABLE IF NOT EXISTS lw_organic_revenue_ratio2_country_group_month_table_by_j AS
+SELECT * FROM lw_organic_revenue_ratio2_country_group_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def createGPIROrganicMonthView():
-    sql = """
+	sql = """
 CREATE OR REPLACE VIEW lw_gpir_organic_revenue_ratio_country_group_month_view_by_j AS
 WITH base_data AS (
 	SELECT
@@ -340,25 +501,25 @@ ORDER BY
 	install_month
 ;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def createGPIROrganicMonthTable():
-    sql = """
+	sql = """
 CREATE TABLE IF NOT EXISTS lw_gpir_organic_revenue_ratio_country_group_month_table_by_j AS
 SELECT * FROM lw_gpir_organic_revenue_ratio_country_group_month_view_by_j;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 为了减少代码修改数量，仍旧沿用ad_type字段，只是不再区分广告类型，全部归为'other'
 # 所有的表名字去掉_ad_type
 
 # 直接使用bi数据，注意这是AF归因，不是GPIR
 def createRealMonthyView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_real_cost_roi_country_group_month_view_by_j AS
 select
 	SUBSTR(install_day, 1, 6) AS install_month,
@@ -418,13 +579,13 @@ group by
 	country_group,
 	mediasource,
 	ad_type;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def createGPIRMonthyView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_gpir_cost_roi_country_group_month_view_by_j AS
 select
 	SUBSTR(install_day, 1, 6) AS install_month,
@@ -481,22 +642,22 @@ group by
 	country_group,
 	mediasource;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def createGPIRMonthyTable():
-    sql = """
+	sql = """
 CREATE TABLE IF NOT EXISTS lw_gpir_cost_roi_country_group_month_table_by_j AS
 SELECT * FROM lw_gpir_cost_roi_country_group_month_view_by_j;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 基于createRealMonthyView，过滤了本月不算，另外计算了ROI
 def createRealCostAndRoiMonthyView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_real_cost_roi2_country_group_month_view_by_j AS
 SELECT
 	a.install_month,
@@ -526,15 +687,15 @@ ORDER BY
 	a.country_group,
 	a.mediasource,
 	a.ad_type;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 收入增长率计算，目前使用比较简单的方法
 # 每个分组最近3个月的收入增长率的均值作为预测值
 def createRevenueRiseRatioView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_month_view_by_j AS
 WITH ratios AS (
 	SELECT
@@ -687,14 +848,14 @@ ORDER BY
 	ad_type,
 	install_month
 ;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 由于满日数据问题，当月数据不完整，需要使用之前数据完成预测。
 def createPredictRevenueRiseRatioView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_month_predict_view_by_j AS
 WITH base AS (
 	SELECT
@@ -764,113 +925,113 @@ ORDER BY
 	cur.mediasource,
 	cur.ad_type,
 	cur.install_month;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 针对 lw_revenue_rise_ratio_country_group_month_predict_view_by_j 视图创建 MAPE 视图
 def createMapeView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_month_predict_mape_view_by_j AS
 SELECT
-    install_month,
-    country_group,
-    mediasource,
-    ad_type,
-    -- MAPE1计算 (real vs predict)
-    CASE
-        WHEN (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
-        ELSE ABS(
-            (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
-                predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
-            )
-        ) / (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
-    END AS MAPE1,
-    -- MAPE3计算 (real vs predict)
-    CASE
-        WHEN (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
-        ELSE ABS(
-            (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
-                predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
-            )
-        ) / (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
-    END AS MAPE3,
-    -- MAPE7计算 (real vs predict)
-    CASE
-        WHEN (r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
-        ELSE ABS(
-            (r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
-                predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
-            )
-        ) / (r30_r7 * r60_r30 * r90_r60 * r120_r90)
-    END AS MAPE7
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	-- MAPE1计算 (real vs predict)
+	CASE
+		WHEN (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+		ELSE ABS(
+			(r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+				predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			)
+		) / (r3_r1 * r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
+	END AS MAPE1,
+	-- MAPE3计算 (real vs predict)
+	CASE
+		WHEN (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+		ELSE ABS(
+			(r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+				predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			)
+		) / (r7_r3 * r30_r7 * r60_r30 * r90_r60 * r120_r90)
+	END AS MAPE3,
+	-- MAPE7计算 (real vs predict)
+	CASE
+		WHEN (r30_r7 * r60_r30 * r90_r60 * r120_r90) = 0 THEN NULL
+		ELSE ABS(
+			(r30_r7 * r60_r30 * r90_r60 * r120_r90) - (
+				predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
+			)
+		) / (r30_r7 * r60_r30 * r90_r60 * r120_r90)
+	END AS MAPE7
 FROM
-    lw_revenue_rise_ratio_country_group_month_predict_view_by_j
+	lw_revenue_rise_ratio_country_group_month_predict_view_by_j
 ORDER BY
-    country_group,
-    mediasource,
-    ad_type,
-    install_month;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	country_group,
+	mediasource,
+	ad_type,
+	install_month;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 由于误差需要有了完整120天的数据才能计算
 # 所以将不满120天的数据过滤掉
 def createMapeViewFix():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j AS
 SELECT
-    a.install_month,
+	a.install_month,
 	a.country_group,
 	a.mediasource,
 	a.ad_type,
-    a.MAPE1,
-    a.MAPE3,
-    a.MAPE7
+	a.MAPE1,
+	a.MAPE3,
+	a.MAPE7
 FROM
-    lw_revenue_rise_ratio_country_group_month_predict_mape_view_by_j a
-    INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+	lw_revenue_rise_ratio_country_group_month_predict_mape_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
 WHERE
-    b.month_diff >= 5
+	b.month_diff >= 5
 ;
 	"""
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def getMapeData(startMonthStr, endMonthStr):
-    sql = f"""
+	sql = f"""
 SELECT
-    install_month,
-    country_group,
-    mediasource,
-    ad_type,
-    avg(MAPE1) as MAPE1,
-    avg(MAPE3) as MAPE3,
-    avg(MAPE7) as MAPE7
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	avg(MAPE1) as MAPE1,
+	avg(MAPE3) as MAPE3,
+	avg(MAPE7) as MAPE7
 FROM
-    lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j
+	lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j
 WHERE
-    install_month BETWEEN '{startMonthStr}' AND '{endMonthStr}'
+	install_month BETWEEN '{startMonthStr}' AND '{endMonthStr}'
 GROUP BY
-    install_month,
-    country_group,
-    mediasource,
-    ad_type
+	install_month,
+	country_group,
+	mediasource,
+	ad_type
 ;
-    """
-    print(f"Executing SQL: {sql}")
-    df = execSql(sql)
-    # print(df)
-    return df
-    
+	"""
+	print(f"Executing SQL: {sql}")
+	df = execSql(sql)
+	# print(df)
+	return df
+		
 # 创建 KPI 视图
 # 其中回本是按照佳玥给出的表格进行计算的
 def createKpiView():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_kpi_country_group_month_view_by_j AS
 SELECT
 	country_group,
@@ -930,15 +1091,15 @@ ORDER BY
 	mediasource,
 	ad_type,
 	install_month;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 创建 KPI2 视图
 # 动态KPI，是根据30日、60日、90日的ROI来计算的
 def createKpi2View():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_kpi2_country_group_month_view_by_j AS WITH roi_base AS (
 	SELECT
 		install_month,
@@ -1112,15 +1273,15 @@ ORDER BY
 	r.ad_type,
 	r.install_month
 ;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 动态KPI，修正，将不完整数据的月份过滤掉
 # 这里的逻辑是基于 lw_kpi_country_group_month_view_by_j 视图进行修正
 def createKpi2ViewFix():
-    sql = """
+	sql = """
 CREATE VIEW IF NOT EXISTS lw_kpi2_fix_country_group_month_view_by_j AS
 SELECT
 	a.install_month,
@@ -1128,21 +1289,21 @@ SELECT
 	a.mediasource,
 	a.ad_type,
 	CASE
-        WHEN b.month_diff >= 5 THEN a.kpi1_120
+		WHEN b.month_diff >= 5 THEN a.kpi1_120
 		WHEN b.month_diff = 4 THEN a.kpi1_90
 		WHEN b.month_diff = 3 THEN a.kpi1_60
 		WHEN b.month_diff = 2 THEN a.kpi1_30
 		ELSE NULL
 	END AS d_kpi1,
 	CASE
-        WHEN b.month_diff >= 5 THEN a.kpi3_120
+		WHEN b.month_diff >= 5 THEN a.kpi3_120
 		WHEN b.month_diff = 4 THEN a.kpi3_90
 		WHEN b.month_diff = 3 THEN a.kpi3_60
 		WHEN b.month_diff = 2 THEN a.kpi3_30
 		ELSE NULL
 	END AS d_kpi3,
 	CASE
-        WHEN b.month_diff >= 5 THEN a.kpi7_120
+		WHEN b.month_diff >= 5 THEN a.kpi7_120
 		WHEN b.month_diff = 4 THEN a.kpi7_90
 		WHEN b.month_diff = 3 THEN a.kpi7_60
 		WHEN b.month_diff = 2 THEN a.kpi7_30
@@ -1156,164 +1317,166 @@ ORDER BY
 	a.country_group,
 	a.mediasource,
 	a.ad_type;
-    """
-    print(f"Executing SQL: {sql}")
-    execSql2(sql)
-    return
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 
 def allInOne():
-    o = getO()
+	o = getO()
 
-    table_name = 'lw_android_kpi_country_group_month_view_by_j_20250702'
+	table_name = 'lw_android_kpi_country_group_month_view_by_j_20250702'
 
-    # 判断表是否存在
-    if not o.exist_table(table_name):
-        # 不存在则创建表
-        sql = '''
-        CREATE TABLE {0} AS
-        SELECT
-            a.install_month,
-            a.country_group,
-            a.mediasource,
-            a.ad_type,
-            a.cost,
-            a.roi1,
-            a.roi3,
-            a.roi7,
-            b.kpi1,
-            b.kpi3,
-            b.kpi7,
-            c.d_kpi1,
-            c.d_kpi3,
-            c.d_kpi7,
-            d.MAPE1,
-            d.MAPE3,
-            d.MAPE7,
-            e.predict_r3_r1,
-            e.predict_r7_r3,
-            e.predict_r30_r7,
-            e.predict_r60_r30,
-            e.predict_r90_r60,
-            e.predict_r120_r90
-        FROM lw_real_cost_roi2_country_group_month_view_by_j a
-        LEFT JOIN lw_kpi_country_group_month_view_by_j b
-            ON a.install_month = b.install_month
-            AND a.country_group = b.country_group
-            AND a.mediasource = b.mediasource
-            AND a.ad_type = b.ad_type
-        LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
-            ON a.install_month = c.install_month
-            AND a.country_group = c.country_group
-            AND a.mediasource = c.mediasource
-            AND a.ad_type = c.ad_type
-        LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
-            ON a.install_month = d.install_month
-            AND a.country_group = d.country_group
-            AND a.mediasource = d.mediasource
-            AND a.ad_type = d.ad_type
+	# 判断表是否存在
+	if not o.exist_table(table_name):
+		# 不存在则创建表
+		sql = '''
+		CREATE TABLE {0} AS
+		SELECT
+			a.install_month,
+			a.country_group,
+			a.mediasource,
+			a.ad_type,
+			a.cost,
+			a.roi1,
+			a.roi3,
+			a.roi7,
+			b.kpi1,
+			b.kpi3,
+			b.kpi7,
+			c.d_kpi1,
+			c.d_kpi3,
+			c.d_kpi7,
+			d.MAPE1,
+			d.MAPE3,
+			d.MAPE7,
+			e.predict_r3_r1,
+			e.predict_r7_r3,
+			e.predict_r30_r7,
+			e.predict_r60_r30,
+			e.predict_r90_r60,
+			e.predict_r120_r90
+		FROM lw_real_cost_roi2_country_group_month_view_by_j a
+		LEFT JOIN lw_kpi_country_group_month_view_by_j b
+			ON a.install_month = b.install_month
+			AND a.country_group = b.country_group
+			AND a.mediasource = b.mediasource
+			AND a.ad_type = b.ad_type
+		LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
+			ON a.install_month = c.install_month
+			AND a.country_group = c.country_group
+			AND a.mediasource = c.mediasource
+			AND a.ad_type = c.ad_type
+		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
+			ON a.install_month = d.install_month
+			AND a.country_group = d.country_group
+			AND a.mediasource = d.mediasource
+			AND a.ad_type = d.ad_type
 		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_view_by_j e
 			ON a.install_month = e.install_month
 			AND a.country_group = e.country_group
 			AND a.mediasource = e.mediasource
 			AND a.ad_type = e.ad_type
-        ;
-        '''.format(table_name)
-    else:
-        # 存在则更新表
-        sql = '''
-        INSERT OVERWRITE TABLE {0}
-        SELECT
-            a.install_month,
-            a.country_group,
-            a.mediasource,
-            a.ad_type,
-            a.cost,
-            a.roi1,
-            a.roi3,
-            a.roi7,
-            b.kpi1,
-            b.kpi3,
-            b.kpi7,
-            c.d_kpi1,
-            c.d_kpi3,
-            c.d_kpi7,
-            d.MAPE1,
-            d.MAPE3,
-            d.MAPE7,
-            e.predict_r3_r1,
-            e.predict_r7_r3,
-            e.predict_r30_r7,
-            e.predict_r60_r30,
-            e.predict_r90_r60,
-            e.predict_r120_r90
-        FROM lw_real_cost_roi2_country_group_month_view_by_j a
-        LEFT JOIN lw_kpi_country_group_month_view_by_j b
-            ON a.install_month = b.install_month
-            AND a.country_group = b.country_group
-            AND a.mediasource = b.mediasource
-            AND a.ad_type = b.ad_type
-        LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
-            ON a.install_month = c.install_month
-            AND a.country_group = c.country_group
-            AND a.mediasource = c.mediasource
-            AND a.ad_type = c.ad_type
-        LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
-            ON a.install_month = d.install_month
-            AND a.country_group = d.country_group
-            AND a.mediasource = d.mediasource
-            AND a.ad_type = d.ad_type
-        LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_view_by_j e
+		;
+		'''.format(table_name)
+	else:
+		# 存在则更新表
+		sql = '''
+		INSERT OVERWRITE TABLE {0}
+		SELECT
+			a.install_month,
+			a.country_group,
+			a.mediasource,
+			a.ad_type,
+			a.cost,
+			a.roi1,
+			a.roi3,
+			a.roi7,
+			b.kpi1,
+			b.kpi3,
+			b.kpi7,
+			c.d_kpi1,
+			c.d_kpi3,
+			c.d_kpi7,
+			d.MAPE1,
+			d.MAPE3,
+			d.MAPE7,
+			e.predict_r3_r1,
+			e.predict_r7_r3,
+			e.predict_r30_r7,
+			e.predict_r60_r30,
+			e.predict_r90_r60,
+			e.predict_r120_r90
+		FROM lw_real_cost_roi2_country_group_month_view_by_j a
+		LEFT JOIN lw_kpi_country_group_month_view_by_j b
+			ON a.install_month = b.install_month
+			AND a.country_group = b.country_group
+			AND a.mediasource = b.mediasource
+			AND a.ad_type = b.ad_type
+		LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
+			ON a.install_month = c.install_month
+			AND a.country_group = c.country_group
+			AND a.mediasource = c.mediasource
+			AND a.ad_type = c.ad_type
+		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
+			ON a.install_month = d.install_month
+			AND a.country_group = d.country_group
+			AND a.mediasource = d.mediasource
+			AND a.ad_type = d.ad_type
+		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_view_by_j e
 			ON a.install_month = e.install_month
 			AND a.country_group = e.country_group
 			AND a.mediasource = e.mediasource
-			AND a.ad_type = e.ad_type    
-        ;
-        '''.format(table_name)
+			AND a.ad_type = e.ad_type	
+		;
+		'''.format(table_name)
 
-    # 执行SQL
-    instance = o.execute_sql(sql)
-    instance.wait_for_success()
+	# 执行SQL
+	instance = o.execute_sql(sql)
+	instance.wait_for_success()
 
 
 
 def main(dayStr=None):
-    # createMonthView()
-    # createRealMonthyView()
-    # createRealCostAndRoiMonthyView()
-    # createRevenueRiseRatioView()
-    # createPredictRevenueRiseRatioView()
-    # createMapeView()
-    # createMapeViewFix()
-    # createKpiView()
-    # createKpi2View()
-    # createKpi2ViewFix()
-    # createOrganicMonthView()
+	# createMonthView()
+	# createRealMonthyView()
+	# createRealCostAndRoiMonthyView()
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createMapeView()
+	# createMapeViewFix()
+	# createKpiView()
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createOrganicMonthView()
 	# createOrganicMonthTable()
-    # createGPIRMonthyView()
-    # createGPIRMonthyTable()
-    createGPIROrganicMonthView()
-    createGPIROrganicMonthTable()
+	createOrganic2MonthView()
+	createOrganic2MonthTable()
+	# createGPIRMonthyView()
+	# createGPIRMonthyTable()
+	# createGPIROrganicMonthView()
+	# createGPIROrganicMonthTable()
 	# allInOne()
 
-    # # 每月的7日执行一次，如果不是7日，则不执行
-    # if dayStr:
-    #     today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
-    # else:
-    #     today = datetime.date.today()
-    # if today.day == 7:
-    #     print(f"Today is {today}, executing the monthly tasks.")
-    #     allInOne()
-    # else:
-    #     print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
+	# # 每月的7日执行一次，如果不是7日，则不执行
+	# if dayStr:
+	#	 today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
+	# else:
+	#	 today = datetime.date.today()
+	# if today.day == 7:
+	#	 print(f"Today is {today}, executing the monthly tasks.")
+	#	 allInOne()
+	# else:
+	#	 print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
 
 
 if __name__ == "__main__":
-    main()
+	main()
 
-    # mapeDf = getMapeData('202406', '202506')
-    # mapeDf = mapeDf.groupby(['country_group', 'mediasource', 'ad_type']).mean().reset_index()
-    # mediaList = ['Facebook Ads', 'googleadwords_int','moloco_int','bytedanceglobal_int','applovin_int']
-    # mapeDf = mapeDf[mapeDf['mediasource'].isin(mediaList)]
-    # # print(mapeDf)
-    # mapeDf.to_csv('/src/data/lw_revenue_month_mape.csv', index=False)
+	# mapeDf = getMapeData('202406', '202506')
+	# mapeDf = mapeDf.groupby(['country_group', 'mediasource', 'ad_type']).mean().reset_index()
+	# mediaList = ['Facebook Ads', 'googleadwords_int','moloco_int','bytedanceglobal_int','applovin_int']
+	# mapeDf = mapeDf[mapeDf['mediasource'].isin(mediaList)]
+	# # print(mapeDf)
+	# mapeDf.to_csv('/src/data/lw_revenue_month_mape.csv', index=False)
