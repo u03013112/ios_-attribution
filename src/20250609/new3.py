@@ -854,9 +854,10 @@ ORDER BY
 # 由于满日数据问题，当月数据不完整，需要使用之前数据完成预测。
 def createPredictRevenueRiseRatioView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_revenue_rise_ratio_country_group_month_predict_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j AS
 WITH base AS (
 	SELECT
+		app_package,
 		country_group,
 		mediasource,
 		ad_type,
@@ -874,16 +875,19 @@ WITH base AS (
 		last3month_r90_r60,
 		last3month_r120_r90,
 		ROW_NUMBER() OVER (
-			PARTITION BY country_group,
+			PARTITION BY 
+			app_package,
+			country_group,
 			mediasource,
 			ad_type
 			ORDER BY
 				install_month
 		) AS row_num
 	FROM
-		lw_20250703_af_revenue_rise_ratio_country_group_month_view_by_j
+		lw_20250703_af_revenue_rise_ratio_month_view_by_j
 )
 SELECT
+	cur.app_package,
 	cur.country_group,
 	cur.mediasource,
 	cur.ad_type,
@@ -894,6 +898,12 @@ SELECT
 	cur.r60_r30,
 	cur.r90_r60,
 	cur.r120_r90,
+	cur.last3month_r3_r1,
+	cur.last3month_r7_r3,
+	cur.last3month_r30_r7,
+	cur.last3month_r60_r30,
+	cur.last3month_r90_r60,
+	cur.last3month_r120_r90,
 	-- 本行的预测值
 	cur.last3month_r3_r1 AS predict_r3_r1,
 	cur.last3month_r7_r3 AS predict_r7_r3,
@@ -906,19 +916,26 @@ SELECT
 	COALESCE(prev3.last3month_r120_r90, 0) AS predict_r120_r90
 FROM
 	base cur
-	LEFT JOIN base prev1 ON cur.country_group = prev1.country_group
+	LEFT JOIN base prev1 ON 
+	cur.app_package = prev1.app_package
+	AND cur.country_group = prev1.country_group
 	AND cur.mediasource = prev1.mediasource
 	AND cur.ad_type = prev1.ad_type
 	AND cur.row_num = prev1.row_num + 1
-	LEFT JOIN base prev2 ON cur.country_group = prev2.country_group
+	LEFT JOIN base prev2 ON 
+	cur.app_package = prev2.app_package
+	AND cur.country_group = prev2.country_group
 	AND cur.mediasource = prev2.mediasource
 	AND cur.ad_type = prev2.ad_type
 	AND cur.row_num = prev2.row_num + 2
-	LEFT JOIN base prev3 ON cur.country_group = prev3.country_group
+	LEFT JOIN base prev3 ON 
+	cur.app_package = prev3.app_package
+	AND cur.country_group = prev3.country_group
 	AND cur.mediasource = prev3.mediasource
 	AND cur.ad_type = prev3.ad_type
 	AND cur.row_num = prev3.row_num + 3
 ORDER BY
+	cur.app_package,
 	cur.country_group,
 	cur.mediasource,
 	cur.ad_type,
@@ -1371,7 +1388,7 @@ def allInOne():
 	
 	# createRealCostAndRoiMonthyView()
 	
-	# createPredictRevenueRiseRatioView()
+	
 	# createMapeView()
 	# createMapeViewFix()
 	# createKpiView()
@@ -1402,7 +1419,8 @@ def createViewsAndTables():
 	# createAfAppCostRevenueMonthyView()
 	# createAfCostRevenueMonthyTable()
 
-	createRevenueRiseRatioView()
+	# createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
 
 # 生成一些计算指标
 
