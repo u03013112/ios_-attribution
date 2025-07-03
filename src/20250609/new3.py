@@ -206,6 +206,132 @@ SELECT * FROM lw_20250703_organic_revenue_ratio_country_group_month_view_by_j;
 	execSql2(sql)
 	return
 
+# 自然量收入占比，与createOrganicMonthView类似，但是取满日数据，所以要向前取更久
+def createOrganic2MonthView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_organic_revenue_ratio_country_group_month_view_by_j AS
+WITH base_data AS (
+	SELECT
+		SUBSTR(install_day, 1, 6) AS install_month,
+		COALESCE(cg.country_group, 'other') AS country_group,
+		-- 没匹配到的国家为other
+		SUM(cost_value_usd) AS cost,
+		SUM(
+			CASE
+				WHEN mediasource = 'Organic' THEN revenue_d120
+				ELSE 0
+			END
+		) AS organic_revenue_d120,
+		SUM(revenue_d120) AS revenue_d120
+	FROM
+		dws_overseas_public_roi roi
+		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	WHERE
+		roi.app = '502'
+		AND roi.app_package = 'com.fun.lastwar.gp'
+		AND roi.facebook_segment IN ('country', 'N/A')
+	GROUP BY
+		install_month,
+		country_group
+),
+ordered_data AS (
+	SELECT
+		install_month,
+		country_group,
+		organic_revenue_d120,
+		revenue_d120,
+		ROW_NUMBER() OVER (
+			PARTITION BY country_group
+			ORDER BY
+				install_month
+		) AS rn
+	FROM
+		base_data
+)
+SELECT
+	install_month,
+	country_group,
+	CASE
+		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+		ELSE ROUND(
+			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+			4
+		)
+	END AS last456month_organic_revenue_ratio
+FROM
+	(
+		SELECT
+			install_month,
+			country_group,
+			COALESCE(
+				LAG(organic_revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_organic_revenue_d120,
+			COALESCE(
+				LAG(revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_revenue_d120
+		FROM
+			ordered_data
+	) t
+group by
+	install_month,
+	country_group
+ORDER BY
+	country_group,
+	install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createOrganic2MonthTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_organic_revenue_ratio_country_group_month_table_by_j;
+CREATE TABLE lw_20250703_organic_revenue_ratio_country_group_month_table_by_j AS
+SELECT * FROM lw_20250703_organic_revenue_ratio_country_group_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 # GPIR版本的自然量收入占比，120日版本
 # 取前3个月（不包括本月）的自然量收入和总收入的比值
 def createGPIROrganicMonthView():
@@ -332,32 +458,35 @@ SELECT * FROM lw_20250703_gpir_organic_revenue_ratio_country_group_month_view_by
 	return
 
 # 直接使用bi数据，注意这是AF归因，不是GPIR
-def createRealMonthyView():
+def createAfAppMediaCountryCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_cost_revenue_country_group_month_view_by_j AS
-select
-	SUBSTR(install_day, 1, 6) AS install_month,
+CREATE VIEW IF NOT EXISTS lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
 	mediasource,
-	'other' AS ad_type,
-	sum(cost_value_usd) as cost,
-	sum(revenue_d1) as revenue_d1,
-	sum(revenue_d3) as revenue_d3,
-	sum(revenue_d7) as revenue_d7,
-	sum(revenue_d30) as revenue_d30,
-	sum(revenue_d60) as revenue_d60,
-	sum(revenue_d90) as revenue_d90,
-	sum(revenue_d120) as revenue_d120
-from
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_d1) AS revenue_d1,
+	SUM(revenue_d3) AS revenue_d3,
+	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d30) AS revenue_d30,
+	SUM(revenue_d60) AS revenue_d60,
+	SUM(revenue_d90) AS revenue_d90,
+	SUM(revenue_d120) AS revenue_d120
+FROM
 	dws_overseas_public_roi roi
-left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
-where
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
 	roi.app = '502'
-	and roi.app_package = 'com.fun.lastwar.gp'
-	and roi.facebook_segment in ('country', 'N/A')
-group by
-	install_month,
-	country_group,
+	AND m.month_diff > 0
+	AND roi.facebook_segment IN ('country', 'N/A')
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
 	mediasource,
 	ad_type;
 	"""
@@ -365,6 +494,107 @@ group by
 	execSql2(sql)
 	return
 
+# 只分app和国家，不分媒体
+def createAfAppCountryCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_country_group_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	'ALL' AS mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_d1) AS revenue_d1,
+	SUM(revenue_d3) AS revenue_d3,
+	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d30) AS revenue_d30,
+	SUM(revenue_d60) AS revenue_d60,
+	SUM(revenue_d90) AS revenue_d90,
+	SUM(revenue_d120) AS revenue_d120
+FROM
+	dws_overseas_public_roi roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+	AND roi.facebook_segment IN ('country', 'N/A')
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	country_group
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 只分app，不分媒体和国家分组
+def createAfAppCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_month_view_by_j AS
+SELECT
+	app_package,
+	m.install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	cost,
+	revenue_d1,
+	revenue_d3,
+	revenue_d7,
+	revenue_d30,
+	revenue_d60,
+	revenue_d90,
+	revenue_d120
+FROM
+(
+		SELECT
+			app_package,
+			SUBSTR(install_day, 1, 6) AS install_month,
+			'ALL' AS country_group,
+			'ALL' AS mediasource,
+			'ALL' AS ad_type,
+			SUM(cost_value_usd) AS cost,
+			SUM(revenue_d1) AS revenue_d1,
+			SUM(revenue_d3) AS revenue_d3,
+			SUM(revenue_d7) AS revenue_d7,
+			SUM(revenue_d30) AS revenue_d30,
+			SUM(revenue_d60) AS revenue_d60,
+			SUM(revenue_d90) AS revenue_d90,
+			SUM(revenue_d120) AS revenue_d120
+		FROM
+			dws_overseas_public_roi
+		WHERE
+			app = '502'
+			AND facebook_segment IN ('country', 'N/A')
+		GROUP BY
+			app_package,
+			install_month
+	) a
+	LEFT JOIN month_view_by_j m ON a.install_month = m.install_month
+WHERE
+	m.month_diff > 0;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createAfCostRevenueMonthyTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_af_cost_revenue_app_month_table_by_j;
+CREATE TABLE lw_20250703_af_cost_revenue_app_month_table_by_j AS
+SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_month_view_by_j
+UNION ALL
+SELECT * FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 # GPIR版本的月视图
 def createGPIRMonthyView():
 	sql = """
@@ -405,7 +635,7 @@ SELECT * FROM lw_20250703_gpir_cost_revenue_country_group_month_view_by_j;
 	execSql2(sql)
 	return
 
-# 基于createRealMonthyView，过滤了本月不算，另外计算了ROI
+# 基于createAfAppMediaCountryCostRevenueMonthyView，过滤了本月不算，另外计算了ROI
 def createRealCostAndRoiMonthyView():
 	sql = """
 CREATE VIEW IF NOT EXISTS lw_20250703_af_cost_roi_country_group_month_view_by_j AS
@@ -456,9 +686,10 @@ SELECT * FROM lw_20250703_af_cost_roi_country_group_month_view_by_j;
 # 本月的付费增长率和上三个月（不包括本月）的平均增长率
 def createRevenueRiseRatioView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_revenue_rise_ratio_country_group_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_month_view_by_j AS
 WITH ratios AS (
 	SELECT
+		app_package,
 		install_month,
 		country_group,
 		mediasource,
@@ -488,13 +719,14 @@ WITH ratios AS (
 			ELSE revenue_d120 / revenue_d90
 		END AS r120_r90
 	FROM
-		lw_20250703_af_cost_revenue_country_group_month_view_by_j
+		lw_20250703_af_cost_revenue_app_month_table_by_j
 ),
 ratios_with_rownum AS (
 	SELECT
 		*,
 		ROW_NUMBER() OVER (
-			PARTITION BY country_group,
+			PARTITION BY app_package,
+			country_group,
 			mediasource,
 			ad_type
 			ORDER BY
@@ -505,6 +737,7 @@ ratios_with_rownum AS (
 ),
 last3month_ratios AS (
 	SELECT
+		cur.app_package,
 		cur.install_month,
 		cur.country_group,
 		cur.mediasource,
@@ -566,12 +799,15 @@ last3month_ratios AS (
 		) AS last3month_r120_r90
 	FROM
 		ratios_with_rownum cur
-		LEFT JOIN ratios_with_rownum prev ON cur.country_group = prev.country_group
+		LEFT JOIN ratios_with_rownum prev ON 
+		cur.app_package = prev.app_package
+		AND cur.country_group = prev.country_group
 		AND cur.mediasource = prev.mediasource
 		AND cur.ad_type = prev.ad_type
 		AND prev.row_num BETWEEN cur.row_num - 3
 		AND cur.row_num - 1
 	GROUP BY
+		cur.app_package,
 		cur.install_month,
 		cur.country_group,
 		cur.mediasource,
@@ -584,6 +820,7 @@ last3month_ratios AS (
 		cur.r120_r90
 )
 SELECT
+	app_package,
 	install_month,
 	country_group,
 	mediasource,
@@ -603,6 +840,7 @@ SELECT
 FROM
 	last3month_ratios
 ORDER BY
+	app_package,
 	country_group,
 	mediasource,
 	ad_type,
@@ -706,6 +944,7 @@ def createKpiView():
 	sql = """
 CREATE VIEW IF NOT EXISTS lw_20250703_af_kpi_country_group_month_view_by_j AS
 SELECT
+
 	country_group,
 	mediasource,
 	ad_type,
@@ -1127,34 +1366,43 @@ def allInOne():
 	instance = o.execute_sql(sql)
 	instance.wait_for_success()
 
-def createViews():
-	createMonthView()
-	createRealMonthyView()
-	createRealCostAndRoiMonthyView()
-	createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
-	createMapeView()
-	createMapeViewFix()
-	createKpiView()
-	createKpi2View()
-	createKpi2ViewFix()
-	createOrganicMonthView()
-	createGPIRMonthyView()
-	createGPIROrganicMonthView()
+# def createViews():
+	# createMonthView()
+	
+	# createRealCostAndRoiMonthyView()
+	
+	# createPredictRevenueRiseRatioView()
+	# createMapeView()
+	# createMapeViewFix()
+	# createKpiView()
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createOrganicMonthView()
+	# createGPIRMonthyView()
+	# createGPIROrganicMonthView()
 
 # 不再使用allInOne函数，而是分开创建表，再使用quickbi数据源进行连接
 # 这种方式更加灵活，后续的工作流都保持这个方式
-def createTables():
+# def createTables():
+
+	# createKpiTable()
+	# createKpi2FixTable()
+	# createPredictRevenueRiseRatioTable()
+	# createOrganicMonthTable()
+	# createGPIRMonthyTable()
+	# createGPIROrganicMonthTable()
+	pass
+		
+# 有先后顺序，依赖关系
+def createViewsAndTables():
 	# createCountryGroupTable()
 
-	createRealCostAndRoiMonthyTable()
-	createKpiTable()
-	createKpi2FixTable()
-	createPredictRevenueRiseRatioTable()
-	createOrganicMonthTable()
-	createGPIRMonthyTable()
-	createGPIROrganicMonthTable()
-		
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	# createAfCostRevenueMonthyTable()
+
+	createRevenueRiseRatioView()
 
 # 生成一些计算指标
 
@@ -1257,8 +1505,7 @@ GROUP BY
 	return df
 
 def main(dayStr=None):
-	# createViews()
-	createTables()
+	createViewsAndTables()
 	
 
 	# # 每月的7日执行一次，如果不是7日，则不执行
