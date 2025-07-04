@@ -725,8 +725,10 @@ SELECT * FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
 # GPIR版本的月视图
 def createGPIRMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_gpir_cost_revenue_country_group_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_gpir_cost_revenue_app_country_group_media_month_view_by_j AS
 select
+	'com.fun.lastwar.gp' AS app_package,
+	'ALL' AS ad_type,
 	SUBSTR(install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
 	mediasource,
@@ -754,9 +756,9 @@ group by
 
 def createGPIRMonthyTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_gpir_cost_revenue_country_group_month_table_by_j;
-CREATE TABLE lw_20250703_gpir_cost_revenue_country_group_month_table_by_j AS
-SELECT * FROM lw_20250703_gpir_cost_revenue_country_group_month_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_gpir_cost_revenue_app_country_group_media_month_table_by_j;
+CREATE TABLE lw_20250703_gpir_cost_revenue_app_country_group_media_month_table_by_j AS
+SELECT * FROM lw_20250703_gpir_cost_revenue_app_country_group_media_month_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -1074,9 +1076,9 @@ ORDER BY
 
 def createPredictRevenueRiseRatioTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_revenue_rise_ratio_country_group_month_predict_table_by_j;
-CREATE TABLE lw_20250703_revenue_rise_ratio_country_group_month_predict_table_by_j AS
-SELECT * FROM lw_20250703_revenue_rise_ratio_country_group_month_predict_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j;
+CREATE TABLE lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j AS
+SELECT * FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -1413,25 +1415,94 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 def allInOne():
 	# 将目前用得上的table先进行合并
 	sql = """
-
+CREATE OR REPLACE VIEW lw_20250703_af_all_in_one_month_view_by_j AS
+select
+	af_cost.app_package,
+	af_cost.install_month,
+	af_cost.country_group,
+	af_cost.mediasource,
+	af_cost.ad_type,
+	af_cost.cost,
+	af_cost.revenue_d1,
+	af_cost.revenue_d3,
+	af_cost.revenue_d7,
+	af_cost.revenue_d30,
+	af_cost.revenue_d60,
+	af_cost.revenue_d90,
+	af_cost.revenue_d120,
+	af_kpi.kpi_target,
+	af_kpi.kpi1,
+	af_kpi.kpi3,
+	af_kpi.kpi7,
+	af_organic_ratio.last456month_organic_revenue_ratio,
+	gpir_organic_ratio.last456month_gpir_organic_revenue_ratio,
+	gpir_cost.cost as gpir_cost,
+	gpir_cost.revenue_d1 as gpir_revenue_d1,
+	gpir_cost.revenue_d3 as gpir_revenue_d3,
+	gpir_cost.revenue_d7 as gpir_revenue_d7,
+	gpir_cost.revenue_d30 as gpir_revenue_d30,
+	gpir_cost.revenue_d60 as gpir_revenue_d60,
+	gpir_cost.revenue_d90 as gpir_revenue_d90,
+	gpir_cost.revenue_d120 as gpir_revenue_d120,
+	af_kpi2.d_kpi1,
+	af_kpi2.d_kpi3,
+	af_kpi2.d_kpi7,
+	af_revenue_rise_ratio.predict_r3_r1,
+	af_revenue_rise_ratio.predict_r7_r3,
+	af_revenue_rise_ratio.predict_r30_r7,
+	af_revenue_rise_ratio.predict_r60_r30,
+	af_revenue_rise_ratio.predict_r90_r60,
+	af_revenue_rise_ratio.predict_r120_r90
+from
+	lw_20250703_af_cost_revenue_app_month_table_by_j af_cost
+	left join lw_20250703_af_kpi_month_table_by_j af_kpi on af_cost.app_package = af_kpi.app_package
+	and af_cost.install_month = af_kpi.install_month
+	and af_cost.country_group = af_kpi.country_group
+	and af_cost.mediasource = af_kpi.mediasource
+	and af_cost.ad_type = af_kpi.ad_type
+	left join lw_20250703_android_organic_revenue_ratio_month_table_by_j af_organic_ratio on af_cost.app_package = af_organic_ratio.app_package
+	and af_cost.install_month = af_organic_ratio.install_month
+	and af_cost.country_group = af_organic_ratio.country_group
+	left join lw_20250703_android_gpir_organic_revenue_ratio_month_table_by_j gpir_organic_ratio on af_cost.app_package = gpir_organic_ratio.app_package
+	and af_cost.install_month = gpir_organic_ratio.install_month
+	and af_cost.country_group = gpir_organic_ratio.country_group
+	left join lw_20250703_gpir_cost_revenue_app_country_group_media_month_table_by_j gpir_cost on af_cost.app_package = gpir_cost.app_package
+	and af_cost.install_month = gpir_cost.install_month
+	and af_cost.country_group = gpir_cost.country_group
+	and af_cost.mediasource = gpir_cost.mediasource
+	and af_cost.ad_type = gpir_cost.ad_type
+	left join lw_20250703_af_kpi2_fix_month_table_by_j af_kpi2 on af_cost.app_package = af_kpi2.app_package
+	and af_cost.install_month = af_kpi2.install_month
+	and af_cost.country_group = af_kpi2.country_group
+	and af_cost.mediasource = af_kpi2.mediasource
+	and af_cost.ad_type = af_kpi2.ad_type
+	left join lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j af_revenue_rise_ratio on af_cost.app_package = af_revenue_rise_ratio.app_package
+	and af_cost.install_month = af_revenue_rise_ratio.install_month
+	and af_cost.country_group = af_revenue_rise_ratio.country_group
+	and af_cost.mediasource = af_revenue_rise_ratio.mediasource
+	and af_cost.ad_type = af_revenue_rise_ratio.ad_type
+;
 	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
 
-# 	# roi
-# 	sql1 = """
-# CREATE OR REPLACE VIEW lw_20250703_tmp1_month_view_by_j AS
-# SELECT
-# 	app_package,
-# 	install_month,
-# 	country_group,
-# 	mediasource,
-# 	ad_type,
-# 	revenue_d1 / cost as roi1,
-# 	revenue_d3 / cost as roi3,
-# 	revenue_d7 / cost as roi7,
-# FROM lw_20250703_af_cost_revenue_app_month_table_by_j;
-# 	"""
-# 	print(f"Executing SQL: {sql1}")
-# 	execSql2(sql1)
+	# 添加计算字段
+	# roi
+	sql1 = """
+CREATE OR REPLACE VIEW lw_20250703_tmp1_month_view_by_j AS
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	revenue_d1 / cost as roi1,
+	revenue_d3 / cost as roi3,
+	revenue_d7 / cost as roi7,
+FROM lw_20250703_af_all_in_one_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql1}")
+	execSql2(sql1)
 
 
 	return
@@ -1448,6 +1519,7 @@ def createViewsAndTables():
 
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
 
 	# createKpiView()
 	# createKpiTable()
@@ -1455,8 +1527,11 @@ def createViewsAndTables():
 	# createOrganic2MonthView()
 	# createOrganic2MonthTable()
 
-	createGPIROrganic2MonthView()
-	createGPIROrganic2MonthTable()
+	# createGPIROrganic2MonthView()
+	# createGPIROrganic2MonthTable()
+
+	createGPIRMonthyView()
+	createGPIRMonthyTable()
 
 	# createKpi2View()
 	# createKpi2ViewFix()
