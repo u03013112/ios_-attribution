@@ -209,7 +209,7 @@ SELECT * FROM lw_20250703_organic_revenue_ratio_country_group_month_view_by_j;
 # 自然量收入占比，与createOrganicMonthView类似，但是取满日数据，所以要向前取更久
 def createOrganic2MonthView():
 	sql = """
-CREATE OR REPLACE VIEW lw_20250703_organic_revenue_ratio_country_group_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_android_organic_revenue_ratio_month_view_by_j AS
 WITH base_data AS (
 	SELECT
 		SUBSTR(install_day, 1, 6) AS install_month,
@@ -249,6 +249,7 @@ ordered_data AS (
 		base_data
 )
 SELECT
+	'com.fun.lastwar.gp' AS app_package,
 	install_month,
 	country_group,
 	CASE
@@ -324,9 +325,9 @@ ORDER BY
 
 def createOrganic2MonthTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_organic_revenue_ratio_country_group_month_table_by_j;
-CREATE TABLE lw_20250703_organic_revenue_ratio_country_group_month_table_by_j AS
-SELECT * FROM lw_20250703_organic_revenue_ratio_country_group_month_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_android_organic_revenue_ratio_month_table_by_j;
+CREATE TABLE lw_20250703_android_organic_revenue_ratio_month_table_by_j AS
+SELECT * FROM lw_20250703_android_organic_revenue_ratio_month_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -456,6 +457,132 @@ SELECT * FROM lw_20250703_gpir_organic_revenue_ratio_country_group_month_view_by
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 	return
+
+# GPIR版本的自然量收入占比，120日版本
+def createGPIROrganic2MonthView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_android_gpir_organic_revenue_ratio_month_view_by_j AS
+WITH base_data AS (
+	SELECT
+		SUBSTR(install_day, 1, 6) AS install_month,
+		COALESCE(cg.country_group, 'other') AS country_group,
+		SUM(cost_value_usd) AS cost,
+		SUM(
+			CASE
+				WHEN mediasource in ('Organic','organic') THEN revenue_d120
+				ELSE 0
+			END
+		) AS organic_revenue_d120,
+		SUM(revenue_d120) AS revenue_d120
+	FROM
+		ads_lastwar_mediasource_reattribution roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	WHERE
+		roi.facebook_segment IN ('country', 'N/A')
+	GROUP BY
+		install_month,
+		country_group
+),
+ordered_data AS (
+	SELECT
+		install_month,
+		country_group,
+		organic_revenue_d120,
+		revenue_d120,
+		ROW_NUMBER() OVER (
+			PARTITION BY country_group
+			ORDER BY
+				install_month
+		) AS rn
+	FROM
+		base_data
+)
+SELECT
+	'com.fun.lastwar.gp' AS app_package,
+	install_month,
+	country_group,
+	CASE
+		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+		ELSE ROUND(
+			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+			4
+		)
+	END AS last456month_gpir_organic_revenue_ratio
+FROM
+	(
+		SELECT
+			install_month,
+			country_group,
+			-- 计算上3个月（不含本月）的累计值，不足3个月补0
+			COALESCE(
+				LAG(organic_revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(organic_revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_organic_revenue_d120,
+			COALESCE(
+				LAG(revenue_d120, 4) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 5) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) + COALESCE(
+				LAG(revenue_d120, 6) OVER (
+					PARTITION BY country_group
+					ORDER BY
+						install_month
+				),
+				0
+			) AS prev3_revenue_d120
+		FROM
+			ordered_data
+	) t
+group by
+	install_month,
+	country_group
+ORDER BY
+	country_group,
+	install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createGPIROrganic2MonthTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_android_gpir_organic_revenue_ratio_month_table_by_j;
+CREATE TABLE lw_20250703_android_gpir_organic_revenue_ratio_month_table_by_j AS
+SELECT * FROM lw_20250703_android_gpir_organic_revenue_ratio_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 
 # 直接使用bi数据，注意这是AF归因，不是GPIR
 def createAfAppMediaCountryCostRevenueMonthyView():
@@ -1281,7 +1408,34 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 	execSql2(sql)
 	return
 
-		
+
+# 一些计算字段，统一放到这里，这样便于管理和维护
+def allInOne():
+	# 将目前用得上的table先进行合并
+	sql = """
+
+	"""
+
+# 	# roi
+# 	sql1 = """
+# CREATE OR REPLACE VIEW lw_20250703_tmp1_month_view_by_j AS
+# SELECT
+# 	app_package,
+# 	install_month,
+# 	country_group,
+# 	mediasource,
+# 	ad_type,
+# 	revenue_d1 / cost as roi1,
+# 	revenue_d3 / cost as roi3,
+# 	revenue_d7 / cost as roi7,
+# FROM lw_20250703_af_cost_revenue_app_month_table_by_j;
+# 	"""
+# 	print(f"Executing SQL: {sql1}")
+# 	execSql2(sql1)
+
+
+	return
+
 # 有先后顺序，依赖关系
 def createViewsAndTables():
 	# createCountryGroupTable()
@@ -1289,16 +1443,24 @@ def createViewsAndTables():
 	# createAfAppMediaCountryCostRevenueMonthyView()
 	# createAfAppCountryCostRevenueMonthyView()
 	# createAfAppCostRevenueMonthyView()
+	
 	# createAfCostRevenueMonthyTable()
 
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
 
 	# createKpiView()
+	# createKpiTable()
 
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# createOrganic2MonthView()
+	# createOrganic2MonthTable()
+
+	createGPIROrganic2MonthView()
+	createGPIROrganic2MonthTable()
+
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
 
 # 生成一些计算指标
 
