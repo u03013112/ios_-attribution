@@ -959,13 +959,14 @@ SELECT * FROM lw_20250703_revenue_rise_ratio_country_group_month_predict_view_by
 # 其中回本是按照佳玥给出的表格进行计算的
 def createKpiView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_kpi_country_group_month_view_by_j AS
+CREATE VIEW IF NOT EXISTS lw_20250703_af_kpi_month_view_by_j AS
 SELECT
-
+	app_package,
 	country_group,
 	mediasource,
 	ad_type,
 	install_month,
+	kpi_target,
 	CASE
 		WHEN (
 			predict_r3_r1 * predict_r7_r3 * predict_r30_r7 * predict_r60_r30 * predict_r90_r60 * predict_r120_r90
@@ -1012,9 +1013,10 @@ FROM
 				ELSE 1.56
 			END AS kpi_target
 		FROM
-			lw_20250703_revenue_rise_ratio_country_group_month_predict_view_by_j
+			lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
 	) t
 ORDER BY
+	app_package,
 	country_group,
 	mediasource,
 	ad_type,
@@ -1026,9 +1028,9 @@ ORDER BY
 
 def createKpiTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_af_kpi_country_group_month_table_by_j;
-CREATE TABLE lw_20250703_af_kpi_country_group_month_table_by_j AS
-SELECT * FROM lw_20250703_af_kpi_country_group_month_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_af_kpi_month_table_by_j;
+CREATE TABLE lw_20250703_af_kpi_month_table_by_j AS
+SELECT * FROM lw_20250703_af_kpi_month_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -1038,8 +1040,10 @@ SELECT * FROM lw_20250703_af_kpi_country_group_month_view_by_j;
 # 动态KPI，是根据30日、60日、90日的ROI来计算的
 def createKpi2View():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_kpi2_country_group_month_view_by_j AS WITH roi_base AS (
+CREATE OR REPLACE VIEW lw_20250703_af_kpi2_month_view_by_j AS 
+WITH roi_base AS (
 	SELECT
+		app_package,
 		install_month,
 		country_group,
 		mediasource,
@@ -1082,7 +1086,7 @@ CREATE VIEW IF NOT EXISTS lw_20250703_kpi2_country_group_month_view_by_j AS WITH
 			ELSE revenue_d120 / cost
 		END AS roi120
 	FROM
-		lw_20250703_af_cost_revenue_country_group_month_view_by_j
+		lw_20250703_af_cost_revenue_app_month_table_by_j
 ),
 predict_base AS (
 	SELECT
@@ -1095,13 +1099,15 @@ predict_base AS (
 			ELSE 1.65
 		END AS kpi_target
 	FROM
-		lw_20250703_revenue_rise_ratio_country_group_month_predict_view_by_j
+		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
 )
 SELECT
+	r.app_package,
 	r.install_month,
 	r.country_group,
 	r.mediasource,
 	r.ad_type,
+	p.kpi_target,
 	-- kpi_30
 	CASE
 		WHEN r.roi30 = 0 THEN NULL
@@ -1201,15 +1207,19 @@ SELECT
 	END AS kpi7_120
 FROM
 	roi_base r
-	LEFT JOIN predict_base p ON r.install_month = p.install_month
+	LEFT JOIN predict_base p ON 
+	r.app_package = p.app_package
+	AND r.install_month = p.install_month
 	AND r.country_group = p.country_group
 	AND r.mediasource = p.mediasource
 	AND r.ad_type = p.ad_type
 ORDER BY
+	r.app_package,
 	r.country_group,
 	r.mediasource,
 	r.ad_type,
-	r.install_month
+	r.install_month,
+	p.kpi_target
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -1220,8 +1230,9 @@ ORDER BY
 # 这里的逻辑是基于 lw_kpi_country_group_month_view_by_j 视图进行修正
 def createKpi2ViewFix():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_kpi2_fix_country_group_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_kpi2_fix_month_view_by_j AS
 SELECT
+	a.app_package,
 	a.install_month,
 	a.country_group,
 	a.mediasource,
@@ -1248,7 +1259,7 @@ SELECT
 		ELSE NULL
 	END AS d_kpi7
 FROM
-	lw_20250703_kpi2_country_group_month_view_by_j a
+	lw_20250703_af_kpi2_month_view_by_j a
 	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
 ORDER BY
 	a.install_month,
@@ -1262,153 +1273,14 @@ ORDER BY
 
 def createKpi2FixTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_kpi2_fix_country_group_month_table_by_j;
-CREATE TABLE lw_20250703_kpi2_fix_country_group_month_table_by_j AS
-SELECT * FROM lw_20250703_kpi2_fix_country_group_month_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_af_kpi2_fix_month_table_by_j;
+CREATE TABLE lw_20250703_af_kpi2_fix_month_table_by_j AS
+SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 	return
 
-def allInOne():
-	o = getO()
-
-	table_name = 'lw_android_kpi_country_group_month_view_by_j_20250702'
-
-	# 判断表是否存在
-	if not o.exist_table(table_name):
-		# 不存在则创建表
-		sql = '''
-		CREATE TABLE {0} AS
-		SELECT
-			a.install_month,
-			a.country_group,
-			a.mediasource,
-			a.ad_type,
-			a.cost,
-			a.roi1,
-			a.roi3,
-			a.roi7,
-			b.kpi1,
-			b.kpi3,
-			b.kpi7,
-			c.d_kpi1,
-			c.d_kpi3,
-			c.d_kpi7,
-			d.MAPE1,
-			d.MAPE3,
-			d.MAPE7,
-			e.predict_r3_r1,
-			e.predict_r7_r3,
-			e.predict_r30_r7,
-			e.predict_r60_r30,
-			e.predict_r90_r60,
-			e.predict_r120_r90
-		FROM lw_real_cost_roi2_country_group_month_view_by_j a
-		LEFT JOIN lw_kpi_country_group_month_view_by_j b
-			ON a.install_month = b.install_month
-			AND a.country_group = b.country_group
-			AND a.mediasource = b.mediasource
-			AND a.ad_type = b.ad_type
-		LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
-			ON a.install_month = c.install_month
-			AND a.country_group = c.country_group
-			AND a.mediasource = c.mediasource
-			AND a.ad_type = c.ad_type
-		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
-			ON a.install_month = d.install_month
-			AND a.country_group = d.country_group
-			AND a.mediasource = d.mediasource
-			AND a.ad_type = d.ad_type
-		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_view_by_j e
-			ON a.install_month = e.install_month
-			AND a.country_group = e.country_group
-			AND a.mediasource = e.mediasource
-			AND a.ad_type = e.ad_type
-		;
-		'''.format(table_name)
-	else:
-		# 存在则更新表
-		sql = '''
-		INSERT OVERWRITE TABLE {0}
-		SELECT
-			a.install_month,
-			a.country_group,
-			a.mediasource,
-			a.ad_type,
-			a.cost,
-			a.roi1,
-			a.roi3,
-			a.roi7,
-			b.kpi1,
-			b.kpi3,
-			b.kpi7,
-			c.d_kpi1,
-			c.d_kpi3,
-			c.d_kpi7,
-			d.MAPE1,
-			d.MAPE3,
-			d.MAPE7,
-			e.predict_r3_r1,
-			e.predict_r7_r3,
-			e.predict_r30_r7,
-			e.predict_r60_r30,
-			e.predict_r90_r60,
-			e.predict_r120_r90
-		FROM lw_real_cost_roi2_country_group_month_view_by_j a
-		LEFT JOIN lw_kpi_country_group_month_view_by_j b
-			ON a.install_month = b.install_month
-			AND a.country_group = b.country_group
-			AND a.mediasource = b.mediasource
-			AND a.ad_type = b.ad_type
-		LEFT JOIN lw_kpi2_fix_country_group_month_view_by_j c
-			ON a.install_month = c.install_month
-			AND a.country_group = c.country_group
-			AND a.mediasource = c.mediasource
-			AND a.ad_type = c.ad_type
-		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_mape_fix_view_by_j d
-			ON a.install_month = d.install_month
-			AND a.country_group = d.country_group
-			AND a.mediasource = d.mediasource
-			AND a.ad_type = d.ad_type
-		LEFT JOIN lw_revenue_rise_ratio_country_group_month_predict_view_by_j e
-			ON a.install_month = e.install_month
-			AND a.country_group = e.country_group
-			AND a.mediasource = e.mediasource
-			AND a.ad_type = e.ad_type	
-		;
-		'''.format(table_name)
-
-	# 执行SQL
-	instance = o.execute_sql(sql)
-	instance.wait_for_success()
-
-# def createViews():
-	# createMonthView()
-	
-	# createRealCostAndRoiMonthyView()
-	
-	
-	# createMapeView()
-	# createMapeViewFix()
-	# createKpiView()
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createOrganicMonthView()
-	# createGPIRMonthyView()
-	# createGPIROrganicMonthView()
-
-# 不再使用allInOne函数，而是分开创建表，再使用quickbi数据源进行连接
-# 这种方式更加灵活，后续的工作流都保持这个方式
-# def createTables():
-
-	# createKpiTable()
-	# createKpi2FixTable()
-	# createPredictRevenueRiseRatioTable()
-	# createOrganicMonthTable()
-	# createGPIRMonthyTable()
-	# createGPIROrganicMonthTable()
-	pass
 		
 # 有先后顺序，依赖关系
 def createViewsAndTables():
@@ -1420,7 +1292,13 @@ def createViewsAndTables():
 	# createAfCostRevenueMonthyTable()
 
 	# createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+
+	# createKpiView()
+
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
 # 生成一些计算指标
 
