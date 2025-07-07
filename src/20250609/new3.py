@@ -801,6 +801,22 @@ SELECT * FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 	return
+
+# 汇总各种不同tag的CostRevenueMonthy数据，并建表
+def createCostRevenueMonthyTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_cost_revenue_app_month_table_by_j;
+CREATE TABLE lw_20250703_cost_revenue_app_month_table_by_j AS
+SELECT
+	*,
+	'af' AS tag 
+FROM lw_20250703_af_cost_revenue_app_month_table_by_j
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 # GPIR版本的月视图
 def createGPIRMonthyView():
 	sql = """
@@ -902,6 +918,7 @@ WITH ratios AS (
 		country_group,
 		mediasource,
 		ad_type,
+		tag,
 		CASE
 			WHEN revenue_d1 = 0 THEN 0
 			ELSE revenue_d3 / revenue_d1
@@ -927,7 +944,7 @@ WITH ratios AS (
 			ELSE revenue_d120 / revenue_d90
 		END AS r120_r90
 	FROM
-		lw_20250703_af_cost_revenue_app_month_table_by_j
+		lw_20250703_cost_revenue_app_month_table_by_j
 ),
 ratios_with_rownum AS (
 	SELECT
@@ -936,7 +953,8 @@ ratios_with_rownum AS (
 			PARTITION BY app_package,
 			country_group,
 			mediasource,
-			ad_type
+			ad_type,
+			tag
 			ORDER BY
 				install_month
 		) AS row_num
@@ -950,6 +968,7 @@ last3month_ratios AS (
 		cur.country_group,
 		cur.mediasource,
 		cur.ad_type,
+		cur.tag,
 		cur.r3_r1,
 		cur.r7_r3,
 		cur.r30_r7,
@@ -1020,6 +1039,7 @@ last3month_ratios AS (
 		cur.country_group,
 		cur.mediasource,
 		cur.ad_type,
+		cur.tag,
 		cur.r3_r1,
 		cur.r7_r3,
 		cur.r30_r7,
@@ -1033,6 +1053,7 @@ SELECT
 	country_group,
 	mediasource,
 	ad_type,
+	tag,
 	r3_r1,
 	r7_r3,
 	r30_r7,
@@ -1048,6 +1069,7 @@ SELECT
 FROM
 	last3month_ratios
 ORDER BY
+	tag,
 	app_package,
 	country_group,
 	mediasource,
@@ -1069,6 +1091,7 @@ WITH base AS (
 		country_group,
 		mediasource,
 		ad_type,
+		tag,
 		install_month,
 		r3_r1,
 		r7_r3,
@@ -1087,7 +1110,8 @@ WITH base AS (
 			app_package,
 			country_group,
 			mediasource,
-			ad_type
+			ad_type,
+			tag
 			ORDER BY
 				install_month
 		) AS row_num
@@ -1099,6 +1123,7 @@ SELECT
 	cur.country_group,
 	cur.mediasource,
 	cur.ad_type,
+	cur.tag,
 	cur.install_month,
 	cur.r3_r1,
 	cur.r7_r3,
@@ -1129,20 +1154,24 @@ FROM
 	AND cur.country_group = prev1.country_group
 	AND cur.mediasource = prev1.mediasource
 	AND cur.ad_type = prev1.ad_type
+	AND cur.tag = prev1.tag
 	AND cur.row_num = prev1.row_num + 1
 	LEFT JOIN base prev2 ON 
 	cur.app_package = prev2.app_package
 	AND cur.country_group = prev2.country_group
 	AND cur.mediasource = prev2.mediasource
 	AND cur.ad_type = prev2.ad_type
+	AND cur.tag = prev2.tag
 	AND cur.row_num = prev2.row_num + 2
 	LEFT JOIN base prev3 ON 
 	cur.app_package = prev3.app_package
 	AND cur.country_group = prev3.country_group
 	AND cur.mediasource = prev3.mediasource
 	AND cur.ad_type = prev3.ad_type
+	AND cur.tag = prev3.tag
 	AND cur.row_num = prev3.row_num + 3
 ORDER BY
+	cur.tag,
 	cur.app_package,
 	cur.country_group,
 	cur.mediasource,
@@ -1167,12 +1196,13 @@ SELECT * FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j;
 # 其中回本是按照佳玥给出的表格进行计算的
 def createKpiView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_kpi_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_kpi_month_view_by_j AS
 SELECT
 	app_package,
 	country_group,
 	mediasource,
 	ad_type,
+	tag,
 	install_month,
 	kpi_target,
 	CASE
@@ -1228,6 +1258,7 @@ ORDER BY
 	country_group,
 	mediasource,
 	ad_type,
+	tag,
 	install_month;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -1256,6 +1287,7 @@ WITH roi_base AS (
 		country_group,
 		mediasource,
 		ad_type,
+		tag,
 		cost,
 		revenue_d1,
 		revenue_d3,
@@ -1294,7 +1326,7 @@ WITH roi_base AS (
 			ELSE revenue_d120 / cost
 		END AS roi120
 	FROM
-		lw_20250703_af_cost_revenue_app_month_table_by_j
+		lw_20250703_cost_revenue_app_month_table_by_j
 ),
 predict_base AS (
 	SELECT
@@ -1315,6 +1347,7 @@ SELECT
 	r.country_group,
 	r.mediasource,
 	r.ad_type,
+	r.tag,
 	p.kpi_target,
 	-- kpi_30
 	CASE
@@ -1421,7 +1454,9 @@ FROM
 	AND r.country_group = p.country_group
 	AND r.mediasource = p.mediasource
 	AND r.ad_type = p.ad_type
+	AND r.tag = p.tag
 ORDER BY
+	r.tag,
 	r.app_package,
 	r.country_group,
 	r.mediasource,
@@ -1445,6 +1480,7 @@ SELECT
 	a.country_group,
 	a.mediasource,
 	a.ad_type,
+	a.tag,
 	CASE
 		WHEN b.month_diff >= 5 THEN a.kpi1_120
 		WHEN b.month_diff = 4 THEN a.kpi1_90
@@ -1470,6 +1506,8 @@ FROM
 	lw_20250703_af_kpi2_month_view_by_j a
 	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
 ORDER BY
+	a.tag,
+	a.app_package,
 	a.install_month,
 	a.country_group,
 	a.mediasource,
@@ -1500,6 +1538,9 @@ def createViewsAndTables():
 	
 	# createAfCostRevenueMonthyTable()
 
+
+	# createCostRevenueMonthyTable()
+
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioTable()
@@ -1520,11 +1561,13 @@ def createViewsAndTables():
 	# createKpi2ViewFix()
 	# createKpi2FixTable()
 
-	createOrganic2MonthViewForDebug()
-	createOrganic2MonthTableForDebug()
+	# createOrganic2MonthViewForDebug()
+	# createOrganic2MonthTableForDebug()
 
-	createGPIROrganic2MonthViewForDebug()
-	createGPIROrganic2MonthTableForDebug()
+	# createGPIROrganic2MonthViewForDebug()
+	# createGPIROrganic2MonthTableForDebug()
+
+	pass
 
 # 执行过createViewsAndTables后，就不需要反复创建views了，这样会快一点
 def createTables():
@@ -1639,20 +1682,20 @@ GROUP BY
 	return df
 
 def main(dayStr=None):
-	# createViewsAndTables()
+	createViewsAndTables()
 	
 	
 
-	# 每月的7日执行一次，如果不是7日，则不执行
-	if dayStr:
-		today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
-	else:
-		today = datetime.date.today()
-	if today.day == 7:
-		print(f"Today is {today}, executing the monthly tasks.")
-		createTables()
-	else:
-		print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
+	# # 每月的7日执行一次，如果不是7日，则不执行
+	# if dayStr:
+	# 	today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
+	# else:
+	# 	today = datetime.date.today()
+	# if today.day == 7:
+	# 	print(f"Today is {today}, executing the monthly tasks.")
+	# 	createTables()
+	# else:
+	# 	print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
 
 
 if __name__ == "__main__":
