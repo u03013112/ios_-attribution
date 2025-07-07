@@ -1526,6 +1526,17 @@ def createViewsAndTables():
 	createGPIROrganic2MonthViewForDebug()
 	createGPIROrganic2MonthTableForDebug()
 
+# 执行过createViewsAndTables后，就不需要反复创建views了，这样会快一点
+def createTables():
+	createAfCostRevenueMonthyTable()
+	createPredictRevenueRiseRatioTable()
+	createKpiTable()
+	createOrganic2MonthTable()
+	createGPIROrganic2MonthTable()
+	createGPIRMonthyTable()
+	createKpi2FixTable()
+	createOrganic2MonthTableForDebug()
+	createGPIROrganic2MonthTableForDebug()
 
 # 生成一些计算指标
 
@@ -1628,19 +1639,20 @@ GROUP BY
 	return df
 
 def main(dayStr=None):
-	createViewsAndTables()
+	# createViewsAndTables()
+	
 	
 
-	# # 每月的7日执行一次，如果不是7日，则不执行
-	# if dayStr:
-	#	 today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
-	# else:
-	#	 today = datetime.date.today()
-	# if today.day == 7:
-	#	 print(f"Today is {today}, executing the monthly tasks.")
-	#	 allInOne()
-	# else:
-	#	 print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
+	# 每月的7日执行一次，如果不是7日，则不执行
+	if dayStr:
+		today = datetime.datetime.strptime(dayStr, '%Y%m%d').date()
+	else:
+		today = datetime.date.today()
+	if today.day == 7:
+		print(f"Today is {today}, executing the monthly tasks.")
+		createTables()
+	else:
+		print(f"Today is {today}, not the 7th day of the month. Skipping execution.")
 
 
 if __name__ == "__main__":
