@@ -700,6 +700,55 @@ GROUP BY
 	execSql2(sql)
 	return
 
+def createAfAppMediaCountryAdtypeCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j AS
+SELECT
+    roi.app_package,
+    SUBSTR(roi.install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    roi.mediasource,
+    CASE
+        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN roi.optimization_goal
+        WHEN roi.mediasource = 'applovin_int' THEN CASE
+            WHEN roi.campaign_name LIKE '%D7%' THEN 'D7'
+            WHEN roi.campaign_name LIKE '%D28%' THEN 'D28'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END AS ad_type,
+    SUM(roi.cost_value_usd) AS cost,
+    SUM(roi.revenue_d1) AS revenue_d1,
+    SUM(roi.revenue_d3) AS revenue_d3,
+    SUM(roi.revenue_d7) AS revenue_d7,
+    SUM(roi.revenue_d30) AS revenue_d30,
+    SUM(roi.revenue_d60) AS revenue_d60,
+    SUM(roi.revenue_d90) AS revenue_d90,
+    SUM(roi.revenue_d120) AS revenue_d120
+FROM
+    dws_overseas_public_roi roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+    roi.app = '502'
+    AND m.month_diff > 0
+    AND roi.facebook_segment IN ('country', 'N/A')
+    AND roi.mediasource IN (
+        'Facebook Ads',
+        'googleadwords_int',
+        'applovin_int'
+    )
+GROUP BY
+    roi.app_package,
+    SUBSTR(roi.install_day, 1, 6),
+    COALESCE(cg.country_group, 'other'),
+    roi.mediasource,
+    ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 # 只分app和国家，不分媒体
 def createAfAppCountryCostRevenueMonthyView():
 	sql = """
@@ -792,6 +841,8 @@ def createAfCostRevenueMonthyTable():
 DROP TABLE IF EXISTS lw_20250703_af_cost_revenue_app_month_table_by_j;
 CREATE TABLE lw_20250703_af_cost_revenue_app_month_table_by_j AS
 SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j
 UNION ALL
 SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_month_view_by_j
 UNION ALL
@@ -1533,20 +1584,21 @@ def createViewsAndTables():
 	# createCountryGroupTable()
 
 	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
 	# createAfAppCountryCostRevenueMonthyView()
 	# createAfAppCostRevenueMonthyView()
 	
-	# createAfCostRevenueMonthyTable()
+	createAfCostRevenueMonthyTable()
 
 
-	# createCostRevenueMonthyTable()
+	createCostRevenueMonthyTable()
 
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioTable()
 
 	# createKpiView()
-	# createKpiTable()
+	createKpiTable()
 
 	# createOrganic2MonthView()
 	# createOrganic2MonthTable()
@@ -1559,7 +1611,7 @@ def createViewsAndTables():
 
 	# createKpi2View()
 	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	createKpi2FixTable()
 
 	# createOrganic2MonthViewForDebug()
 	# createOrganic2MonthTableForDebug()
@@ -1681,7 +1733,49 @@ GROUP BY
 	# print(df)
 	return df
 
+
+def adTypeDebug():
+	sql = """
+SELECT
+    DISTINCT mediasource,
+    campaign_name,
+    CASE
+        WHEN mediasource = 'Facebook Ads' THEN CASE
+            WHEN campaign_name LIKE '%BAU%' THEN 'BAU'
+            WHEN campaign_name LIKE '%AAA%'
+            OR campaign_name LIKE '%3A%' THEN 'AAA'
+            ELSE 'other'
+        END
+        WHEN mediasource = 'googleadwords_int' THEN CASE
+            WHEN campaign_name LIKE '%3.0%' THEN '3.0'
+            WHEN campaign_name LIKE '%2.5%' THEN '2.5'
+            ELSE 'other'
+        END
+		WHEN mediasource = 'applovin_int' THEN CASE
+			WHEN campaign_name LIKE '%D7%' THEN 'D7'
+			WHEN campaign_name LIKE '%D28%' THEN 'D28'
+			ELSE 'other'
+		END
+    END AS ad_type
+FROM
+    dws_overseas_public_roi
+WHERE
+    app = '502'
+    AND app_package = 'com.fun.lastwar.gp'
+    AND facebook_segment IN ('country', 'N/A')
+ORDER BY
+    mediasource,
+    ad_type,
+    campaign_name;
+	"""
+	print(f"Executing SQL: {sql}")
+	df = execSql(sql)
+	print(df)
+	df.to_csv('/src/data/ad_type_debug.csv', index=False)
+	return df
+
 def main(dayStr=None):
+	# adTypeDebug()
 	createViewsAndTables()
 	
 	
