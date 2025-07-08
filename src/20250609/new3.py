@@ -840,13 +840,25 @@ def createAfCostRevenueMonthyTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250703_af_cost_revenue_app_month_table_by_j;
 CREATE TABLE lw_20250703_af_cost_revenue_app_month_table_by_j AS
-SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j
+SELECT
+	*,
+	'af' AS tag 
+FROM lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j
 UNION ALL
-SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j
+SELECT
+	*,
+	'af' AS tag 
+FROM lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j
 UNION ALL
-SELECT * FROM lw_20250703_af_cost_revenue_app_country_group_month_view_by_j
+SELECT
+	*,
+	'only country' AS tag 
+FROM lw_20250703_af_cost_revenue_app_country_group_month_view_by_j
 UNION ALL
-SELECT * FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
+SELECT
+	*,
+	'ALL' AS tag 
+FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -859,9 +871,12 @@ def createCostRevenueMonthyTable():
 DROP TABLE IF EXISTS lw_20250703_cost_revenue_app_month_table_by_j;
 CREATE TABLE lw_20250703_cost_revenue_app_month_table_by_j AS
 SELECT
-	*,
-	'af' AS tag 
+*
 FROM lw_20250703_af_cost_revenue_app_month_table_by_j
+UNION ALL
+SELECT 
+*
+FROM lw_20250703_gpir_cost_revenue_app_month_table_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -874,10 +889,10 @@ def createGPIRMonthyView():
 CREATE OR REPLACE VIEW lw_20250703_gpir_cost_revenue_app_country_group_media_month_view_by_j AS
 select
 	'com.fun.lastwar.gp' AS app_package,
-	'ALL' AS ad_type,
 	SUBSTR(install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
 	mediasource,
+	'ALL' AS ad_type,
 	sum(cost_value_usd) as cost,
 	sum(revenue_d1) as revenue_d1,
 	sum(revenue_d3) as revenue_d3,
@@ -888,11 +903,13 @@ select
 	sum(revenue_d120) as revenue_d120
 from
 	ads_lastwar_mediasource_reattribution roi
-left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
+	left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 where
 	roi.facebook_segment in ('country', 'N/A')
+	AND m.month_diff > 0
 group by
-	install_month,
+	SUBSTR(roi.install_day, 1, 6),
 	country_group,
 	mediasource;
 	"""
@@ -900,11 +917,82 @@ group by
 	execSql2(sql)
 	return
 
+def createGPIRAdtypeMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_cost_revenue_app_country_group_media_adtype_month_view_by_j AS
+WITH campaign_opt_goal AS (
+    SELECT
+        campaign_name,
+        MAX(optimization_goal) AS optimization_goal
+    FROM
+        dws_overseas_public_roi
+    WHERE
+        app = '502'
+        AND app_package = 'com.fun.lastwar.gp'
+        AND mediasource IN ('Facebook Ads', 'googleadwords_int')
+        AND facebook_segment IN ('country', 'N/A')
+    GROUP BY
+        campaign_name
+)
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(roi.install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    roi.mediasource,
+    CASE
+        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN COALESCE(cog.optimization_goal, 'other')
+        WHEN roi.mediasource = 'applovin_int' THEN CASE
+            WHEN roi.campaign_name LIKE '%D7%' THEN 'D7'
+            WHEN roi.campaign_name LIKE '%D28%' THEN 'D28'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END AS ad_type,
+    SUM(roi.cost_value_usd) AS cost,
+    SUM(roi.revenue_d1) AS revenue_d1,
+    SUM(roi.revenue_d3) AS revenue_d3,
+    SUM(roi.revenue_d7) AS revenue_d7,
+    SUM(roi.revenue_d30) AS revenue_d30,
+    SUM(roi.revenue_d60) AS revenue_d60,
+    SUM(roi.revenue_d90) AS revenue_d90,
+    SUM(roi.revenue_d120) AS revenue_d120
+FROM
+    ads_lastwar_mediasource_reattribution roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+    LEFT JOIN campaign_opt_goal cog ON roi.campaign_name = cog.campaign_name
+WHERE
+    roi.facebook_segment IN ('country', 'N/A')
+    AND m.month_diff > 0
+    AND roi.mediasource IN (
+        'Facebook Ads',
+        'googleadwords_int',
+        'applovin_int'
+    )
+GROUP BY
+    SUBSTR(roi.install_day, 1, 6),
+    COALESCE(cg.country_group, 'other'),
+    roi.mediasource,
+    ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 def createGPIRMonthyTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_gpir_cost_revenue_app_country_group_media_month_table_by_j;
-CREATE TABLE lw_20250703_gpir_cost_revenue_app_country_group_media_month_table_by_j AS
-SELECT * FROM lw_20250703_gpir_cost_revenue_app_country_group_media_month_view_by_j;
+DROP TABLE IF EXISTS lw_20250703_gpir_cost_revenue_app_month_table_by_j;
+CREATE TABLE lw_20250703_gpir_cost_revenue_app_month_table_by_j AS
+SELECT
+	*,
+	'gpir' AS tag
+FROM lw_20250703_gpir_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'gpir' AS tag
+FROM lw_20250703_gpir_cost_revenue_app_country_group_media_adtype_month_view_by_j
+;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -1588,8 +1676,11 @@ def createViewsAndTables():
 	# createAfAppCountryCostRevenueMonthyView()
 	# createAfAppCostRevenueMonthyView()
 	
-	createAfCostRevenueMonthyTable()
+	# createAfCostRevenueMonthyTable()
 
+	createGPIRMonthyView()
+	createGPIRAdtypeMonthyView()
+	createGPIRMonthyTable()
 
 	createCostRevenueMonthyTable()
 
@@ -1605,9 +1696,6 @@ def createViewsAndTables():
 
 	# createGPIROrganic2MonthView()
 	# createGPIROrganic2MonthTable()
-
-	# createGPIRMonthyView()
-	# createGPIRMonthyTable()
 
 	# createKpi2View()
 	# createKpi2ViewFix()
