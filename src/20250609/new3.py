@@ -702,6 +702,86 @@ GROUP BY
 	execSql2(sql)
 	return
 
+# 带Adtype的版本
+def createAfAppMediaCountryAdtypeCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j AS
+SELECT
+    roi.app_package,
+    SUBSTR(roi.install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    roi.mediasource,
+    CASE
+        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN roi.optimization_goal
+        WHEN roi.mediasource = 'applovin_int' THEN CASE
+            WHEN roi.campaign_name LIKE '%D7%' THEN 'D7'
+            WHEN roi.campaign_name LIKE '%D28%' THEN 'D28'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END AS ad_type,
+    SUM(roi.cost_value_usd) AS cost,
+    SUM(roi.revenue_d1) AS revenue_d1,
+    SUM(roi.revenue_d3) AS revenue_d3,
+    SUM(roi.revenue_d7) AS revenue_d7,
+    SUM(roi.revenue_d30) AS revenue_d30,
+    SUM(roi.revenue_d60) AS revenue_d60,
+    SUM(roi.revenue_d90) AS revenue_d90,
+    SUM(roi.revenue_d120) AS revenue_d120
+FROM
+    dws_overseas_public_roi roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+    roi.app = '502'
+    AND m.month_diff > 0
+    AND roi.facebook_segment IN ('country', 'N/A')
+    AND roi.mediasource IN (
+        'Facebook Ads',
+        'googleadwords_int',
+        'applovin_int'
+    )
+GROUP BY
+    roi.app_package,
+    SUBSTR(roi.install_day, 1, 6),
+    COALESCE(cg.country_group, 'other'),
+    roi.mediasource,
+    ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+
+def createAdtypeView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_adtype_view_by_j AS
+SELECT
+    campaign_name,
+    MAX(
+        CASE
+            WHEN mediasource IN ('Facebook Ads', 'googleadwords_int') THEN optimization_goal
+            WHEN mediasource = 'applovin_int' THEN CASE
+                WHEN campaign_name LIKE '%D7%' THEN 'D7'
+                WHEN campaign_name LIKE '%D28%' THEN 'D28'
+                ELSE 'other'
+            END
+            ELSE 'other'
+        END
+    ) AS ad_type
+FROM dws_overseas_public_roi
+WHERE
+    app = '502'
+    AND facebook_segment IN ('country', 'N/A')
+    AND mediasource IN ('Facebook Ads', 'googleadwords_int', 'applovin_int')
+GROUP BY campaign_name
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+
+	return
 
 # 针对AF分app、媒体、国家、广告类型、安装月，大R削弱，然后最总获得花费与收入金额
 def createAfAppNerfBigRCostRevenueMonthyView(percentile=0.99):
@@ -1035,9 +1115,357 @@ and before_t.ad_type = after_t.ad_type
 	print(f"Executing SQL3: {sql3}")
 	execSql2(sql3)
 
-
 	return
 
+# 大R削弱带AdType版本
+def createAfAppAdtypeNerfBigRCostRevenueMonthyView(percentile=0.99):
+	percentileStr = str(percentile).replace('.', '')
+	view1Name = f"lw_20250703_af_adtype_big_r_{percentileStr}_month_view_by_j"
+	sql1 = f"""
+CREATE OR REPLACE VIEW {view1Name} AS
+SELECT
+    app_package,
+    mediasource,
+    country_group,
+    ad_type,
+    percentile_approx(revenue_1d, { percentile }) AS revenue_1d_big_r,
+    percentile_approx(revenue_3d, { percentile }) AS revenue_3d_big_r,
+    percentile_approx(revenue_7d, { percentile }) AS revenue_7d_big_r,
+    percentile_approx(revenue_30d, { percentile }) AS revenue_30d_big_r,
+    percentile_approx(revenue_60d, { percentile }) AS revenue_60d_big_r,
+    percentile_approx(revenue_90d, { percentile }) AS revenue_90d_big_r,
+    percentile_approx(revenue_120d, { percentile }) AS revenue_120d_big_r
+FROM
+    (
+        SELECT
+            roi.app_package,
+            SUBSTR(roi.install_day, 1, 6) AS install_month,
+            roi.mediasource,
+            roi.game_uid,
+            COALESCE(cg.country_group, 'other') AS country_group,
+            COALESCE(ad.ad_type, 'other') AS ad_type,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 0 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 2 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 6 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 29 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_30d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 59 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_60d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 89 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_90d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 119 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_120d
+        FROM
+            rg_bi.dwd_overseas_revenue_allproject roi
+            LEFT JOIN (
+                SELECT
+                    mediasource,
+                    campaign_id,
+                    campaign_name
+                FROM
+                    dwb_overseas_mediasource_campaign_map
+                GROUP BY
+                    mediasource,
+                    campaign_id,
+                    campaign_name
+            ) b ON roi.mediasource = b.mediasource
+            AND roi.campaign_id = b.campaign_id
+            LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+            LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+            LEFT JOIN lw_20250703_adtype_view_by_j ad ON b.campaign_name = ad.campaign_name
+        WHERE
+            roi.zone = '0'
+            AND roi.app = '502'
+            AND roi.install_day BETWEEN '20241001'
+            AND '20250301'
+            AND m.month_diff > 0
+        GROUP BY
+            app_package,
+            SUBSTR(roi.install_day, 1, 6),
+            COALESCE(cg.country_group, 'other'),
+            roi.mediasource,
+            COALESCE(ad.ad_type, 'other'),
+            roi.game_uid
+    ) grouped_user_revenue
+GROUP BY
+    app_package,
+    mediasource,
+    country_group,
+    ad_type;
+	"""
+	print(f"Executing SQL1: {sql1}")
+	execSql2(sql1)
+
+	view2Name = f"lw_20250703_af_adtype_revenue_{percentileStr}_month_view_by_j"
+	sql2 = f"""
+CREATE
+OR REPLACE VIEW { view2Name } AS
+SELECT
+    u.app_package,
+    u.install_month,
+    u.country_group,
+    CASE
+        WHEN u.mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
+        ELSE u.mediasource
+    END AS mediasource,
+    u.ad_type,
+    SUM(LEAST(u.revenue_1d, r.revenue_1d_big_r)) AS revenue_d1,
+    SUM(LEAST(u.revenue_3d, r.revenue_3d_big_r)) AS revenue_d3,
+    SUM(LEAST(u.revenue_7d, r.revenue_7d_big_r)) AS revenue_d7,
+    SUM(LEAST(u.revenue_30d, r.revenue_30d_big_r)) AS revenue_d30,
+    SUM(LEAST(u.revenue_60d, r.revenue_60d_big_r)) AS revenue_d60,
+    SUM(LEAST(u.revenue_90d, r.revenue_90d_big_r)) AS revenue_d90,
+    SUM(LEAST(u.revenue_120d, r.revenue_120d_big_r)) AS revenue_d120
+FROM
+    (
+        SELECT
+            roi.app_package,
+            SUBSTR(roi.install_day, 1, 6) AS install_month,
+            roi.mediasource,
+            roi.game_uid,
+            COALESCE(cg.country_group, 'other') AS country_group,
+            COALESCE(ad.ad_type, 'other') AS ad_type,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 0 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_1d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 2 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_3d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 6 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_7d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 29 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_30d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 59 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_60d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 89 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_90d,
+            SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 119 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_120d
+        FROM
+            rg_bi.dwd_overseas_revenue_allproject roi
+            LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+            LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+            LEFT JOIN (
+                SELECT
+                    mediasource,
+                    campaign_id,
+                    campaign_name
+                FROM
+                    dwb_overseas_mediasource_campaign_map
+                GROUP BY
+                    mediasource,
+                    campaign_id,
+                    campaign_name
+            ) b ON roi.mediasource = b.mediasource
+            AND roi.campaign_id = b.campaign_id
+            LEFT JOIN lw_20250703_adtype_view_by_j ad ON b.campaign_name = ad.campaign_name
+        WHERE
+            roi.zone = '0'
+            AND roi.app = '502'
+            AND m.month_diff > 0
+        GROUP BY
+            roi.app_package,
+            SUBSTR(roi.install_day, 1, 6),
+            roi.mediasource,
+            COALESCE(ad.ad_type, 'other'),
+            roi.game_uid,
+            COALESCE(cg.country_group, 'other')
+    ) u
+    LEFT JOIN { view1Name } r ON u.app_package = r.app_package
+    AND u.mediasource = r.mediasource
+    AND u.country_group = r.country_group
+    AND u.ad_type = r.ad_type
+GROUP BY
+    u.app_package,
+    u.install_month,
+    u.country_group,
+    u.mediasource,
+    u.ad_type;
+	"""
+	print(f"Executing SQL2: {sql2}")
+	execSql2(sql2)
+
+	view3Name = f"lw_20250703_af_adtype_cost_revenue_{percentileStr}_month_view_by_j"
+	sql3 = f"""
+	CREATE
+OR REPLACE VIEW { view3Name } AS
+select
+    before_t.app_package,
+    before_t.install_month,
+    before_t.country_group,
+    CASE
+        WHEN before_t.mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
+        ELSE before_t.mediasource
+    END AS mediasource,
+    before_t.ad_type,
+    before_t.cost,
+    before_t.revenue_d1 as before_revenue_d1,
+    before_t.revenue_d3 as before_revenue_d3,
+    before_t.revenue_d7 as before_revenue_d7,
+    before_t.revenue_d30 as before_revenue_d30,
+    before_t.revenue_d60 as before_revenue_d60,
+    before_t.revenue_d90 as before_revenue_d90,
+    before_t.revenue_d120 as before_revenue_d120,
+    after_t.revenue_d1 as revenue_d1,
+    after_t.revenue_d3 as revenue_d3,
+    after_t.revenue_d7 as revenue_d7,
+    after_t.revenue_d30 as revenue_d30,
+    after_t.revenue_d60 as revenue_d60,
+    after_t.revenue_d90 as revenue_d90,
+    after_t.revenue_d120 as revenue_d120,
+    ROUND(
+        (before_t.revenue_d1 - after_t.revenue_d1) / before_t.revenue_d1,
+        4
+    ) AS nerf_ratio_1d,
+    ROUND(
+        (before_t.revenue_d3 - after_t.revenue_d3) / before_t.revenue_d3,
+        4
+    ) AS nerf_ratio_3d,
+    ROUND(
+        (before_t.revenue_d7 - after_t.revenue_d7) / before_t.revenue_d7,
+        4
+    ) AS nerf_ratio_7d,
+    ROUND(
+        (before_t.revenue_d30 - after_t.revenue_d30) / before_t.revenue_d30,
+        4
+    ) AS nerf_ratio_30d,
+    ROUND(
+        (before_t.revenue_d60 - after_t.revenue_d60) / before_t.revenue_d60,
+        4
+    ) AS nerf_ratio_60d,
+    ROUND(
+        (before_t.revenue_d90 - after_t.revenue_d90) / before_t.revenue_d90,
+        4
+    ) AS nerf_ratio_90d,
+    ROUND(
+        (before_t.revenue_d120 - after_t.revenue_d120) / before_t.revenue_d120,
+        4
+    ) AS nerf_ratio_120d
+from
+    lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j before_t
+    left join { view2Name } after_t on before_t.app_package = after_t.app_package
+    and before_t.install_month = after_t.install_month
+    and before_t.country_group = after_t.country_group
+    and before_t.mediasource = after_t.mediasource
+    and before_t.ad_type = after_t.ad_type;
+	"""
+	print(f"Executing SQL3: {sql3}")
+	execSql2(sql3)
+
+	return
 
 def createAfAppNerfBigRDebugTable(percentile=0.99):
 	percentileStr = str(percentile).replace('.', '')
@@ -1072,57 +1500,6 @@ SELECT * FROM {view3Name};
 	execSql2(sql)
 
 
-	return
-
-
-
-def createAfAppMediaCountryAdtypeCostRevenueMonthyView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j AS
-SELECT
-    roi.app_package,
-    SUBSTR(roi.install_day, 1, 6) AS install_month,
-    COALESCE(cg.country_group, 'other') AS country_group,
-    roi.mediasource,
-    CASE
-        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN roi.optimization_goal
-        WHEN roi.mediasource = 'applovin_int' THEN CASE
-            WHEN roi.campaign_name LIKE '%D7%' THEN 'D7'
-            WHEN roi.campaign_name LIKE '%D28%' THEN 'D28'
-            ELSE 'other'
-        END
-        ELSE 'other'
-    END AS ad_type,
-    SUM(roi.cost_value_usd) AS cost,
-    SUM(roi.revenue_d1) AS revenue_d1,
-    SUM(roi.revenue_d3) AS revenue_d3,
-    SUM(roi.revenue_d7) AS revenue_d7,
-    SUM(roi.revenue_d30) AS revenue_d30,
-    SUM(roi.revenue_d60) AS revenue_d60,
-    SUM(roi.revenue_d90) AS revenue_d90,
-    SUM(roi.revenue_d120) AS revenue_d120
-FROM
-    dws_overseas_public_roi roi
-    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-    LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
-WHERE
-    roi.app = '502'
-    AND m.month_diff > 0
-    AND roi.facebook_segment IN ('country', 'N/A')
-    AND roi.mediasource IN (
-        'Facebook Ads',
-        'googleadwords_int',
-        'applovin_int'
-    )
-GROUP BY
-    roi.app_package,
-    SUBSTR(roi.install_day, 1, 6),
-    COALESCE(cg.country_group, 'other'),
-    roi.mediasource,
-    ad_type;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
 	return
 
 # 只分app和国家，不分媒体
@@ -1270,6 +1647,23 @@ SELECT
 	revenue_d120,
 	'af_nerf_big_r_0999' AS tag
 FROM lw_20250703_af_cost_revenue_0999_month_view_by_j
+UNION ALL
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	cost,
+	revenue_d1,
+	revenue_d3,
+	revenue_d7,
+	revenue_d30,
+	revenue_d60,
+	revenue_d90,
+	revenue_d120,
+	'af_nerf_big_r_0999' AS tag
+FROM lw_20250703_af_adtype_cost_revenue_0999_month_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -1316,35 +1710,13 @@ group by
 def createGPIRAdtypeMonthyView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250703_gpir_cost_revenue_app_country_group_media_adtype_month_view_by_j AS
-WITH campaign_opt_goal AS (
-    SELECT
-        campaign_name,
-        MAX(optimization_goal) AS optimization_goal
-    FROM
-        dws_overseas_public_roi
-    WHERE
-        app = '502'
-        AND app_package = 'com.fun.lastwar.gp'
-        AND mediasource IN ('Facebook Ads', 'googleadwords_int')
-        AND facebook_segment IN ('country', 'N/A')
-    GROUP BY
-        campaign_name
-)
 SELECT
     app_package,
     SUBSTR(roi.install_day, 1, 6) AS install_month,
     COALESCE(cg.country_group, 'other') AS country_group,
     case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
 	else roi.mediasource end as mediasource,
-    CASE
-        WHEN roi.mediasource IN ('Facebook Ads', 'restricted', 'googleadwords_int') THEN COALESCE(cog.optimization_goal, 'other')
-        WHEN roi.mediasource = 'applovin_int' THEN CASE
-            WHEN roi.campaign_name LIKE '%D7%' THEN 'D7'
-            WHEN roi.campaign_name LIKE '%D28%' THEN 'D28'
-            ELSE 'other'
-        END
-        ELSE 'other'
-    END AS ad_type,
+    COALESCE(cog.ad_type, 'other') AS ad_type,
     SUM(roi.cost_value_usd) AS cost,
     SUM(roi.revenue_d1) AS revenue_d1,
     SUM(roi.revenue_d3) AS revenue_d3,
@@ -1357,7 +1729,7 @@ FROM
     ads_lastwar_mediasource_reattribution roi
     LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
     LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
-    LEFT JOIN campaign_opt_goal cog ON roi.campaign_name = cog.campaign_name
+    LEFT JOIN lw_20250703_adtype_view_by_j cog ON roi.campaign_name = cog.campaign_name
 WHERE
     roi.facebook_segment IN ('country', 'N/A')
     AND m.month_diff > 0
@@ -2067,71 +2439,6 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 	return
 
 
-# 有先后顺序，依赖关系
-def createViewsAndTables():
-	# createCountryGroupTable()
-
-	# createAfAppMediaCountryCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createAfAppCountryCostRevenueMonthyView()
-	# createAfAppCostRevenueMonthyView()
-	
-	# createAfCostRevenueMonthyTable()
-
-	createGPIRMonthyView()
-	createGPIRAdtypeMonthyView()
-	createGPIRMonthyTable()
-
-	createAfAppNerfBigRCostRevenueMonthyView(percentile=0.999)
-
-	createCostRevenueMonthyTable()
-
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
-
-	# createKpiView()
-	createKpiTable()
-
-	# createOrganic2MonthView()
-	# createOrganic2MonthTable()
-
-	createGPIROrganic2MonthView()
-	createGPIROrganic2MonthTable()
-
-	# createKpi2View()
-	# createKpi2ViewFix()
-	createKpi2FixTable()
-
-	# createOrganic2MonthViewForDebug()
-	# createOrganic2MonthTableForDebug()
-
-	createGPIROrganic2MonthViewForDebug()
-	createGPIROrganic2MonthTableForDebug()
-
-	# createMapeView()
-	# createMapeViewFix()
-	# createMapeTable()
-
-	createAfAppNerfBigRDebugTable(percentile=0.999)
-
-
-	pass
-
-# 执行过createViewsAndTables后，就不需要反复创建views了，这样会快一点
-def createTables():
-	createAfCostRevenueMonthyTable()
-	createPredictRevenueRiseRatioTable()
-	createKpiTable()
-	createOrganic2MonthTable()
-	createGPIROrganic2MonthTable()
-	createGPIRMonthyTable()
-	createKpi2FixTable()
-	createOrganic2MonthTableForDebug()
-	createGPIROrganic2MonthTableForDebug()
-
-# 生成一些计算指标
-
 # 针对 lw_revenue_rise_ratio_country_group_month_predict_view_by_j 视图创建 MAPE 视图
 def createMapeView():
 	sql = """
@@ -2261,6 +2568,76 @@ GROUP BY
 	# print(df)
 	return df
 
+
+# 有先后顺序，依赖关系
+def createViewsAndTables():
+	# createCountryGroupTable()
+
+	createAdtypeView()
+
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	
+	# createAfCostRevenueMonthyTable()
+
+	createGPIRMonthyView()
+	createGPIRAdtypeMonthyView()
+	createGPIRMonthyTable()
+
+	createAfAppNerfBigRCostRevenueMonthyView(percentile=0.999)
+	createAfAppAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+
+	createCostRevenueMonthyTable()
+
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioTable()
+
+	# createKpiView()
+	createKpiTable()
+
+	# createOrganic2MonthView()
+	# createOrganic2MonthTable()
+
+	createGPIROrganic2MonthView()
+	createGPIROrganic2MonthTable()
+
+	# createKpi2View()
+	# createKpi2ViewFix()
+	createKpi2FixTable()
+
+	# createOrganic2MonthViewForDebug()
+	# createOrganic2MonthTableForDebug()
+
+	# createGPIROrganic2MonthViewForDebug()
+	# createGPIROrganic2MonthTableForDebug()
+
+	# createMapeView()
+	# createMapeViewFix()
+	# createMapeTable()
+
+	# createAfAppNerfBigRDebugTable(percentile=0.999)
+
+
+	
+
+	pass
+
+# 执行过createViewsAndTables后，就不需要反复创建views了，这样会快一点
+def createTables():
+	createAfCostRevenueMonthyTable()
+	createPredictRevenueRiseRatioTable()
+	createKpiTable()
+	createOrganic2MonthTable()
+	createGPIROrganic2MonthTable()
+	createGPIRMonthyTable()
+	createKpi2FixTable()
+	createOrganic2MonthTableForDebug()
+	createGPIROrganic2MonthTableForDebug()
+
+# 生成一些计算指标
 
 def main(dayStr=None):
 	# adTypeDebug()
