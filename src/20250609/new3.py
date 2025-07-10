@@ -1664,6 +1664,11 @@ SELECT
 	revenue_d120,
 	'af_nerf_big_r_0999' AS tag
 FROM lw_20250703_af_adtype_cost_revenue_0999_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'af_onlyprofit_cohort' AS tag
+FROM lw_20250703_af_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -2155,12 +2160,15 @@ FROM
 		SELECT
 			*,
 			CASE
-				WHEN country_group = 'US' THEN 1.45
-				WHEN country_group = 'KR' THEN 1.58
-				WHEN country_group = 'JP' THEN 1.66
-				WHEN country_group = 'GCC' THEN 1.45
-				WHEN country_group = 'T1' THEN 1.65
-				ELSE 1.56
+				WHEN tag LIKE '%onlyprofit%' THEN 1.00
+				ELSE 
+					CASE
+						WHEN country_group = 'US' THEN 1.45
+						WHEN country_group = 'KR' THEN 1.58
+						WHEN country_group = 'JP' THEN 1.66
+						WHEN country_group = 'GCC' THEN 1.45
+						ELSE 1.65
+					END
 			END AS kpi_target
 		FROM
 			lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
@@ -2244,11 +2252,15 @@ predict_base AS (
 	SELECT
 		*,
 		CASE
-			WHEN country_group = 'US' THEN 1.45
-			WHEN country_group = 'KR' THEN 1.58
-			WHEN country_group = 'JP' THEN 1.66
-			WHEN country_group = 'GCC' THEN 1.45
-			ELSE 1.65
+			WHEN tag LIKE '%onlyprofit%' THEN 1.00
+			ELSE 
+				CASE
+					WHEN country_group = 'US' THEN 1.45
+					WHEN country_group = 'KR' THEN 1.58
+					WHEN country_group = 'JP' THEN 1.66
+					WHEN country_group = 'GCC' THEN 1.45
+					ELSE 1.65
+				END
 		END AS kpi_target
 	FROM
 		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
@@ -2569,6 +2581,45 @@ GROUP BY
 	# print(df)
 	return df
 
+# 20250710 新增逻辑
+# 使用纯利表，并且24小时版本
+def createAfOnlyprofitAppMediaCountryCostRevenueMonthyView():
+	sql = """
+CREATE VIEW IF NOT EXISTS lw_20250703_af_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+	dws_overseas_lastwar_roi_onlyprofit roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	mediasource,
+	ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+
 
 # 有先后顺序，依赖关系
 def createViewsAndTables():
@@ -2576,12 +2627,12 @@ def createViewsAndTables():
 
 	# createAdtypeView()
 
-	# # createAfAppMediaCountryCostRevenueMonthyView()
-	# # createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# # createAfAppCountryCostRevenueMonthyView()
-	# # createAfAppCostRevenueMonthyView()
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
 	
-	# # createAfCostRevenueMonthyTable()
+	# createAfCostRevenueMonthyTable()
 
 	# createGPIRMonthyView()
 	# createGPIRAdtypeMonthyView()
@@ -2590,23 +2641,25 @@ def createViewsAndTables():
 	# createAfAppNerfBigRCostRevenueMonthyView(percentile=0.999)
 	# createAfAppAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
 
-	# createCostRevenueMonthyTable()
+	createAfOnlyprofitAppMediaCountryCostRevenueMonthyView()
+
+	createCostRevenueMonthyTable()
 
 	createRevenueRiseRatioView()
 	createPredictRevenueRiseRatioView()
 	createPredictRevenueRiseRatioTable()
 
-	# createKpiView()
+	createKpiView()
 	createKpiTable()
 
 	# createOrganic2MonthView()
 	# createOrganic2MonthTable()
 
-	createGPIROrganic2MonthView()
-	createGPIROrganic2MonthTable()
+	# createGPIROrganic2MonthView()
+	# createGPIROrganic2MonthTable()
 
-	# createKpi2View()
-	# createKpi2ViewFix()
+	createKpi2View()
+	createKpi2ViewFix()
 	createKpi2FixTable()
 
 	# createOrganic2MonthViewForDebug()
