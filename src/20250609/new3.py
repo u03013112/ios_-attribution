@@ -1942,6 +1942,7 @@ last3month_ratios AS (
 		AND cur.country_group = prev.country_group
 		AND cur.mediasource = prev.mediasource
 		AND cur.ad_type = prev.ad_type
+		AND cur.tag = prev.tag
 		AND prev.row_num BETWEEN cur.row_num - 3
 		AND cur.row_num - 1
 	GROUP BY
@@ -2573,26 +2574,26 @@ GROUP BY
 def createViewsAndTables():
 	# createCountryGroupTable()
 
-	createAdtypeView()
+	# createAdtypeView()
 
-	# createAfAppMediaCountryCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createAfAppCountryCostRevenueMonthyView()
-	# createAfAppCostRevenueMonthyView()
+	# # createAfAppMediaCountryCostRevenueMonthyView()
+	# # createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# # createAfAppCountryCostRevenueMonthyView()
+	# # createAfAppCostRevenueMonthyView()
 	
-	# createAfCostRevenueMonthyTable()
+	# # createAfCostRevenueMonthyTable()
 
-	createGPIRMonthyView()
-	createGPIRAdtypeMonthyView()
-	createGPIRMonthyTable()
+	# createGPIRMonthyView()
+	# createGPIRAdtypeMonthyView()
+	# createGPIRMonthyTable()
 
-	createAfAppNerfBigRCostRevenueMonthyView(percentile=0.999)
-	createAfAppAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfAppNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfAppAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
 
-	createCostRevenueMonthyTable()
+	# createCostRevenueMonthyTable()
 
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
+	createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
 	createPredictRevenueRiseRatioTable()
 
 	# createKpiView()
