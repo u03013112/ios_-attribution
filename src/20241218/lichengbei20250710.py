@@ -32,41 +32,41 @@ CREATE TABLE lw_media_kpi_table_by_j_20250703 (
 );
 
 INSERT INTO lw_media_kpi_table_by_j_20250703 (app_package, mediasource, country, kpi1, kpi3, kpi7) VALUES
-('com.fun.lastwar.gp', 'google', 'US', 0.0093, 0.0287, 0.0632),
-('com.fun.lastwar.gp', 'applovin', 'US', 0.0080, 0.0230, 0.0550),
-('com.fun.lastwar.gp', 'facebook', 'US', 0.0080, 0.0240, 0.0550),
-('com.fun.lastwar.gp', 'tiktok', 'US', 0.0140, 0.0370, 0.0670),
-('com.fun.lastwar.gp', 'Snapchat', 'US', 0.0100, 0.0270, 0.0550),
-('com.fun.lastwar.gp', 'Moloco', 'US', 0.0100, 0.0500, 0.1000),
+('com.fun.lastwar.gp', 'googleadwords_int', 'US', 0.0093, 0.0287, 0.0632),
+('com.fun.lastwar.gp', 'applovin_int', 'US', 0.0080, 0.0230, 0.0550),
+('com.fun.lastwar.gp', 'Facebook Ads', 'US', 0.0080, 0.0240, 0.0550),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'US', 0.0140, 0.0370, 0.0670),
+('com.fun.lastwar.gp', 'snapchat_int', 'US', 0.0100, 0.0270, 0.0550),
+('com.fun.lastwar.gp', 'moloco_int', 'US', 0.0100, 0.0500, 0.1000),
 
-('com.fun.lastwar.gp', 'google', 'KR', 0.0090, 0.0260, 0.0650),
-('com.fun.lastwar.gp', 'applovin', 'KR', 0.0100, 0.0300, 0.0740),
-('com.fun.lastwar.gp', 'facebook', 'KR', 0.0120, 0.0320, 0.0770),
-('com.fun.lastwar.gp', 'tiktok', 'KR', 0.0130, 0.0420, 0.0850),
-('com.fun.lastwar.gp', 'Moloco', 'KR', 0.0140, 0.0400, 0.0900),
+('com.fun.lastwar.gp', 'googleadwords_int', 'KR', 0.0090, 0.0260, 0.0650),
+('com.fun.lastwar.gp', 'applovin_int', 'KR', 0.0100, 0.0300, 0.0740),
+('com.fun.lastwar.gp', 'Facebook Ads', 'KR', 0.0120, 0.0320, 0.0770),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'KR', 0.0130, 0.0420, 0.0850),
+('com.fun.lastwar.gp', 'moloco_int', 'KR', 0.0140, 0.0400, 0.0900),
 
-('com.fun.lastwar.gp', 'google', 'JP', 0.0110, 0.0340, 0.0830),
-('com.fun.lastwar.gp', 'applovin', 'JP', 0.0100, 0.0300, 0.0650),
-('com.fun.lastwar.gp', 'facebook', 'JP', 0.0100, 0.0300, 0.0780),
-('com.fun.lastwar.gp', 'tiktok', 'JP', 0.0130, 0.0500, 0.0900),
+('com.fun.lastwar.gp', 'googleadwords_int', 'JP', 0.0110, 0.0340, 0.0830),
+('com.fun.lastwar.gp', 'applovin_int', 'JP', 0.0100, 0.0300, 0.0650),
+('com.fun.lastwar.gp', 'Facebook Ads', 'JP', 0.0100, 0.0300, 0.0780),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'JP', 0.0130, 0.0500, 0.0900),
 
-('com.fun.lastwar.gp', 'google', 'GCC', 0.0060, 0.0200, 0.0450),
-('com.fun.lastwar.gp', 'applovin', 'GCC', 0.0050, 0.0180, 0.0450),
-('com.fun.lastwar.gp', 'facebook', 'GCC', 0.0030, 0.0120, 0.0300),
-('com.fun.lastwar.gp', 'tiktok', 'GCC', 0.0050, 0.0200, 0.0400),
-('com.fun.lastwar.gp', 'Snapchat', 'GCC', 0.0030, 0.0150, 0.0400),
+('com.fun.lastwar.gp', 'googleadwords_int', 'GCC', 0.0060, 0.0200, 0.0450),
+('com.fun.lastwar.gp', 'applovin_int', 'GCC', 0.0050, 0.0180, 0.0450),
+('com.fun.lastwar.gp', 'Facebook Ads', 'GCC', 0.0030, 0.0120, 0.0300),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'GCC', 0.0050, 0.0200, 0.0400),
+('com.fun.lastwar.gp', 'snapchat_int', 'GCC', 0.0030, 0.0150, 0.0400),
 
-('com.fun.lastwar.gp', 'google', 'T1', 0.0100, 0.0350, 0.0770),
-('com.fun.lastwar.gp', 'applovin', 'T1', 0.0100, 0.0360, 0.0820),
-('com.fun.lastwar.gp', 'facebook', 'T1', 0.0110, 0.0330, 0.0700),
-('com.fun.lastwar.gp', 'tiktok', 'T1', 0.0140, 0.0440, 0.0970),
-('com.fun.lastwar.gp', 'Moloco', 'T1', 0.0137, 0.0407, 0.0815),
+('com.fun.lastwar.gp', 'googleadwords_int', 'T1', 0.0100, 0.0350, 0.0770),
+('com.fun.lastwar.gp', 'applovin_int', 'T1', 0.0100, 0.0360, 0.0820),
+('com.fun.lastwar.gp', 'Facebook Ads', 'T1', 0.0110, 0.0330, 0.0700),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'T1', 0.0140, 0.0440, 0.0970),
+('com.fun.lastwar.gp', 'moloco_int', 'T1', 0.0137, 0.0407, 0.0815),
 
-('com.fun.lastwar.gp', 'google', 'other', 0.0120, 0.0350, 0.0760),
-('com.fun.lastwar.gp', 'applovin', 'other', 0.0100, 0.0280, 0.0670),
-('com.fun.lastwar.gp', 'facebook', 'other', 0.0100, 0.0300, 0.0700),
-('com.fun.lastwar.gp', 'tiktok', 'other', 0.0170, 0.0500, 0.1000),
-('com.fun.lastwar.gp', 'Moloco', 'other', 0.0140, 0.0420, 0.0840);
+('com.fun.lastwar.gp', 'googleadwords_int', 'other', 0.0120, 0.0350, 0.0760),
+('com.fun.lastwar.gp', 'applovin_int', 'other', 0.0100, 0.0280, 0.0670),
+('com.fun.lastwar.gp', 'Facebook Ads', 'other', 0.0100, 0.0300, 0.0700),
+('com.fun.lastwar.gp', 'bytedanceglobal_int', 'other', 0.0170, 0.0500, 0.1000),
+('com.fun.lastwar.gp', 'moloco_int', 'other', 0.0140, 0.0420, 0.0840);
 
     """
     print(f"Executing SQL: {sql}")
@@ -221,11 +221,64 @@ def createMilestoneMediaTable():
     sql = """
 DROP TABLE IF EXISTS lw_milestone_media_table_by_j_20250703;
 CREATE TABLE lw_milestone_media_table_by_j_20250703 AS
+SELECT
+    a.app_package,
+    a.install_day,
+    a.country_group,
+    a.mediasource,
+    a.startday,
+    a.cost,
+    a.revenue_d1,
+    a.revenue_d3,
+    a.revenue_d7,
+    a.cumulative_cost,
+    a.cumulative_revenue_d1,
+    a.cumulative_revenue_d3,
+    a.cumulative_revenue_d7,
+    -- 计算累计ROI
+    CASE WHEN a.cumulative_cost > 0 THEN a.cumulative_revenue_d1 / a.cumulative_cost ELSE 0 END AS cumulative_roi_d1,
+    CASE WHEN a.cumulative_cost > 0 THEN a.cumulative_revenue_d3 / a.cumulative_cost ELSE 0 END AS cumulative_roi_d3,
+    CASE WHEN a.cumulative_cost > 0 THEN a.cumulative_revenue_d7 / a.cumulative_cost ELSE 0 END AS cumulative_roi_d7,
+    -- 计算有效花费
+    CASE 
+        WHEN a.cumulative_cost > 0 AND (a.cumulative_revenue_d1 / a.cumulative_cost) >= COALESCE(b.kpi1, 0) 
+        THEN a.cumulative_cost ELSE 0 
+    END AS valid_cost_d1,
+    CASE 
+        WHEN a.cumulative_cost > 0 AND (a.cumulative_revenue_d3 / a.cumulative_cost) >= COALESCE(b.kpi3, 0) 
+        THEN a.cumulative_cost ELSE 0 
+    END AS valid_cost_d3,
+    CASE 
+        WHEN a.cumulative_cost > 0 AND (a.cumulative_revenue_d7 / a.cumulative_cost) >= COALESCE(b.kpi7, 0) 
+        THEN a.cumulative_cost ELSE 0 
+    END AS valid_cost_d7,
+    COALESCE(b.kpi1, 0) AS kpi1,
+    COALESCE(b.kpi3, 0) AS kpi3,
+    COALESCE(b.kpi7, 0) AS kpi7
+FROM
+    lw_milestone_media_cost_revenue_view_by_j_20250703 a
+LEFT JOIN
+    lw_media_kpi_table_by_j_20250703 b
+ON
+    a.app_package = b.app_package
+    AND LOWER(a.mediasource) = LOWER(b.mediasource)
+    AND a.country_group = b.country
+ORDER BY
+    a.app_package,
+    a.country_group,
+    a.mediasource,
+    a.startday,
+    a.install_day;
     """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
     
 
 
-# createMediaKpiTable()
+createMediaKpiTable()
 
 # createMilestoneStartdayTable()
-createMilestoneMediaCostRevenueView()
+# createMilestoneMediaCostRevenueView()
+
+createMilestoneMediaTable()
