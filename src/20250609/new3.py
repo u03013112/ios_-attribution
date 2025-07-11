@@ -3047,28 +3047,28 @@ GROUP BY
 
 # 有先后顺序，依赖关系
 def createViewsAndTables():
-	# # createCountryGroupTable()
-	# createMonthView()
-	# createAdtypeView()
+	# createCountryGroupTable()
+	createMonthView()
+	createAdtypeView()
 
-	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createAfAppCountryCostRevenueMonthyView()
-	# createAfAppCostRevenueMonthyView()
-	# createAfCostRevenueMonthyTable()
+	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	createAfAppCountryCostRevenueMonthyView()
+	createAfAppCostRevenueMonthyView()
+	createAfCostRevenueMonthyTable()
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
-	# createGPIRAppMediaCountryCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createGPIRCostRevenueMonthyTable()
+	# GPIR 花费、收入数据，包括普通、添加adtype 2种
+	createGPIRAppMediaCountryCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	createGPIRCostRevenueMonthyTable()
 
 	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
 	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
@@ -3130,20 +3130,6 @@ def createViewsAndTables():
 	
 
 	pass
-
-# 执行过createViewsAndTables后，就不需要反复创建views了，这样会快一点
-def createTables():
-	createAfCostRevenueMonthyTable()
-	createPredictRevenueRiseRatioTable()
-	createKpiTable()
-	createOrganic2MonthTable()
-	createGPIROrganic2MonthTable()
-	createGPIRCostRevenueMonthyTable()
-	createKpi2FixTable()
-	createOrganic2MonthTableForDebug()
-	createGPIROrganic2MonthTableForDebug()
-
-# 生成一些计算指标
 
 def main(dayStr=None):
 	# adTypeDebug()
