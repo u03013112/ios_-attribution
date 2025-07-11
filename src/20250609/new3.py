@@ -1659,8 +1659,8 @@ from
 # AF大R削弱 花费、收入数据汇总
 def createAfNerfBigRCostRevenueMonthyTable():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_af_cost_revenue_0999_month_table_by_j;
-CREATE TABLE lw_20250703_af_cost_revenue_0999_month_table_by_j AS
+DROP TABLE IF EXISTS lw_20250703_af_nerf_big_r_cost_revenue_month_table_by_j;
+CREATE TABLE lw_20250703_af_nerf_big_r_cost_revenue_month_table_by_j AS
 SELECT
 	app_package,
 	install_month,
@@ -1735,7 +1735,11 @@ FROM lw_20250703_af_onlyprofit_cost_revenue_month_table_by_j
 UNION ALL
 SELECT
 	*
-FROM lw_20250703_af_cost_revenue_0999_month_table_by_j
+FROM lw_20250703_gpir_onlyprofit_cost_revenue_month_table_by_j
+UNION ALL
+SELECT
+	*
+FROM lw_20250703_af_nerf_big_r_cost_revenue_month_table_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -3159,47 +3163,47 @@ GROUP BY
 
 # 有先后顺序，依赖关系
 def createViewsAndTables():
-	# createCountryGroupTable()
-	createMonthView()
-	createAdtypeView()
+	# # createCountryGroupTable()
+	# createMonthView()
+	# createAdtypeView()
 
-	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	createAfAppCountryCostRevenueMonthyView()
-	createAfAppCostRevenueMonthyView()
-	createAfCostRevenueMonthyTable()
+	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	# createAfCostRevenueMonthyTable()
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入数据，包括普通、添加adtype 2种
-	createGPIRAppMediaCountryCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	createGPIRCostRevenueMonthyTable()
+	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
+	# createGPIRAppMediaCountryCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createGPIRCostRevenueMonthyTable()
 
-	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	createGPIRCohortCostRevenueMonthyTable()
+	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
-	createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
-	createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
+	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
 	createAfNerfBigRCostRevenueMonthyTable()
 
 
@@ -3223,22 +3227,22 @@ def createViewsAndTables():
 	createKpi2ViewFix()
 	createKpi2FixTable()
 
-	# 自然量收入占比
-	createOrganic2MonthView()
-	createOrganic2MonthTable()
-	createGPIROrganic2MonthView()
-	createGPIROrganic2MonthTable()
+	# # 自然量收入占比
+	# createOrganic2MonthView()
+	# createOrganic2MonthTable()
+	# createGPIROrganic2MonthView()
+	# createGPIROrganic2MonthTable()
 
-	# 自然量debug
-	createOrganic2MonthViewForDebug()
-	createOrganic2MonthTableForDebug()
-	createGPIROrganic2MonthViewForDebug()
-	createGPIROrganic2MonthTableForDebug()
+	# # 自然量debug
+	# createOrganic2MonthViewForDebug()
+	# createOrganic2MonthTableForDebug()
+	# createGPIROrganic2MonthViewForDebug()
+	# createGPIROrganic2MonthTableForDebug()
 
-	# 误差计算
-	createMapeView()
-	createMapeViewFix()
-	createMapeTable()
+	# # 误差计算
+	# createMapeView()
+	# createMapeViewFix()
+	# createMapeTable()
 
 	# 大R削弱debug
 	createAfAppNerfBigRDebugTable(percentile=0.999)
