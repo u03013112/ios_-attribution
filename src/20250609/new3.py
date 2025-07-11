@@ -857,7 +857,7 @@ FROM lw_20250703_af_onlyprofit_adtype_cost_revenue_app_country_group_media_month
 #####################################################
 # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 
-# AF纯利表，并且24小时版本
+# GPIR纯利表，并且24小时版本
 def createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView():
 	sql = """
 CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
@@ -893,7 +893,8 @@ GROUP BY
 	execSql2(sql)
 	return
 
-# AF纯利表，并且24小时版本 adtype
+# GPIR纯利表，并且24小时版本 adtype
+# 由于目前GPIR纯利表没有campaign信息，所以这部分先不用
 def createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView():
 	sql = """
 CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
@@ -942,11 +943,12 @@ GROUP BY
         ELSE 'other'
     END;
 	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
+	# print(f"Executing SQL: {sql}")
+	# execSql2(sql)
+	print('GPIR纯利表 adtype 视图暂时不创建，因为没有campaign信息')
 	return
 
-# AF纯利表 汇总
+# GPIR纯利表 汇总
 def createGPIROnlyProfitCohortCostRevenueMonthyTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250703_gpir_onlyprofit_cost_revenue_month_table_by_j;
@@ -955,11 +957,11 @@ SELECT
 	*,
 	'gpir_onlyprofit_cohort' AS tag
 FROM lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j
-UNION ALL
-SELECT
-	*,
-	'gpir_onlyprofit_cohort' AS tag
-FROM lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j
+-- UNION ALL
+-- SELECT
+-- 	*,
+-- 	'gpir_onlyprofit_cohort' AS tag
+-- FROM lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
