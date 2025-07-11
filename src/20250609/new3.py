@@ -854,7 +854,117 @@ FROM lw_20250703_af_onlyprofit_adtype_cost_revenue_app_country_group_media_month
 	return
 
 
+#####################################################
+# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 
+# AF纯利表，并且24小时版本
+def createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView():
+	sql = """
+CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+	dws_lastwar_roi_profit_reafattribution roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	mediasource,
+	ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# AF纯利表，并且24小时版本 adtype
+def createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView():
+	sql = """
+CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	mediasource,
+	CASE
+        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
+        WHEN roi.mediasource = 'applovin_int' THEN CASE
+            WHEN ad.campaign_name LIKE '%D7%' THEN 'D7'
+            WHEN ad.campaign_name LIKE '%D28%' THEN 'D28'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+	dws_lastwar_roi_profit_reafattribution roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+	LEFT JOIN lw_20250703_adtype_view_by_j ad ON ad.campaign_id = roi.campaign_id
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	mediasource,
+	CASE
+        WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
+        WHEN roi.mediasource = 'applovin_int' THEN CASE
+            WHEN ad.campaign_name LIKE '%D7%' THEN 'D7'
+            WHEN ad.campaign_name LIKE '%D28%' THEN 'D28'
+            ELSE 'other'
+        END
+        ELSE 'other'
+    END;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# AF纯利表 汇总
+def createGPIROnlyProfitCohortCostRevenueMonthyTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_gpir_onlyprofit_cost_revenue_month_table_by_j;
+CREATE TABLE lw_20250703_gpir_onlyprofit_cost_revenue_month_table_by_j AS
+SELECT
+	*,
+	'gpir_onlyprofit_cohort' AS tag
+FROM lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'gpir_onlyprofit_cohort' AS tag
+FROM lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 
 #####################################################
@@ -3079,7 +3189,12 @@ def createViewsAndTables():
 	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
 	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
 	createAfOnlyProfitCohortCostRevenueMonthyTable()
-	
+
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+
 	# AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
 	createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
 	createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
