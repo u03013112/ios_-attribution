@@ -849,6 +849,78 @@ GROUP BY
 	execSql2(sql)
 	return
 
+
+# AF纯利表，只分app和国家，不分媒体 24小时版本
+def createAfOnlyprofitAppCountryCohortCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cost_revenue_app_country_group_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	'ALL' mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+	dws_overseas_lastwar_roi_onlyprofit roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+	LEFT JOIN lw_20250703_adtype_view_by_j ad ON ad.campaign_id = roi.campaign_id
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other')
+	;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# AF纯利表 大盘 24小时版本
+def createAfOnlyprofitAppCohortCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cost_revenue_app_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	'ALL' AS country_group,
+	'ALL' mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+	dws_overseas_lastwar_roi_onlyprofit roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+	LEFT JOIN lw_20250703_adtype_view_by_j ad ON ad.campaign_id = roi.campaign_id
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6)
+	;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 # AF纯利表 汇总
 def createAfOnlyProfitCohortCostRevenueMonthyTable():
 	sql = """
@@ -863,6 +935,16 @@ SELECT
 	*,
 	'af_onlyprofit_cohort' AS tag
 FROM lw_20250703_af_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'af_onlyprofit_only_country_cohort' AS tag
+FROM lw_20250703_af_onlyprofit_cost_revenue_app_country_group_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'af_onlyprofit_ALL_cohort' AS tag
+FROM lw_20250703_af_onlyprofit_cost_revenue_app_month_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -3210,6 +3292,8 @@ def createViewsAndTables():
 	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
 	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
 	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
 	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
