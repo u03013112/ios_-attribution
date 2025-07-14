@@ -276,9 +276,9 @@ ORDER BY
     
 
 
-createMediaKpiTable()
+# createMediaKpiTable()
 
-# createMilestoneStartdayTable()
-# createMilestoneMediaCostRevenueView()
+createMilestoneStartdayTable()
+createMilestoneMediaCostRevenueView()
 
 createMilestoneMediaTable()
