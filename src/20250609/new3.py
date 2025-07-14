@@ -747,12 +747,16 @@ FROM lw_20250703_gpir_cohort_cost_revenue_app_country_group_media_adtype_month_v
 # AF纯利表，并且24小时版本
 def createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	mediasource,
+	case 
+		when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+		when mediasource in ('bytedanceglobal_int','tiktokglobal_int') then 'bytedanceglobal_int'
+		else mediasource
+	end AS mediasource,
 	'ALL' AS ad_type,
 	SUM(cost_value_usd) AS cost,
 	SUM(revenue_h24) AS revenue_d1,
@@ -773,7 +777,11 @@ GROUP BY
 	app_package,
 	SUBSTR(roi.install_day, 1, 6),
 	COALESCE(cg.country_group, 'other'),
-	mediasource,
+	case 
+		when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+		when mediasource in ('bytedanceglobal_int','tiktokglobal_int') then 'bytedanceglobal_int'
+		else mediasource
+	end,
 	ad_type;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -783,12 +791,16 @@ GROUP BY
 # AF纯利表，并且24小时版本 adtype
 def createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	mediasource,
+	case 
+		when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+		when mediasource in ('bytedanceglobal_int','tiktokglobal_int') then 'bytedanceglobal_int'
+		else mediasource
+	end AS mediasource,
 	CASE
         WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
         WHEN roi.mediasource = 'applovin_int' THEN CASE
@@ -818,7 +830,11 @@ GROUP BY
 	app_package,
 	SUBSTR(roi.install_day, 1, 6),
 	COALESCE(cg.country_group, 'other'),
-	mediasource,
+	case 
+		when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+		when mediasource in ('bytedanceglobal_int','tiktokglobal_int') then 'bytedanceglobal_int'
+		else mediasource
+	end,
 	CASE
         WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
         WHEN roi.mediasource = 'applovin_int' THEN CASE
@@ -3191,10 +3207,10 @@ def createViewsAndTables():
 	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
 	# createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
 	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
@@ -3204,7 +3220,7 @@ def createViewsAndTables():
 	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
 	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
 	# createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
-	createAfNerfBigRCostRevenueMonthyTable()
+	# createAfNerfBigRCostRevenueMonthyTable()
 
 
 	# 所有的花费、收入数据汇总
@@ -3245,7 +3261,7 @@ def createViewsAndTables():
 	# createMapeTable()
 
 	# 大R削弱debug
-	createAfAppNerfBigRDebugTable(percentile=0.999)
+	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
 
 	
