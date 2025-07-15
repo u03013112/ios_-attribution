@@ -118,7 +118,7 @@ GROUP BY
 # AF 花费、收入数据
 def createAfAppMediaCountryCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
@@ -129,10 +129,12 @@ SELECT
 	SUM(revenue_d1) AS revenue_d1,
 	SUM(revenue_d3) AS revenue_d3,
 	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d14) AS revenue_d14,
 	SUM(revenue_d30) AS revenue_d30,
 	SUM(revenue_d60) AS revenue_d60,
 	SUM(revenue_d90) AS revenue_d90,
-	SUM(revenue_d120) AS revenue_d120
+	SUM(revenue_d120) AS revenue_d120,
+	SUM(revenue_d150) AS revenue_d150
 FROM
 	dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -174,10 +176,12 @@ SELECT
     SUM(roi.revenue_d1) AS revenue_d1,
     SUM(roi.revenue_d3) AS revenue_d3,
     SUM(roi.revenue_d7) AS revenue_d7,
+	SUM(roi.revenue_d14) AS revenue_d14,
     SUM(roi.revenue_d30) AS revenue_d30,
     SUM(roi.revenue_d60) AS revenue_d60,
     SUM(roi.revenue_d90) AS revenue_d90,
-    SUM(roi.revenue_d120) AS revenue_d120
+    SUM(roi.revenue_d120) AS revenue_d120,
+	SUM(roi.revenue_d150) AS revenue_d150
 FROM
     dws_overseas_public_roi roi
     LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -216,10 +220,12 @@ SELECT
 	SUM(revenue_d1) AS revenue_d1,
 	SUM(revenue_d3) AS revenue_d3,
 	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d14) AS revenue_d14,
 	SUM(revenue_d30) AS revenue_d30,
 	SUM(revenue_d60) AS revenue_d60,
 	SUM(revenue_d90) AS revenue_d90,
-	SUM(revenue_d120) AS revenue_d120
+	SUM(revenue_d120) AS revenue_d120,
+	SUM(revenue_d150) AS revenue_d150
 FROM
 	dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -252,10 +258,12 @@ SELECT
 	revenue_d1,
 	revenue_d3,
 	revenue_d7,
+	revenue_d14,
 	revenue_d30,
 	revenue_d60,
 	revenue_d90,
-	revenue_d120
+	revenue_d120,
+	revenue_d150
 FROM
 (
 		SELECT
@@ -268,10 +276,12 @@ FROM
 			SUM(revenue_d1) AS revenue_d1,
 			SUM(revenue_d3) AS revenue_d3,
 			SUM(revenue_d7) AS revenue_d7,
+			SUM(revenue_d14) AS revenue_d14,
 			SUM(revenue_d30) AS revenue_d30,
 			SUM(revenue_d60) AS revenue_d60,
 			SUM(revenue_d90) AS revenue_d90,
-			SUM(revenue_d120) AS revenue_d120
+			SUM(revenue_d120) AS revenue_d120,
+			SUM(revenue_d150) AS revenue_d150
 		FROM
 			dws_overseas_public_roi
 		WHERE
@@ -326,7 +336,7 @@ FROM lw_20250703_af_cost_revenue_app_month_view_by_j;
 # AF 花费、收入数据 24小时版本
 def createAfAppMediaCountryCohortCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_af_cohort_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_af_cohort_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
@@ -337,10 +347,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -382,10 +394,12 @@ SELECT
     SUM(roi.revenue_h24) AS revenue_d1,
     SUM(roi.revenue_h72) AS revenue_d3,
     SUM(roi.revenue_h168) AS revenue_d7,
+	SUM(roi.revenue_cohort_d14) AS revenue_d14,
     SUM(roi.revenue_cohort_d30) AS revenue_d30,
     SUM(roi.revenue_cohort_d60) AS revenue_d60,
     SUM(roi.revenue_cohort_d90) AS revenue_d90,
-    SUM(roi.revenue_cohort_d120) AS revenue_d120
+    SUM(roi.revenue_cohort_d120) AS revenue_d120,
+	SUM(roi.revenue_cohort_d150) AS revenue_d150
 FROM
     dws_overseas_public_roi roi
     LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -424,10 +438,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -460,10 +476,12 @@ SELECT
 	revenue_d1,
 	revenue_d3,
 	revenue_d7,
+	revenue_d14,
 	revenue_d30,
 	revenue_d60,
 	revenue_d90,
-	revenue_d120
+	revenue_d120,
+	revenue_d150
 FROM
 (
 		SELECT
@@ -476,10 +494,12 @@ FROM
 			SUM(revenue_h24) AS revenue_d1,
 			SUM(revenue_h72) AS revenue_d3,
 			SUM(revenue_h168) AS revenue_d7,
+			SUM(revenue_cohort_d14) AS revenue_d14,
 			SUM(revenue_cohort_d30) AS revenue_d30,
 			SUM(revenue_cohort_d60) AS revenue_d60,
 			SUM(revenue_cohort_d90) AS revenue_d90,
-			SUM(revenue_cohort_d120) AS revenue_d120
+			SUM(revenue_cohort_d120) AS revenue_d120,
+			SUM(revenue_cohort_d150) AS revenue_d150
 		FROM
 			dws_overseas_public_roi
 		WHERE
@@ -546,10 +566,12 @@ select
 	sum(revenue_d1) as revenue_d1,
 	sum(revenue_d3) as revenue_d3,
 	sum(revenue_d7) as revenue_d7,
+	sum(revenue_d14) as revenue_d14,
 	sum(revenue_d30) as revenue_d30,
 	sum(revenue_d60) as revenue_d60,
 	sum(revenue_d90) as revenue_d90,
-	sum(revenue_d120) as revenue_d120
+	sum(revenue_d120) as revenue_d120,
+	sum(revenue_d150) as revenue_d150
 from
 	ads_lastwar_mediasource_reattribution roi
 	left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
@@ -583,10 +605,12 @@ SELECT
     SUM(roi.revenue_d1) AS revenue_d1,
     SUM(roi.revenue_d3) AS revenue_d3,
     SUM(roi.revenue_d7) AS revenue_d7,
+	SUM(roi.revenue_d14) AS revenue_d14,
     SUM(roi.revenue_d30) AS revenue_d30,
     SUM(roi.revenue_d60) AS revenue_d60,
     SUM(roi.revenue_d90) AS revenue_d90,
-    SUM(roi.revenue_d120) AS revenue_d120
+    SUM(roi.revenue_d120) AS revenue_d120,
+	SUM(roi.revenue_d150) AS revenue_d150
 FROM
     ads_lastwar_mediasource_reattribution roi
     LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -652,10 +676,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 from
 	ads_lastwar_mediasource_reattribution roi
 	left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
@@ -689,10 +715,12 @@ SELECT
     SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
     ads_lastwar_mediasource_reattribution roi
     LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -761,10 +789,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_lastwar_roi_onlyprofit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -813,10 +843,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_lastwar_roi_onlyprofit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -863,10 +895,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_lastwar_roi_onlyprofit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -899,10 +933,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_overseas_lastwar_roi_onlyprofit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -957,7 +993,7 @@ FROM lw_20250703_af_onlyprofit_cost_revenue_app_month_view_by_j
 # GPIR纯利表，并且24小时版本
 def createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
@@ -968,10 +1004,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_lastwar_roi_profit_reafattribution roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -994,7 +1032,7 @@ GROUP BY
 # 由于目前GPIR纯利表没有campaign信息，所以这部分先不用
 def createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView():
 	sql = """
-CREATE VIEW IF NOT EXISTS lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_adtype_cost_revenue_app_country_group_media_month_view_by_j AS
 SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
@@ -1013,10 +1051,12 @@ SELECT
 	SUM(revenue_h24) AS revenue_d1,
 	SUM(revenue_h72) AS revenue_d3,
 	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
 	SUM(revenue_cohort_d30) AS revenue_d30,
 	SUM(revenue_cohort_d60) AS revenue_d60,
 	SUM(revenue_cohort_d90) AS revenue_d90,
-	SUM(revenue_cohort_d120) AS revenue_d120
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
 	dws_lastwar_roi_profit_reafattribution roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -1084,10 +1124,12 @@ SELECT
     percentile_approx(revenue_1d, { percentile }) AS revenue_1d_big_r,
     percentile_approx(revenue_3d, { percentile }) AS revenue_3d_big_r,
     percentile_approx(revenue_7d, { percentile }) AS revenue_7d_big_r,
+	percentile_approx(revenue_14d, { percentile }) AS revenue_14d_big_r,
     percentile_approx(revenue_30d, { percentile }) AS revenue_30d_big_r,
     percentile_approx(revenue_60d, { percentile }) AS revenue_60d_big_r,
     percentile_approx(revenue_90d, { percentile }) AS revenue_90d_big_r,
-    percentile_approx(revenue_120d, { percentile }) AS revenue_120d_big_r
+    percentile_approx(revenue_120d, { percentile }) AS revenue_120d_big_r,
+	percentile_approx(revenue_150d, { percentile }) AS revenue_150d_big_r
 FROM
     (
         SELECT
@@ -1127,6 +1169,16 @@ FROM
                     ELSE 0
                 END
             ) AS revenue_7d,
+			SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 13 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_14d,
             SUM(
                 CASE
                     WHEN datediff(
@@ -1166,7 +1218,17 @@ FROM
                     ) <= 119 THEN revenue_value_usd
                     ELSE 0
                 END
-            ) AS revenue_120d
+            ) AS revenue_120d,
+			SUM(
+				CASE
+					WHEN datediff(
+						to_date(event_day, 'yyyymmdd'),
+						to_date(install_day, 'yyyymmdd'),
+						'dd'
+					) <= 149 THEN revenue_value_usd
+					ELSE 0
+				END
+			) AS revenue_150d
         FROM
             rg_bi.dwd_overseas_revenue_allproject roi
             LEFT JOIN (
@@ -1222,10 +1284,12 @@ SELECT
     SUM(LEAST(u.revenue_1d, r.revenue_1d_big_r)) AS revenue_d1,
     SUM(LEAST(u.revenue_3d, r.revenue_3d_big_r)) AS revenue_d3,
     SUM(LEAST(u.revenue_7d, r.revenue_7d_big_r)) AS revenue_d7,
+	SUM(LEAST(u.revenue_14d, r.revenue_14d_big_r)) AS revenue_d14,
     SUM(LEAST(u.revenue_30d, r.revenue_30d_big_r)) AS revenue_d30,
     SUM(LEAST(u.revenue_60d, r.revenue_60d_big_r)) AS revenue_d60,
     SUM(LEAST(u.revenue_90d, r.revenue_90d_big_r)) AS revenue_d90,
-    SUM(LEAST(u.revenue_120d, r.revenue_120d_big_r)) AS revenue_d120
+    SUM(LEAST(u.revenue_120d, r.revenue_120d_big_r)) AS revenue_d120,
+	SUM(LEAST(u.revenue_150d, r.revenue_150d_big_r)) AS revenue_d150
 FROM
     (
         SELECT
@@ -1265,6 +1329,16 @@ FROM
                     ELSE 0
                 END
             ) AS revenue_7d,
+			SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 13 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_14d,
             SUM(
                 CASE
                     WHEN datediff(
@@ -1304,7 +1378,17 @@ FROM
                     ) <= 119 THEN revenue_value_usd
                     ELSE 0
                 END
-            ) AS revenue_120d
+            ) AS revenue_120d,
+			SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 149 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_150d
         FROM
             rg_bi.dwd_overseas_revenue_allproject roi
             LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -1350,17 +1434,21 @@ select
 	before_t.revenue_d1 as before_revenue_d1,
 	before_t.revenue_d3 as before_revenue_d3,
 	before_t.revenue_d7 as before_revenue_d7,
+	before_t.revenue_d14 as before_revenue_d14,
 	before_t.revenue_d30 as before_revenue_d30,
 	before_t.revenue_d60 as before_revenue_d60,
 	before_t.revenue_d90 as before_revenue_d90,
 	before_t.revenue_d120 as before_revenue_d120,
+	before_t.revenue_d150 as before_revenue_d150,
 	after_t.revenue_d1 as revenue_d1,
 	after_t.revenue_d3 as revenue_d3,
 	after_t.revenue_d7 as revenue_d7,
+	after_t.revenue_d14 as revenue_d14,
 	after_t.revenue_d30 as revenue_d30,
 	after_t.revenue_d60 as revenue_d60,
 	after_t.revenue_d90 as revenue_d90,
 	after_t.revenue_d120 as revenue_d120,
+	after_t.revenue_d150 as revenue_d150,
 	ROUND(
 		(before_t.revenue_d1 - after_t.revenue_d1) / before_t.revenue_d1,
 		4
@@ -1373,6 +1461,10 @@ select
 		(before_t.revenue_d7 - after_t.revenue_d7) / before_t.revenue_d7,
 		4
 	) AS nerf_ratio_7d,
+	ROUND(
+		(before_t.revenue_d14 - after_t.revenue_d14) / before_t.revenue_d14,
+		4
+	) AS nerf_ratio_14d,
 	ROUND(
 		(before_t.revenue_d30 - after_t.revenue_d30) / before_t.revenue_d30,
 		4
@@ -1388,7 +1480,11 @@ select
 	ROUND(
 		(before_t.revenue_d120 - after_t.revenue_d120) / before_t.revenue_d120,
 		4
-	) AS nerf_ratio_120d
+	) AS nerf_ratio_120d,
+	ROUND(
+		(before_t.revenue_d150 - after_t.revenue_d150) / before_t.revenue_d150,
+		4
+	) AS nerf_ratio_150d
 from lw_20250703_af_cost_revenue_app_country_group_media_month_view_by_j before_t
 left join {view2Name} after_t
 on before_t.app_package = after_t.app_package
@@ -1417,10 +1513,12 @@ SELECT
     percentile_approx(revenue_1d, { percentile }) AS revenue_1d_big_r,
     percentile_approx(revenue_3d, { percentile }) AS revenue_3d_big_r,
     percentile_approx(revenue_7d, { percentile }) AS revenue_7d_big_r,
+	percentile_approx(revenue_14d, { percentile }) AS revenue_14d_big_r,
     percentile_approx(revenue_30d, { percentile }) AS revenue_30d_big_r,
     percentile_approx(revenue_60d, { percentile }) AS revenue_60d_big_r,
     percentile_approx(revenue_90d, { percentile }) AS revenue_90d_big_r,
-    percentile_approx(revenue_120d, { percentile }) AS revenue_120d_big_r
+    percentile_approx(revenue_120d, { percentile }) AS revenue_120d_big_r,
+	percentile_approx(revenue_150d, { percentile }) AS revenue_150d_big_r
 FROM
     (
         SELECT
@@ -1460,6 +1558,16 @@ FROM
                     ELSE 0
                 END
             ) AS revenue_7d,
+			SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 13 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_14d,
             SUM(
                 CASE
                     WHEN datediff(
@@ -1499,7 +1607,17 @@ FROM
                     ) <= 119 THEN revenue_value_usd
                     ELSE 0
                 END
-            ) AS revenue_120d
+            ) AS revenue_120d,
+			SUM(
+				CASE
+					WHEN datediff(
+						to_date(event_day, 'yyyymmdd'),
+						to_date(install_day, 'yyyymmdd'),
+						'dd'
+					) <= 149 THEN revenue_value_usd
+					ELSE 0
+				END
+			) AS revenue_150d
         FROM
             rg_bi.dwd_overseas_revenue_allproject roi
             LEFT JOIN (
@@ -1557,10 +1675,12 @@ SELECT
     SUM(LEAST(u.revenue_1d, r.revenue_1d_big_r)) AS revenue_d1,
     SUM(LEAST(u.revenue_3d, r.revenue_3d_big_r)) AS revenue_d3,
     SUM(LEAST(u.revenue_7d, r.revenue_7d_big_r)) AS revenue_d7,
+	SUM(LEAST(u.revenue_14d, r.revenue_14d_big_r)) AS revenue_d14,
     SUM(LEAST(u.revenue_30d, r.revenue_30d_big_r)) AS revenue_d30,
     SUM(LEAST(u.revenue_60d, r.revenue_60d_big_r)) AS revenue_d60,
     SUM(LEAST(u.revenue_90d, r.revenue_90d_big_r)) AS revenue_d90,
-    SUM(LEAST(u.revenue_120d, r.revenue_120d_big_r)) AS revenue_d120
+    SUM(LEAST(u.revenue_120d, r.revenue_120d_big_r)) AS revenue_d120,
+	SUM(LEAST(u.revenue_150d, r.revenue_150d_big_r)) AS revenue_d150
 FROM
     (
         SELECT
@@ -1600,6 +1720,16 @@ FROM
                     ELSE 0
                 END
             ) AS revenue_7d,
+			SUM(
+                CASE
+                    WHEN datediff(
+                        to_date(event_day, 'yyyymmdd'),
+                        to_date(install_day, 'yyyymmdd'),
+                        'dd'
+                    ) <= 13 THEN revenue_value_usd
+                    ELSE 0
+                END
+            ) AS revenue_14d,
             SUM(
                 CASE
                     WHEN datediff(
@@ -1639,7 +1769,17 @@ FROM
                     ) <= 119 THEN revenue_value_usd
                     ELSE 0
                 END
-            ) AS revenue_120d
+            ) AS revenue_120d,
+			SUM(
+				CASE
+					WHEN datediff(
+						to_date(event_day, 'yyyymmdd'),
+						to_date(install_day, 'yyyymmdd'),
+						'dd'
+					) <= 149 THEN revenue_value_usd
+					ELSE 0
+				END
+			) AS revenue_150d
         FROM
             rg_bi.dwd_overseas_revenue_allproject roi
             LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
@@ -1701,17 +1841,21 @@ select
     before_t.revenue_d1 as before_revenue_d1,
     before_t.revenue_d3 as before_revenue_d3,
     before_t.revenue_d7 as before_revenue_d7,
+	before_t.revenue_d14 as before_revenue_d14,
     before_t.revenue_d30 as before_revenue_d30,
     before_t.revenue_d60 as before_revenue_d60,
     before_t.revenue_d90 as before_revenue_d90,
     before_t.revenue_d120 as before_revenue_d120,
+	before_t.revenue_d150 as before_revenue_d150,
     after_t.revenue_d1 as revenue_d1,
     after_t.revenue_d3 as revenue_d3,
     after_t.revenue_d7 as revenue_d7,
+	after_t.revenue_d14 as revenue_d14,
     after_t.revenue_d30 as revenue_d30,
     after_t.revenue_d60 as revenue_d60,
     after_t.revenue_d90 as revenue_d90,
     after_t.revenue_d120 as revenue_d120,
+	after_t.revenue_d150 as revenue_d150,
     ROUND(
         (before_t.revenue_d1 - after_t.revenue_d1) / before_t.revenue_d1,
         4
@@ -1724,6 +1868,10 @@ select
         (before_t.revenue_d7 - after_t.revenue_d7) / before_t.revenue_d7,
         4
     ) AS nerf_ratio_7d,
+	ROUND(
+		(before_t.revenue_d14 - after_t.revenue_d14) / before_t.revenue_d14,
+		4
+	) AS nerf_ratio_14d,
     ROUND(
         (before_t.revenue_d30 - after_t.revenue_d30) / before_t.revenue_d30,
         4
@@ -1739,7 +1887,11 @@ select
     ROUND(
         (before_t.revenue_d120 - after_t.revenue_d120) / before_t.revenue_d120,
         4
-    ) AS nerf_ratio_120d
+    ) AS nerf_ratio_120d,
+	ROUND(
+		(before_t.revenue_d150 - after_t.revenue_d150) / before_t.revenue_d150,
+		4
+	) AS nerf_ratio_150d
 from
     lw_20250703_af_cost_revenue_app_country_group_media_adtype_month_view_by_j before_t
     left join { view2Name } after_t on before_t.app_package = after_t.app_package
@@ -1768,10 +1920,12 @@ SELECT
 	revenue_d1,
 	revenue_d3,
 	revenue_d7,
+	revenue_d14,
 	revenue_d30,
 	revenue_d60,
 	revenue_d90,
 	revenue_d120,
+	revenue_d150,
 	'af_nerf_big_r_0999' AS tag
 FROM lw_20250703_af_cost_revenue_0999_month_view_by_j
 UNION ALL
@@ -1785,10 +1939,12 @@ SELECT
 	revenue_d1,
 	revenue_d3,
 	revenue_d7,
+	revenue_d14,
 	revenue_d30,
 	revenue_d60,
 	revenue_d90,
 	revenue_d120,
+	revenue_d150,
 	'af_nerf_big_r_0999' AS tag
 FROM lw_20250703_af_adtype_cost_revenue_0999_month_view_by_j
 ;
@@ -1869,6 +2025,14 @@ WITH ratios AS (
 		END AS r7_r3,
 		CASE
 			WHEN revenue_d7 = 0 THEN 0
+			ELSE revenue_d14 / revenue_d7
+		END AS r14_r7,
+		CASE
+			WHEN revenue_d14 = 0 THEN 0
+			ELSE revenue_d30 / revenue_d14
+		END AS r30_r14,
+		CASE
+			WHEN revenue_d7 = 0 THEN 0
 			ELSE revenue_d30 / revenue_d7
 		END AS r30_r7,
 		CASE
@@ -1882,7 +2046,11 @@ WITH ratios AS (
 		CASE
 			WHEN revenue_d90 = 0 THEN 0
 			ELSE revenue_d120 / revenue_d90
-		END AS r120_r90
+		END AS r120_r90,
+		CASE
+			WHEN revenue_d120 = 0 THEN 0
+			ELSE revenue_d150 / revenue_d120
+		END AS r150_r120
 	FROM
 		lw_20250703_cost_revenue_app_month_table_by_j
 ),
@@ -1911,10 +2079,13 @@ last3month_ratios AS (
 		cur.tag,
 		cur.r3_r1,
 		cur.r7_r3,
+		cur.r14_r7,
+		cur.r30_r14,
 		cur.r30_r7,
 		cur.r60_r30,
 		cur.r90_r60,
 		cur.r120_r90,
+		cur.r150_r120,
 		-- 计算平均值时排除0值
 		COALESCE(
 			AVG(
@@ -1932,6 +2103,22 @@ last3month_ratios AS (
 			),
 			0
 		) AS last3month_r7_r3,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r14_r7 <> 0 THEN prev.r14_r7
+				END
+			),
+			0
+		) AS last3month_r14_r7,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r30_r14 <> 0 THEN prev.r30_r14
+				END
+			),
+			0
+		) AS last3month_r30_r14,
 		COALESCE(
 			AVG(
 				CASE
@@ -1963,7 +2150,15 @@ last3month_ratios AS (
 				END
 			),
 			0
-		) AS last3month_r120_r90
+		) AS last3month_r120_r90,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r150_r120 <> 0 THEN prev.r150_r120
+				END
+			),
+			0
+		) AS last3month_r150_r120
 	FROM
 		ratios_with_rownum cur
 		LEFT JOIN ratios_with_rownum prev ON 
@@ -1983,10 +2178,13 @@ last3month_ratios AS (
 		cur.tag,
 		cur.r3_r1,
 		cur.r7_r3,
+		cur.r14_r7,
+		cur.r30_r14,
 		cur.r30_r7,
 		cur.r60_r30,
 		cur.r90_r60,
-		cur.r120_r90
+		cur.r120_r90,
+		cur.r150_r120
 )
 SELECT
 	app_package,
@@ -1997,16 +2195,22 @@ SELECT
 	tag,
 	r3_r1,
 	r7_r3,
+	r14_r7,
+	r30_r14,
 	r30_r7,
 	r60_r30,
 	r90_r60,
 	r120_r90,
+	r150_r120,
 	last3month_r3_r1,
 	last3month_r7_r3,
+	last3month_r14_r7,
+	last3month_r30_r14,
 	last3month_r30_r7,
 	last3month_r60_r30,
 	last3month_r90_r60,
-	last3month_r120_r90
+	last3month_r120_r90,
+	last3month_r150_r120
 FROM
 	last3month_ratios
 ORDER BY
@@ -2036,16 +2240,22 @@ WITH base AS (
 		install_month,
 		r3_r1,
 		r7_r3,
+		r14_r7,
+		r30_r14,
 		r30_r7,
 		r60_r30,
 		r90_r60,
 		r120_r90,
+		r150_r120,
 		last3month_r3_r1,
 		last3month_r7_r3,
+		last3month_r14_r7,
+		last3month_r30_r14,
 		last3month_r30_r7,
 		last3month_r60_r30,
 		last3month_r90_r60,
 		last3month_r120_r90,
+		last3month_r150_r120,
 		ROW_NUMBER() OVER (
 			PARTITION BY 
 			app_package,
@@ -2068,26 +2278,36 @@ SELECT
 	cur.install_month,
 	cur.r3_r1,
 	cur.r7_r3,
+	cur.r14_r7,
+	cur.r30_r14,
 	cur.r30_r7,
 	cur.r60_r30,
 	cur.r90_r60,
 	cur.r120_r90,
+	cur.r150_r120,
 	cur.last3month_r3_r1,
 	cur.last3month_r7_r3,
+	cur.last3month_r14_r7,
+	cur.last3month_r30_r14,
 	cur.last3month_r30_r7,
 	cur.last3month_r60_r30,
 	cur.last3month_r90_r60,
 	cur.last3month_r120_r90,
+	cur.last3month_r150_r120,
 	-- 本行的预测值
 	cur.last3month_r3_r1 AS predict_r3_r1,
 	cur.last3month_r7_r3 AS predict_r7_r3,
 	cur.last3month_r30_r7 AS predict_r30_r7,
+	cur.last3month_r14_r7 AS predict_r14_r7,
+	cur.last3month_r30_r14 AS predict_r30_r14,
 	-- 上一行的预测值
 	COALESCE(prev1.last3month_r60_r30, 0) AS predict_r60_r30,
 	-- 上两行的预测值
 	COALESCE(prev2.last3month_r90_r60, 0) AS predict_r90_r60,
 	-- 上三行的预测值
-	COALESCE(prev3.last3month_r120_r90, 0) AS predict_r120_r90
+	COALESCE(prev3.last3month_r120_r90, 0) AS predict_r120_r90,
+	-- 上四行的预测值
+	COALESCE(prev4.last3month_r150_r120, 0) AS predict_r150_r120
 FROM
 	base cur
 	LEFT JOIN base prev1 ON 
@@ -2111,6 +2331,13 @@ FROM
 	AND cur.ad_type = prev3.ad_type
 	AND cur.tag = prev3.tag
 	AND cur.row_num = prev3.row_num + 3
+	LEFT JOIN base prev4 ON
+	cur.app_package = prev4.app_package
+	AND cur.country_group = prev4.country_group
+	AND cur.mediasource = prev4.mediasource
+	AND cur.ad_type = prev4.ad_type
+	AND cur.tag = prev4.tag
+	AND cur.row_num = prev4.row_num + 4
 ORDER BY
 	cur.tag,
 	cur.app_package,
@@ -3288,12 +3515,12 @@ def createViewsAndTables():
 	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
 	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
 	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
@@ -3306,8 +3533,8 @@ def createViewsAndTables():
 	# createAfNerfBigRCostRevenueMonthyTable()
 
 
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyTable()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyTable()
 
 
 	
