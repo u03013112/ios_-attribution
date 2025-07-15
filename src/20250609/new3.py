@@ -1962,10 +1962,9 @@ FROM lw_20250703_af_adtype_cost_revenue_0999_month_view_by_j
 #####################################################
 # 所有的花费、收入数据汇总
 # 汇总各种不同tag的CostRevenueMonthy数据，并建表
-def createCostRevenueMonthyTable():
+def createCostRevenueMonthyView():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_cost_revenue_app_month_table_by_j;
-CREATE TABLE lw_20250703_cost_revenue_app_month_table_by_j AS
+CREATE OR REPLACE VIEW lw_20250703_cost_revenue_app_month_view_by_j AS
 SELECT
 *
 FROM lw_20250703_af_cost_revenue_app_month_table_by_j
@@ -1993,6 +1992,49 @@ UNION ALL
 SELECT
 	*
 FROM lw_20250703_af_nerf_big_r_cost_revenue_month_table_by_j
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createCostRevenueMonthyTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_cost_revenue_app_month_table_by_j;
+CREATE TABLE lw_20250703_cost_revenue_app_month_table_by_j AS
+SELECT
+	case
+		when app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp') then 'com.fun.lastwar.gp'
+		when app_package in ('id6448786147','id6736925794') then 'id6448786147'
+		else app_package
+	end AS app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	sum(cost) AS cost,
+	sum(revenue_d1) AS revenue_d1,
+	sum(revenue_d3) AS revenue_d3,
+	sum(revenue_d7) AS revenue_d7,
+	sum(revenue_d14) AS revenue_d14,
+	sum(revenue_d30) AS revenue_d30,
+	sum(revenue_d60) AS revenue_d60,
+	sum(revenue_d90) AS revenue_d90,
+	sum(revenue_d120) AS revenue_d120,
+	sum(revenue_d150) AS revenue_d150,
+	tag
+FROM lw_20250703_cost_revenue_app_month_view_by_j
+GROUP BY
+	case
+		when app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp') then 'com.fun.lastwar.gp'
+		when app_package in ('id6448786147','id6736925794') then 'id6448786147'
+		else app_package
+	end,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	tag
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -3533,8 +3575,9 @@ def createViewsAndTables():
 	# createAfNerfBigRCostRevenueMonthyTable()
 
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 
 
 	
