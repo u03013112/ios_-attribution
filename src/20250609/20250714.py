@@ -124,5 +124,26 @@ def main():
 	df.to_csv('/src/data/20250714_space.csv', index=False)
 
 
+	# 将milestoneDf拆分，保留 install_day,mediasource,space
+	# 然后将mediasource拆分成列
+	milestoneDf = milestoneDf[['install_day', 'mediasource', 'space']]
+	milestoneDf = milestoneDf.pivot(index='install_day', columns='mediasource', values='space').reset_index()
+	milestoneDf.columns.name = None  # 重置列名
+	milestoneDf = milestoneDf.fillna(0)  # 将NaN替换为0
+	milestoneDf.to_csv('/src/data/20250714_milestone_split.csv', index=False)
+
+	df2 = totalUsDf[['install_day','space']].merge(milestoneDf, on='install_day', how='left')
+	df2.rename(columns={
+		'space': 'total_space',
+		'Facebook Ads': 'facebook_space',
+		'applovin_int': 'applovin_space',
+		'bytedanceglobal_int': 'bytedance_space',
+		'googleadwords_int': 'googleadwords_space',
+		'moloco_int': 'moloco_space',
+		'snapchat_int': 'snapchat_space'	
+	}, inplace=True)
+	df2.to_csv('/src/data/20250714_totalUs_split.csv', index=False)
+
+
 if __name__ == "__main__":
 	main()
