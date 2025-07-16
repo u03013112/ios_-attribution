@@ -125,7 +125,7 @@ def hack2(transceiver):
     end = 0x40000
     for i in range(start, end):
         hex_string = f"{i:05x}" + "1"
-        if hex_string == '4bb10801':
+        if hex_string == '4bb101':
             continue
         tx_data = hex2code1527(hex_string)
         print(f"Sending: {hex_string}")
