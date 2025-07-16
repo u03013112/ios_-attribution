@@ -2891,6 +2891,212 @@ FROM
 	execSql2(sql)
 	return
 
+# 真实+预测回本周期，根据真实的30,60,90,120日ROI与预测付费增长比例，预测出回本周期
+def createPayback2View():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*,
+		CASE
+			WHEN tag LIKE '%onlyprofit%' THEN 1.00
+			ELSE CASE
+				WHEN country_group = 'US' THEN 1.45
+				WHEN country_group = 'KR' THEN 1.58
+				WHEN country_group = 'JP' THEN 1.66
+				WHEN country_group = 'GCC' THEN 1.45
+				ELSE 1.65
+			END
+		END AS kpi_target
+	FROM
+		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+),
+predict AS (
+	SELECT
+		r.app_package,
+		r.install_month,
+		r.country_group,
+		r.mediasource,
+		r.ad_type,
+		r.tag,
+		p.kpi_target,
+		r.roi90,
+		r.roi120,
+		r.roi150,
+		r.roi30 * p.predict_r60_r30 as roi_30_predict_60,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 as roi_30_predict_90,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_30_predict_120,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_30_predict_150,
+		r.roi60 * p.predict_r90_r60 as roi_60_predict_90,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 as roi_60_predict_120,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_60_predict_150,
+		r.roi90 * p.predict_r120_r90 as roi_90_predict_120,
+		r.roi90 * p.predict_r120_r90 * p.predict_r150_r120 as roi_90_predict_150,
+		r.roi120 * p.predict_r150_r120 as roi_120_predict_150
+	FROM
+		roi_base r
+		LEFT JOIN predict_base p ON r.app_package = p.app_package
+		AND r.install_month = p.install_month
+		AND r.country_group = p.country_group
+		AND r.mediasource = p.mediasource
+		AND r.ad_type = p.ad_type
+		AND r.tag = p.tag
+)
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	tag,
+	CASE
+		WHEN roi_30_predict_90 >= kpi_target THEN '<3'
+		WHEN roi_30_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_30_predict_90) /(roi_30_predict_120 - roi_30_predict_90)
+		WHEN roi_30_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_30_predict_120) /(roi_30_predict_150 - roi_30_predict_120)
+		ELSE '>5'
+	END AS payback_30_p_150,
+	CASE
+		WHEN roi_60_predict_90 >= kpi_target THEN '<3'
+		WHEN roi_60_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_60_predict_90) /(roi_60_predict_120 - roi_60_predict_90)
+		WHEN roi_60_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_60_predict_120) /(roi_60_predict_150 - roi_60_predict_120)
+		ELSE '>5'
+	END AS payback_60_p_150,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		WHEN roi_90_predict_120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi_90_predict_120 - roi90)
+		WHEN roi_90_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_90_predict_120) /(roi_90_predict_150 - roi_90_predict_120)
+		ELSE '>5'
+	END AS payback_90_p_150,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi_120_predict_150 - roi120)
+		ELSE '>5'
+	END AS payback_120_p_150,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
+		ELSE '>5'
+	END AS payback_150
+FROM
+	predict;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 修正预测回本周期，将不完整的月份过滤掉
+def createPayback2ViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120_p_150
+		WHEN b.month_diff = 4 THEN a.payback_90_p_150
+		WHEN b.month_diff = 3 THEN a.payback_60_p_150
+		WHEN b.month_diff = 2 THEN a.payback_30_p_150
+		ELSE NULL
+	END AS d_payback_2
+FROM
+	lw_20250703_af_payback2_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 创建推算回本周期table
+# 将lw_20250703_af_payback1_fix_month_view_by_j，lw_20250703_af_payback2_fix_month_view_by_j
+# 合并成一个table
+def createPaybackTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_af_payback_month_table_by_j;
+CREATE TABLE lw_20250703_af_payback_month_table_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	a.d_payback_1 as real_payback_month,
+	b.d_payback_2 as predict_payback_month
+FROM
+	lw_20250703_af_payback1_fix_month_view_by_j a
+	LEFT JOIN lw_20250703_af_payback2_fix_month_view_by_j b ON
+	a.app_package = b.app_package
+	AND a.install_month = b.install_month
+	AND a.country_group = b.country_group
+	AND a.mediasource = b.mediasource
+	AND a.ad_type = b.ad_type
+	AND a.tag = b.tag
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 #####################################################
 # 自然量收入占比
@@ -3760,7 +3966,10 @@ def createViewsAndTables():
 
 	createPayback1View()
 	createPayback1ViewFix()
-
+	createPayback2View()
+	createPayback2ViewFix()
+	createPaybackTable()
+	
 	pass
 
 def main(dayStr=None):
