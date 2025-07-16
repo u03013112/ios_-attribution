@@ -998,7 +998,8 @@ SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	mediasource,
+	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+	else mediasource end as mediasource,
 	'ALL' AS ad_type,
 	SUM(cost_value_usd) AS cost,
 	SUM(revenue_h24) AS revenue_d1,
@@ -1037,7 +1038,8 @@ SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	mediasource,
+	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+	else mediasource end as mediasource,
 	CASE
         WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
         WHEN roi.mediasource = 'applovin_int' THEN CASE
@@ -2750,6 +2752,146 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 	return
 
 
+
+#####################################################
+# 推算回本周期（月）
+
+# 真实回本周期，是根据90日、120日、150日的ROI来计算的
+def createPayback1View():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*,
+		CASE
+			WHEN tag LIKE '%onlyprofit%' THEN 1.00
+			ELSE CASE
+				WHEN country_group = 'US' THEN 1.45
+				WHEN country_group = 'KR' THEN 1.58
+				WHEN country_group = 'JP' THEN 1.66
+				WHEN country_group = 'GCC' THEN 1.45
+				ELSE 1.65
+			END
+		END AS kpi_target
+	FROM
+		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+)
+SELECT
+	r.app_package,
+	r.install_month,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.tag,
+	p.kpi_target,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		ELSE '>3'
+	END AS payback_90,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		ELSE '>4'
+	END AS payback_120,
+	CASE
+		WHEN roi90 >= kpi_target THEN '<3'
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
+		ELSE '>5'
+	END AS payback_150
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON r.app_package = p.app_package
+	AND r.install_month = p.install_month
+	AND r.country_group = p.country_group
+	AND r.mediasource = p.mediasource
+	AND r.ad_type = p.ad_type
+	AND r.tag = p.tag;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 修正真是回本周期，将不完整的月份过滤掉
+def createPayback1ViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120
+		WHEN b.month_diff = 4 THEN a.payback_90
+		ELSE NULL
+	END AS d_payback_1
+FROM
+	lw_20250703_af_payback1_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
 #####################################################
 # 自然量收入占比
 
@@ -3530,71 +3672,71 @@ GROUP BY
 # 有先后顺序，依赖关系
 def createViewsAndTables():
 	# createCountryGroupTable()
-	createMonthView()
-	createAdtypeView()
+	# createMonthView()
+	# createAdtypeView()
 
-	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	createAfAppCountryCostRevenueMonthyView()
-	createAfAppCostRevenueMonthyView()
-	createAfCostRevenueMonthyTable()
+	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	# createAfCostRevenueMonthyTable()
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入数据，包括普通、添加adtype 2种
-	createGPIRAppMediaCountryCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	createGPIRCostRevenueMonthyTable()
+	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
+	# createGPIRAppMediaCountryCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createGPIRCostRevenueMonthyTable()
 
-	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	createGPIRCohortCostRevenueMonthyTable()
+	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
-	createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
-	createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
-	createAfNerfBigRCostRevenueMonthyTable()
+	# # # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
+	# # createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# # createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# # createAfNerfBigRCostRevenueMonthyTable()
 
 
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyView()
-	createCostRevenueMonthyTable()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyView()
+	# createCostRevenueMonthyTable()
 
 
 	
 	
-	# 计算收入增长率
-	createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
+	# # 计算收入增长率
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
 
-	# 推算KPI
-	createKpiView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiTable()
 
-	# 推算动态KPI
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# # 推算动态KPI
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
 
 	# # 自然量收入占比
 	# createOrganic2MonthView()
@@ -3616,8 +3758,8 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-
-	
+	createPayback1View()
+	createPayback1ViewFix()
 
 	pass
 
