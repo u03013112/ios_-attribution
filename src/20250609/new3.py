@@ -2464,6 +2464,8 @@ FROM
 						WHEN country_group = 'KR' THEN 1.58
 						WHEN country_group = 'JP' THEN 1.66
 						WHEN country_group = 'GCC' THEN 1.45
+						WHEN country_group = 'T1' THEN 1.65
+						WHEN country_group = 'other' THEN 1.65
 						ELSE 1.43
 					END
 			END AS kpi_target
@@ -2559,6 +2561,8 @@ predict_base AS (
 					WHEN country_group = 'KR' THEN 1.58
 					WHEN country_group = 'JP' THEN 1.66
 					WHEN country_group = 'GCC' THEN 1.45
+					WHEN country_group = 'T1' THEN 1.65
+					WHEN country_group = 'other' THEN 1.65
 					ELSE 1.43
 				END
 		END AS kpi_target
@@ -2823,6 +2827,8 @@ predict_base AS (
 				WHEN country_group = 'KR' THEN 1.58
 				WHEN country_group = 'JP' THEN 1.66
 				WHEN country_group = 'GCC' THEN 1.45
+				WHEN country_group = 'T1' THEN 1.65
+				WHEN country_group = 'other' THEN 1.65
 				ELSE 1.43
 			END
 		END AS kpi_target
@@ -2838,16 +2844,23 @@ SELECT
 	r.tag,
 	p.kpi_target,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		ELSE NULL
+	END AS payback_60,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		ELSE NULL
 	END AS payback_90,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
 		ELSE NULL
 	END AS payback_120,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
 		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
 		ELSE 5.0
@@ -2880,6 +2893,7 @@ SELECT
 		WHEN b.month_diff >= 6 THEN a.payback_150
 		WHEN b.month_diff = 5 THEN a.payback_120
 		WHEN b.month_diff = 4 THEN a.payback_90
+		WHEN b.month_diff = 3 THEN a.payback_60
 		ELSE NULL
 	END AS d_payback_1
 FROM
@@ -2958,6 +2972,8 @@ predict_base AS (
 				WHEN country_group = 'KR' THEN 1.58
 				WHEN country_group = 'JP' THEN 1.66
 				WHEN country_group = 'GCC' THEN 1.45
+				WHEN country_group = 'T1' THEN 1.65
+				WHEN country_group = 'other' THEN 1.65
 				ELSE 1.43
 			END
 		END AS kpi_target
@@ -2973,6 +2989,7 @@ predict AS (
 		r.ad_type,
 		r.tag,
 		p.kpi_target,
+		r.roi60,
 		r.roi90,
 		r.roi120,
 		r.roi150,
@@ -3007,37 +3024,43 @@ SELECT
 	ad_type,
 	tag,
 	CASE
-		WHEN roi_7_predict_90 >= kpi_target THEN 3.0
+		WHEN roi_7_predict_60 >= kpi_target THEN 2.0
+		WHEN roi_7_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_7_predict_60) /(roi_7_predict_90 - roi_7_predict_60)
 		WHEN roi_7_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_7_predict_90) /(roi_7_predict_120 - roi_7_predict_90)
 		WHEN roi_7_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_7_predict_120) /(roi_7_predict_150 - roi_7_predict_120)
 		ELSE 5.0
 	END AS payback_7_p_150,
 	CASE
-		WHEN roi_30_predict_90 >= kpi_target THEN 3.0
+		WHEN roi_30_predict_60 >= kpi_target THEN 2.0
+		WHEN roi_30_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_30_predict_60) /(roi_30_predict_90 - roi_30_predict_60)
 		WHEN roi_30_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_30_predict_90) /(roi_30_predict_120 - roi_30_predict_90)
 		WHEN roi_30_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_30_predict_120) /(roi_30_predict_150 - roi_30_predict_120)
 		ELSE 5.0
 	END AS payback_30_p_150,
 	CASE
-		WHEN roi_60_predict_90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi_60_predict_90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi_60_predict_90 - roi60)
 		WHEN roi_60_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_60_predict_90) /(roi_60_predict_120 - roi_60_predict_90)
 		WHEN roi_60_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_60_predict_120) /(roi_60_predict_150 - roi_60_predict_120)
 		ELSE 5.0
 	END AS payback_60_p_150,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		WHEN roi_90_predict_120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi_90_predict_120 - roi90)
 		WHEN roi_90_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_90_predict_120) /(roi_90_predict_150 - roi_90_predict_120)
 		ELSE 5.0
 	END AS payback_90_p_150,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
 		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi_120_predict_150 - roi120)
 		ELSE 5.0
 	END AS payback_120_p_150,
 	CASE
-		WHEN roi90 >= kpi_target THEN 3.0
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
 		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
 		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
 		ELSE 5.0
