@@ -1956,10 +1956,62 @@ FROM lw_20250703_af_adtype_cost_revenue_0999_month_view_by_j
 	return
 
 
+#####################################################
+# 纯净版
+# 纯净版只要gpir corhort数据
+# 纯净版要把applovin 拆成D7和D28两个媒体
+# 纯净版只分app、国家、媒体，不再细分adtype
+# 纯净版tag：for_ua
+def createForUaCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_for_ua_cost_revenue_app_month_view_by_j AS
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	case when mediasource = 'applovin_int' and ad_type = 'D7' then 'applovin_d7'
+		when mediasource = 'applovin_int' and ad_type = 'D28' then 'applovin_d28'
+		else mediasource
+	end AS mediasource,
+	'ALL' as ad_type,
+	sum(cost) AS cost,
+    SUM(revenue_d1) AS revenue_d1,
+	SUM(revenue_d3) AS revenue_d3,
+	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d14) AS revenue_d14,
+	SUM(revenue_d30) AS revenue_d30,
+	SUM(revenue_d60) AS revenue_d60,
+	SUM(revenue_d90) AS revenue_d90,
+	SUM(revenue_d120) AS revenue_d120,
+	SUM(revenue_d150) AS revenue_d150
+FROM lw_20250703_gpir_cohort_cost_revenue_app_country_group_media_adtype_month_view_by_j
+GROUP BY
+	app_package,
+	install_month,
+	country_group,
+	case when mediasource = 'applovin_int' and ad_type = 'D7' then 'applovin_d7'
+		when mediasource = 'applovin_int' and ad_type = 'D28' then 'applovin_d28'
+		else mediasource
+	end
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
-
-
-
+def createForUaCostRevenueMonthyTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_for_ua_cost_revenue_app_month_table_by_j;
+CREATE TABLE lw_20250703_for_ua_cost_revenue_app_month_table_by_j AS
+SELECT
+	* ,
+	'for_ua' AS tag
+FROM lw_20250703_for_ua_cost_revenue_app_month_view_by_j
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 #####################################################
 # 所有的花费、收入数据汇总
@@ -1994,6 +2046,10 @@ UNION ALL
 SELECT
 	*
 FROM lw_20250703_af_nerf_big_r_cost_revenue_month_table_by_j
+UNION ALL
+SELECT
+	*
+FROM lw_20250703_for_ua_cost_revenue_app_month_table_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -2398,7 +2454,55 @@ def createPredictRevenueRiseRatioTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j;
 CREATE TABLE lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j AS
-SELECT * FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j;
+SELECT 
+	rr.app_package,
+	rr.country_group,
+	rr.mediasource,
+	rr.ad_type,
+	rr.tag,
+	rr.install_month,
+	rr.r3_r1,
+	rr.r7_r3,
+	rr.r14_r7,
+	case when m.month_diff >= 1 then rr.r30_r14 
+	else NULL end
+	as r30_r14,
+	case when m.month_diff >= 1 then rr.r30_r7
+	else NULL end
+	as r30_r7,
+	case when m.month_diff >= 2 then rr.r60_r30
+	else NULL end
+	as r60_r30,
+	case when m.month_diff >= 3 then rr.r90_r60
+	else NULL end
+	as r90_r60,
+	case when m.month_diff >= 4 then rr.r120_r90
+	else NULL end
+	as r120_r90,
+	case when m.month_diff >= 5 then rr.r150_r120
+	else NULL end
+	as r150_r120,
+	rr.last3month_r3_r1,
+	rr.last3month_r7_r3,
+	rr.last3month_r14_r7,
+	rr.last3month_r30_r14,
+	rr.last3month_r30_r7,
+	rr.last3month_r60_r30,
+	rr.last3month_r90_r60,
+	rr.last3month_r120_r90,
+	rr.last3month_r150_r120,
+	rr.predict_r3_r1,
+	rr.predict_r7_r3,
+	rr.predict_r30_r7,
+	rr.predict_r14_r7,
+	rr.predict_r30_r14,
+	rr.predict_r60_r30,
+	rr.predict_r90_r60,
+	rr.predict_r120_r90,
+	rr.predict_r150_r120
+FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+LEFT JOIN month_view_by_j m ON rr.install_month = m.install_month
+;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -4273,10 +4377,10 @@ def createViewsAndTables():
 	# createAfAppCohortCostRevenueMonthyView()
 	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入数据，包括普通、添加adtype 2种
-	createGPIRAppMediaCountryCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	createGPIRCostRevenueMonthyTable()
+	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
+	# createGPIRAppMediaCountryCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createGPIRCostRevenueMonthyTable()
 
 	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
 	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
@@ -4295,41 +4399,41 @@ def createViewsAndTables():
 	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
 	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# # # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
-	# # createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# # createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# # createAfNerfBigRCostRevenueMonthyTable()
+	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
+	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfNerfBigRCostRevenueMonthyTable()
 
+
+	# createForUaCostRevenueMonthyView()
+	# createForUaCostRevenueMonthyTable()
 
 	# # 所有的花费、收入数据汇总
 	# createCostRevenueMonthyView()
 	# createCostRevenueMonthyTable()
-
-
-	
 	
 	# # 计算收入增长率
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioTable()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
-	# 自然量收入占比
-	createAfAndroidOrganicMonthView()
-	createAfCohortAndroidOrganicMonthView()
-	createAfOnlyprofitCohortAndroidOrganicMonthView()
-	createGpirAndroidOrganic2MonthView()
-	createGpirCohortAndroidOrganic2MonthView()
-	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	createOrganicMonthTable()
+	# # 自然量收入占比
+	# createAfAndroidOrganicMonthView()
+	# createAfCohortAndroidOrganicMonthView()
+	# createAfOnlyprofitCohortAndroidOrganicMonthView()
+	# createGpirAndroidOrganic2MonthView()
+	# createGpirCohortAndroidOrganic2MonthView()
+	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	# createOrganicMonthTable()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
