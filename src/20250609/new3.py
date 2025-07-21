@@ -2681,6 +2681,40 @@ SELECT
 	r.ad_type,
 	r.tag,
 	p.kpi_target,
+	-- kpi_7
+	CASE
+		WHEN r.roi7 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi1_7,
+	CASE
+		WHEN r.roi7 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi3_7,
+	CASE
+		WHEN r.roi7 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi7_7,
 	-- kpi_30
 	CASE
 		WHEN r.roi30 = 0 THEN NULL
@@ -2818,6 +2852,7 @@ SELECT
 		WHEN b.month_diff = 4 THEN a.kpi1_90
 		WHEN b.month_diff = 3 THEN a.kpi1_60
 		WHEN b.month_diff = 2 THEN a.kpi1_30
+		WHEN b.month_diff = 1 THEN a.kpi1_7
 		ELSE NULL
 	END AS d_kpi1,
 	CASE
@@ -2825,6 +2860,7 @@ SELECT
 		WHEN b.month_diff = 4 THEN a.kpi3_90
 		WHEN b.month_diff = 3 THEN a.kpi3_60
 		WHEN b.month_diff = 2 THEN a.kpi3_30
+		WHEN b.month_diff = 1 THEN a.kpi3_7
 		ELSE NULL
 	END AS d_kpi3,
 	CASE
@@ -2832,6 +2868,7 @@ SELECT
 		WHEN b.month_diff = 4 THEN a.kpi7_90
 		WHEN b.month_diff = 3 THEN a.kpi7_60
 		WHEN b.month_diff = 2 THEN a.kpi7_30
+		WHEN b.month_diff = 1 THEN a.kpi7_7
 		ELSE NULL
 	END AS d_kpi7
 FROM
@@ -4415,11 +4452,11 @@ def createViewsAndTables():
 	# # 计算收入增长率
 	# createRevenueRiseRatioView()
 	# createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
+	# createPredictRevenueRiseRatioTable()
 
-	# 推算KPI
-	createKpiView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiTable()
 
 	# 推算动态KPI
 	createKpi2View()
