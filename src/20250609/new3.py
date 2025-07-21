@@ -4273,10 +4273,10 @@ def createViewsAndTables():
 	# createAfAppCohortCostRevenueMonthyView()
 	# createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
-	# createGPIRAppMediaCountryCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createGPIRCostRevenueMonthyTable()
+	# GPIR 花费、收入数据，包括普通、添加adtype 2种
+	createGPIRAppMediaCountryCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	createGPIRCostRevenueMonthyTable()
 
 	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
 	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
