@@ -2897,382 +2897,6 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 	return
 
 
-
-#####################################################
-# 推算回本周期（月）
-
-# 真实回本周期，是根据90日、120日、150日的ROI来计算的
-def createPayback1View():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_payback1_month_view_by_j AS
-WITH roi_base AS (
-	SELECT
-		app_package,
-		install_month,
-		country_group,
-		mediasource,
-		ad_type,
-		tag,
-		cost,
-		revenue_d1,
-		revenue_d3,
-		revenue_d7,
-		revenue_d30,
-		revenue_d60,
-		revenue_d90,
-		revenue_d120,
-		revenue_d150,
-		-- 计算ROI
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d1 / cost
-		END AS roi1,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d3 / cost
-		END AS roi3,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d7 / cost
-		END AS roi7,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d30 / cost
-		END AS roi30,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d60 / cost
-		END AS roi60,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d90 / cost
-		END AS roi90,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d120 / cost
-		END AS roi120,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d150 / cost
-		END AS roi150
-	FROM
-		lw_20250703_cost_revenue_app_month_table_by_j
-),
-predict_base AS (
-	SELECT
-		*,
-		CASE
-			WHEN tag LIKE '%onlyprofit%' THEN 1.00
-			ELSE CASE
-				WHEN country_group = 'US' THEN 1.45
-				WHEN country_group = 'KR' THEN 1.58
-				WHEN country_group = 'JP' THEN 1.66
-				WHEN country_group = 'GCC' THEN 1.45
-				WHEN country_group = 'T1' THEN 1.65
-				WHEN country_group = 'other' THEN 1.65
-				ELSE 1.43
-			END
-		END AS kpi_target
-	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
-)
-SELECT
-	r.app_package,
-	r.install_month,
-	r.country_group,
-	r.mediasource,
-	r.ad_type,
-	r.tag,
-	p.kpi_target,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		ELSE NULL
-	END AS payback_60,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		ELSE NULL
-	END AS payback_90,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
-		ELSE NULL
-	END AS payback_120,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
-		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
-		ELSE 5.0
-	END AS payback_150
-FROM
-	roi_base r
-	LEFT JOIN predict_base p ON r.app_package = p.app_package
-	AND r.install_month = p.install_month
-	AND r.country_group = p.country_group
-	AND r.mediasource = p.mediasource
-	AND r.ad_type = p.ad_type
-	AND r.tag = p.tag;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# 修正真是回本周期，将不完整的月份过滤掉
-def createPayback1ViewFix():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_payback1_fix_month_view_by_j AS
-SELECT
-	a.app_package,
-	a.install_month,
-	a.country_group,
-	a.mediasource,
-	a.ad_type,
-	a.tag,
-	CASE
-		WHEN b.month_diff >= 6 THEN a.payback_150
-		WHEN b.month_diff = 5 THEN a.payback_120
-		WHEN b.month_diff = 4 THEN a.payback_90
-		WHEN b.month_diff = 3 THEN a.payback_60
-		ELSE NULL
-	END AS d_payback_1
-FROM
-	lw_20250703_af_payback1_month_view_by_j a
-	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
-
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# 真实+预测回本周期，根据真实的30,60,90,120日ROI与预测付费增长比例，预测出回本周期
-def createPayback2View():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_payback2_month_view_by_j AS
-WITH roi_base AS (
-	SELECT
-		app_package,
-		install_month,
-		country_group,
-		mediasource,
-		ad_type,
-		tag,
-		cost,
-		revenue_d1,
-		revenue_d3,
-		revenue_d7,
-		revenue_d30,
-		revenue_d60,
-		revenue_d90,
-		revenue_d120,
-		revenue_d150,
-		-- 计算ROI
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d1 / cost
-		END AS roi1,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d3 / cost
-		END AS roi3,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d7 / cost
-		END AS roi7,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d30 / cost
-		END AS roi30,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d60 / cost
-		END AS roi60,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d90 / cost
-		END AS roi90,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d120 / cost
-		END AS roi120,
-		CASE
-			WHEN cost = 0 THEN 0
-			ELSE revenue_d150 / cost
-		END AS roi150
-	FROM
-		lw_20250703_cost_revenue_app_month_table_by_j
-),
-predict_base AS (
-	SELECT
-		*,
-		CASE
-			WHEN tag LIKE '%onlyprofit%' THEN 1.00
-			ELSE CASE
-				WHEN country_group = 'US' THEN 1.45
-				WHEN country_group = 'KR' THEN 1.58
-				WHEN country_group = 'JP' THEN 1.66
-				WHEN country_group = 'GCC' THEN 1.45
-				WHEN country_group = 'T1' THEN 1.65
-				WHEN country_group = 'other' THEN 1.65
-				ELSE 1.43
-			END
-		END AS kpi_target
-	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
-),
-predict AS (
-	SELECT
-		r.app_package,
-		r.install_month,
-		r.country_group,
-		r.mediasource,
-		r.ad_type,
-		r.tag,
-		p.kpi_target,
-		r.roi60,
-		r.roi90,
-		r.roi120,
-		r.roi150,
-		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 as roi_7_predict_60,
-		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 as roi_7_predict_90,
-		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_7_predict_120,
-		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_7_predict_150,
-		r.roi30 * p.predict_r60_r30 as roi_30_predict_60,
-		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 as roi_30_predict_90,
-		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_30_predict_120,
-		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_30_predict_150,
-		r.roi60 * p.predict_r90_r60 as roi_60_predict_90,
-		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 as roi_60_predict_120,
-		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_60_predict_150,
-		r.roi90 * p.predict_r120_r90 as roi_90_predict_120,
-		r.roi90 * p.predict_r120_r90 * p.predict_r150_r120 as roi_90_predict_150,
-		r.roi120 * p.predict_r150_r120 as roi_120_predict_150
-	FROM
-		roi_base r
-		LEFT JOIN predict_base p ON r.app_package = p.app_package
-		AND r.install_month = p.install_month
-		AND r.country_group = p.country_group
-		AND r.mediasource = p.mediasource
-		AND r.ad_type = p.ad_type
-		AND r.tag = p.tag
-)
-SELECT
-	app_package,
-	install_month,
-	country_group,
-	mediasource,
-	ad_type,
-	tag,
-	CASE
-		WHEN roi_7_predict_60 >= kpi_target THEN 2.0
-		WHEN roi_7_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_7_predict_60) /(roi_7_predict_90 - roi_7_predict_60)
-		WHEN roi_7_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_7_predict_90) /(roi_7_predict_120 - roi_7_predict_90)
-		WHEN roi_7_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_7_predict_120) /(roi_7_predict_150 - roi_7_predict_120)
-		ELSE 5.0
-	END AS payback_7_p_150,
-	CASE
-		WHEN roi_30_predict_60 >= kpi_target THEN 2.0
-		WHEN roi_30_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_30_predict_60) /(roi_30_predict_90 - roi_30_predict_60)
-		WHEN roi_30_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_30_predict_90) /(roi_30_predict_120 - roi_30_predict_90)
-		WHEN roi_30_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_30_predict_120) /(roi_30_predict_150 - roi_30_predict_120)
-		ELSE 5.0
-	END AS payback_30_p_150,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi_60_predict_90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi_60_predict_90 - roi60)
-		WHEN roi_60_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_60_predict_90) /(roi_60_predict_120 - roi_60_predict_90)
-		WHEN roi_60_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_60_predict_120) /(roi_60_predict_150 - roi_60_predict_120)
-		ELSE 5.0
-	END AS payback_60_p_150,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		WHEN roi_90_predict_120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi_90_predict_120 - roi90)
-		WHEN roi_90_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_90_predict_120) /(roi_90_predict_150 - roi_90_predict_120)
-		ELSE 5.0
-	END AS payback_90_p_150,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
-		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi_120_predict_150 - roi120)
-		ELSE 5.0
-	END AS payback_120_p_150,
-	CASE
-		WHEN roi60 >= kpi_target THEN 2.0
-		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
-		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
-		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
-		ELSE 5.0
-	END AS payback_150
-FROM
-	predict;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# 修正预测回本周期，将不完整的月份过滤掉
-def createPayback2ViewFix():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_payback2_fix_month_view_by_j AS
-SELECT
-	a.app_package,
-	a.install_month,
-	a.country_group,
-	a.mediasource,
-	a.ad_type,
-	a.tag,
-	CASE
-		WHEN b.month_diff >= 6 THEN a.payback_150
-		WHEN b.month_diff = 5 THEN a.payback_120_p_150
-		WHEN b.month_diff = 4 THEN a.payback_90_p_150
-		WHEN b.month_diff = 3 THEN a.payback_60_p_150
-		WHEN b.month_diff = 2 THEN a.payback_30_p_150
-		WHEN b.month_diff = 1 THEN a.payback_7_p_150
-		ELSE NULL
-	END AS d_payback_2
-FROM
-	lw_20250703_af_payback2_month_view_by_j a
-	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# 创建推算回本周期table
-# 将lw_20250703_af_payback1_fix_month_view_by_j，lw_20250703_af_payback2_fix_month_view_by_j
-# 合并成一个table
-def createPaybackTable():
-	sql = """
-DROP TABLE IF EXISTS lw_20250703_af_payback_month_table_by_j;
-CREATE TABLE lw_20250703_af_payback_month_table_by_j AS
-SELECT
-	a.app_package,
-	a.install_month,
-	a.country_group,
-	a.mediasource,
-	a.ad_type,
-	a.tag,
-	a.d_payback_1 as real_payback_month,
-	b.d_payback_2 as predict_payback_month
-FROM
-	lw_20250703_af_payback1_fix_month_view_by_j a
-	LEFT JOIN lw_20250703_af_payback2_fix_month_view_by_j b ON
-	a.app_package = b.app_package
-	AND a.install_month = b.install_month
-	AND a.country_group = b.country_group
-	AND a.mediasource = b.mediasource
-	AND a.ad_type = b.ad_type
-	AND a.tag = b.tag
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
 #####################################################
 # 自然量收入占比
 
@@ -3977,6 +3601,23 @@ ORDER BY
 	execSql2(sql)
 	return
 
+# for_ua 版本的自然量收入占比，内容和gpir_cohort版本一致,只是tag不一样
+def createForUaAndroidOrganic2MonthView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	'for_ua' as tag,
+	last456month_gpir_organic_revenue_ratio
+FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
 def createOrganicMonthTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
@@ -3992,6 +3633,8 @@ UNION ALL
 SELECT * FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j
 UNION ALL
 SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
+UNION ALL
+SELECT * FROM lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -3999,11 +3642,770 @@ SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_m
 	return
 
 
-def createGPIROrganic2MonthTable():
+# 自然量与lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+# 合并，并计算含自然量的kpi_target，以供各种KPI使用
+def createKpiTargetWithOrganicView():
 	sql = """
-DROP TABLE IF EXISTS lw_20250703_android_gpir_organic_revenue_ratio_month_table_by_j;
-CREATE TABLE lw_20250703_android_gpir_organic_revenue_ratio_month_table_by_j AS
-SELECT * FROM lw_20250703_android_gpir_organic_revenue_ratio_month_view_by_j;
+CREATE OR REPLACE VIEW lw_20250703_kpi_target_with_organic_month_view_by_j AS
+SELECT
+	rr.*,
+	o.last456month_organic_revenue_ratio,
+	CASE
+		WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00
+		ELSE 
+			CASE
+				WHEN rr.country_group = 'US' THEN 1.45
+				WHEN rr.country_group = 'KR' THEN 1.58
+				WHEN rr.country_group = 'JP' THEN 1.66
+				WHEN rr.country_group = 'GCC' THEN 1.45
+				WHEN rr.country_group = 'T1' THEN 1.65
+				WHEN rr.country_group = 'other' THEN 1.65
+				ELSE 1.43
+			END
+	END AS kpi_target,
+	CASE
+		WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00 * ( 1 - o.last456month_organic_revenue_ratio)
+		ELSE 
+			CASE
+				WHEN rr.country_group = 'US' THEN 1.45 * ( 1 - o.last456month_organic_revenue_ratio)
+				WHEN rr.country_group = 'KR' THEN 1.58 * ( 1 - o.last456month_organic_revenue_ratio)
+				WHEN rr.country_group = 'JP' THEN 1.66 * ( 1 - o.last456month_organic_revenue_ratio)
+				WHEN rr.country_group = 'GCC' THEN 1.45 * ( 1 - o.last456month_organic_revenue_ratio)
+				WHEN rr.country_group = 'T1' THEN 1.65 * ( 1 - o.last456month_organic_revenue_ratio)
+				WHEN rr.country_group = 'other' THEN 1.65 * ( 1 - o.last456month_organic_revenue_ratio)
+				ELSE 1.43 * ( 1 - o.last456month_organic_revenue_ratio)
+			END
+	END AS kpi_target_with_organic
+FROM
+lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+LEFT JOIN lw_20250718_android_organic_revenue_ratio_month_table_by_j o
+ON rr.app_package = o.app_package
+AND rr.install_month = o.install_month
+AND rr.country_group = o.country_group
+AND rr.tag = o.tag
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+#####################################################
+# 推算回本周期（月）
+
+# 真实回本周期，是根据90日、120日、150日的ROI来计算的
+def createPayback1View():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*,
+		CASE
+			WHEN tag LIKE '%onlyprofit%' THEN 1.00
+			ELSE CASE
+				WHEN country_group = 'US' THEN 1.45
+				WHEN country_group = 'KR' THEN 1.58
+				WHEN country_group = 'JP' THEN 1.66
+				WHEN country_group = 'GCC' THEN 1.45
+				WHEN country_group = 'T1' THEN 1.65
+				WHEN country_group = 'other' THEN 1.65
+				ELSE 1.43
+			END
+		END AS kpi_target
+	FROM
+		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+)
+SELECT
+	r.app_package,
+	r.install_month,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.tag,
+	p.kpi_target,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		ELSE NULL
+	END AS payback_60,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		ELSE NULL
+	END AS payback_90,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		ELSE NULL
+	END AS payback_120,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
+		ELSE 5.0
+	END AS payback_150
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON r.app_package = p.app_package
+	AND r.install_month = p.install_month
+	AND r.country_group = p.country_group
+	AND r.mediasource = p.mediasource
+	AND r.ad_type = p.ad_type
+	AND r.tag = p.tag;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 修正真是回本周期，将不完整的月份过滤掉
+def createPayback1ViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120
+		WHEN b.month_diff = 4 THEN a.payback_90
+		WHEN b.month_diff = 3 THEN a.payback_60
+		ELSE NULL
+	END AS d_payback_1
+FROM
+	lw_20250703_af_payback1_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 真实+预测回本周期，根据真实的30,60,90,120日ROI与预测付费增长比例，预测出回本周期
+def createPayback2View():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*,
+		CASE
+			WHEN tag LIKE '%onlyprofit%' THEN 1.00
+			ELSE CASE
+				WHEN country_group = 'US' THEN 1.45
+				WHEN country_group = 'KR' THEN 1.58
+				WHEN country_group = 'JP' THEN 1.66
+				WHEN country_group = 'GCC' THEN 1.45
+				WHEN country_group = 'T1' THEN 1.65
+				WHEN country_group = 'other' THEN 1.65
+				ELSE 1.43
+			END
+		END AS kpi_target
+	FROM
+		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+),
+predict AS (
+	SELECT
+		r.app_package,
+		r.install_month,
+		r.country_group,
+		r.mediasource,
+		r.ad_type,
+		r.tag,
+		p.kpi_target,
+		r.roi60,
+		r.roi90,
+		r.roi120,
+		r.roi150,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 as roi_7_predict_60,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 as roi_7_predict_90,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_7_predict_120,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_7_predict_150,
+		r.roi30 * p.predict_r60_r30 as roi_30_predict_60,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 as roi_30_predict_90,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_30_predict_120,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_30_predict_150,
+		r.roi60 * p.predict_r90_r60 as roi_60_predict_90,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 as roi_60_predict_120,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_60_predict_150,
+		r.roi90 * p.predict_r120_r90 as roi_90_predict_120,
+		r.roi90 * p.predict_r120_r90 * p.predict_r150_r120 as roi_90_predict_150,
+		r.roi120 * p.predict_r150_r120 as roi_120_predict_150
+	FROM
+		roi_base r
+		LEFT JOIN predict_base p ON r.app_package = p.app_package
+		AND r.install_month = p.install_month
+		AND r.country_group = p.country_group
+		AND r.mediasource = p.mediasource
+		AND r.ad_type = p.ad_type
+		AND r.tag = p.tag
+)
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	tag,
+	CASE
+		WHEN roi_7_predict_60 >= kpi_target THEN 2.0
+		WHEN roi_7_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_7_predict_60) /(roi_7_predict_90 - roi_7_predict_60)
+		WHEN roi_7_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_7_predict_90) /(roi_7_predict_120 - roi_7_predict_90)
+		WHEN roi_7_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_7_predict_120) /(roi_7_predict_150 - roi_7_predict_120)
+		ELSE 5.0
+	END AS payback_7_p_150,
+	CASE
+		WHEN roi_30_predict_60 >= kpi_target THEN 2.0
+		WHEN roi_30_predict_90 >= kpi_target THEN 2 + (kpi_target - roi_30_predict_60) /(roi_30_predict_90 - roi_30_predict_60)
+		WHEN roi_30_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_30_predict_90) /(roi_30_predict_120 - roi_30_predict_90)
+		WHEN roi_30_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_30_predict_120) /(roi_30_predict_150 - roi_30_predict_120)
+		ELSE 5.0
+	END AS payback_30_p_150,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi_60_predict_90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi_60_predict_90 - roi60)
+		WHEN roi_60_predict_120 >= kpi_target THEN 3 +(kpi_target - roi_60_predict_90) /(roi_60_predict_120 - roi_60_predict_90)
+		WHEN roi_60_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_60_predict_120) /(roi_60_predict_150 - roi_60_predict_120)
+		ELSE 5.0
+	END AS payback_60_p_150,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi_90_predict_120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi_90_predict_120 - roi90)
+		WHEN roi_90_predict_150 >= kpi_target THEN 4 +(kpi_target - roi_90_predict_120) /(roi_90_predict_150 - roi_90_predict_120)
+		ELSE 5.0
+	END AS payback_90_p_150,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi_120_predict_150 - roi120)
+		ELSE 5.0
+	END AS payback_120_p_150,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
+		ELSE 5.0
+	END AS payback_150
+FROM
+	predict;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 修正预测回本周期，将不完整的月份过滤掉
+def createPayback2ViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120_p_150
+		WHEN b.month_diff = 4 THEN a.payback_90_p_150
+		WHEN b.month_diff = 3 THEN a.payback_60_p_150
+		WHEN b.month_diff = 2 THEN a.payback_30_p_150
+		WHEN b.month_diff = 1 THEN a.payback_7_p_150
+		ELSE NULL
+	END AS d_payback_2
+FROM
+	lw_20250703_af_payback2_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 创建推算回本周期table
+# 将lw_20250703_af_payback1_fix_month_view_by_j，lw_20250703_af_payback2_fix_month_view_by_j
+# 合并成一个table
+def createPaybackTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_af_payback_month_table_by_j;
+CREATE TABLE lw_20250703_af_payback_month_table_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	a.d_payback_1 as real_payback_month,
+	b.d_payback_2 as predict_payback_month
+FROM
+	lw_20250703_af_payback1_fix_month_view_by_j a
+	LEFT JOIN lw_20250703_af_payback2_fix_month_view_by_j b ON
+	a.app_package = b.app_package
+	AND a.install_month = b.install_month
+	AND a.country_group = b.country_group
+	AND a.mediasource = b.mediasource
+	AND a.ad_type = b.ad_type
+	AND a.tag = b.tag
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+# 带自然量版本，真实回本周期，是根据90日、120日、150日的ROI来计算的
+def createPayback1OrganicView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_organic_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*
+	FROM
+		lw_20250703_kpi_target_with_organic_month_view_by_j
+)
+SELECT
+	r.app_package,
+	r.install_month,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.tag,
+	p.kpi_target_with_organic,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		ELSE NULL
+	END AS payback_60,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		ELSE NULL
+	END AS payback_90,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi90) /(roi120 - roi90)
+		ELSE NULL
+	END AS payback_120,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi120) /(roi150 - roi120)
+		ELSE 5.0
+	END AS payback_150
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON r.app_package = p.app_package
+	AND r.install_month = p.install_month
+	AND r.country_group = p.country_group
+	AND r.mediasource = p.mediasource
+	AND r.ad_type = p.ad_type
+	AND r.tag = p.tag;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 带自然量版本，修正真是回本周期，将不完整的月份过滤掉
+def createPayback1OrganicViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback1_organic_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120
+		WHEN b.month_diff = 4 THEN a.payback_90
+		WHEN b.month_diff = 3 THEN a.payback_60
+		ELSE NULL
+	END AS d_payback_1_organic
+FROM
+	lw_20250703_af_payback1_organic_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 带自然量版本，真实+预测回本周期，根据真实的30,60,90,120日ROI与预测付费增长比例，预测出回本周期
+def createPayback2OrganicView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_organic_month_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*
+	FROM
+		lw_20250703_kpi_target_with_organic_month_view_by_j
+),
+predict AS (
+	SELECT
+		r.app_package,
+		r.install_month,
+		r.country_group,
+		r.mediasource,
+		r.ad_type,
+		r.tag,
+		p.kpi_target_with_organic,
+		r.roi60,
+		r.roi90,
+		r.roi120,
+		r.roi150,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 as roi_7_predict_60,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 as roi_7_predict_90,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_7_predict_120,
+		r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_7_predict_150,
+		r.roi30 * p.predict_r60_r30 as roi_30_predict_60,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 as roi_30_predict_90,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 as roi_30_predict_120,
+		r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_30_predict_150,
+		r.roi60 * p.predict_r90_r60 as roi_60_predict_90,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 as roi_60_predict_120,
+		r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 * p.predict_r150_r120 as roi_60_predict_150,
+		r.roi90 * p.predict_r120_r90 as roi_90_predict_120,
+		r.roi90 * p.predict_r120_r90 * p.predict_r150_r120 as roi_90_predict_150,
+		r.roi120 * p.predict_r150_r120 as roi_120_predict_150
+	FROM
+		roi_base r
+		LEFT JOIN predict_base p ON r.app_package = p.app_package
+		AND r.install_month = p.install_month
+		AND r.country_group = p.country_group
+		AND r.mediasource = p.mediasource
+		AND r.ad_type = p.ad_type
+		AND r.tag = p.tag
+)
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	tag,
+	CASE
+		WHEN roi_7_predict_60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi_7_predict_90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi_7_predict_60) /(roi_7_predict_90 - roi_7_predict_60)
+		WHEN roi_7_predict_120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi_7_predict_90) /(roi_7_predict_120 - roi_7_predict_90)
+		WHEN roi_7_predict_150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi_7_predict_120) /(roi_7_predict_150 - roi_7_predict_120)
+		ELSE 5.0
+	END AS payback_7_p_150,
+	CASE
+		WHEN roi_30_predict_60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi_30_predict_90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi_30_predict_60) /(roi_30_predict_90 - roi_30_predict_60)
+		WHEN roi_30_predict_120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi_30_predict_90) /(roi_30_predict_120 - roi_30_predict_90)
+		WHEN roi_30_predict_150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi_30_predict_120) /(roi_30_predict_150 - roi_30_predict_120)
+		ELSE 5.0
+	END AS payback_30_p_150,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi_60_predict_90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi_60_predict_90 - roi60)
+		WHEN roi_60_predict_120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi_60_predict_90) /(roi_60_predict_120 - roi_60_predict_90)
+		WHEN roi_60_predict_150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi_60_predict_120) /(roi_60_predict_150 - roi_60_predict_120)
+		ELSE 5.0
+	END AS payback_60_p_150,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		WHEN roi_90_predict_120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi90) /(roi_90_predict_120 - roi90)
+		WHEN roi_90_predict_150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi_90_predict_120) /(roi_90_predict_150 - roi_90_predict_120)
+		ELSE 5.0
+	END AS payback_90_p_150,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi120) /(roi_120_predict_150 - roi120)
+		ELSE 5.0
+	END AS payback_120_p_150,
+	CASE
+		WHEN roi60 >= kpi_target_with_organic THEN 2.0
+		WHEN roi90 >= kpi_target_with_organic THEN 2 + (kpi_target_with_organic - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target_with_organic THEN 3 +(kpi_target_with_organic - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target_with_organic THEN 4 +(kpi_target_with_organic - roi120) /(roi150 - roi120)
+		ELSE 5.0
+	END AS payback_150
+FROM
+	predict;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 带自然量版本，修正预测回本周期，将不完整的月份过滤掉
+def createPayback2OrganicViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_payback2_organic_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 6 THEN a.payback_150
+		WHEN b.month_diff = 5 THEN a.payback_120_p_150
+		WHEN b.month_diff = 4 THEN a.payback_90_p_150
+		WHEN b.month_diff = 3 THEN a.payback_60_p_150
+		WHEN b.month_diff = 2 THEN a.payback_30_p_150
+		WHEN b.month_diff = 1 THEN a.payback_7_p_150
+		ELSE NULL
+	END AS d_payback_2_organic
+FROM
+	lw_20250703_af_payback2_organic_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 带自然量版本，创建推算回本周期table
+def createPaybackOrganicTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_af_payback_organic_month_table_by_j;
+CREATE TABLE lw_20250703_af_payback_organic_month_table_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	a.d_payback_1_organic as real_payback_month_organic,
+	b.d_payback_2_organic as predict_payback_month_organic
+FROM
+	lw_20250703_af_payback1_organic_fix_month_view_by_j a
+	LEFT JOIN lw_20250703_af_payback2_organic_fix_month_view_by_j b ON
+	a.app_package = b.app_package
+	AND a.install_month = b.install_month
+	AND a.country_group = b.country_group
+	AND a.mediasource = b.mediasource
+	AND a.ad_type = b.ad_type
+	AND a.tag = b.tag
+;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -4458,10 +4860,10 @@ def createViewsAndTables():
 	# createKpiView()
 	# createKpiTable()
 
-	# 推算动态KPI
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# # 推算动态KPI
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
 
 	# # 自然量收入占比
 	# createAfAndroidOrganicMonthView()
@@ -4470,13 +4872,17 @@ def createViewsAndTables():
 	# createGpirAndroidOrganic2MonthView()
 	# createGpirCohortAndroidOrganic2MonthView()
 	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	# createOrganicMonthTable()
+	createForUaAndroidOrganic2MonthView()
+	createOrganicMonthTable()
+	# 只用自然量收入占比计算含自然量回本目标
+	createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
 	# createOrganic2MonthTableForDebug()
 	# createGPIRAndroidOrganic2MonthViewForDebug()
 	# createGPIROrganic2MonthTableForDebug()
+	
 
 	# # 误差计算
 	# createMapeView()
@@ -4492,6 +4898,12 @@ def createViewsAndTables():
 	# createPayback2View()
 	# createPayback2ViewFix()
 	# createPaybackTable()
+
+	createPayback1OrganicView()
+	createPayback1OrganicViewFix()
+	createPayback2OrganicView()
+	createPayback2OrganicViewFix()
+	createPaybackOrganicTable()
 
 	pass
 
