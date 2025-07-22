@@ -1944,38 +1944,48 @@ def createForUaCostRevenueMonthyView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250703_for_ua_cost_revenue_app_month_view_by_j AS
 SELECT
-	app_package,
-	install_month,
-	country_group,
-	case when mediasource = 'applovin_int' and ad_type = 'D7' then 'applovin_d7'
-		when mediasource = 'applovin_int' and ad_type = 'D28' then 'applovin_d28'
-		else mediasource
-	end AS mediasource,
-	'ALL' as ad_type,
-	sum(cost) AS cost,
-    SUM(revenue_d1) AS revenue_d1,
-	SUM(revenue_d3) AS revenue_d3,
-	SUM(revenue_d7) AS revenue_d7,
-	SUM(revenue_d14) AS revenue_d14,
-	SUM(revenue_d30) AS revenue_d30,
-	SUM(revenue_d60) AS revenue_d60,
-	SUM(revenue_d90) AS revenue_d90,
-	SUM(revenue_d120) AS revenue_d120,
-	SUM(revenue_d150) AS revenue_d150
-FROM lw_20250703_gpir_cohort_cost_revenue_app_country_group_media_adtype_month_view_by_j
+    app_package,
+    SUBSTR(roi.install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D7%' then 'applovin_int_d7'
+	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D28%' then 'applovin_int_d28'
+	when roi.mediasource = 'applovin_int' then 'applovin_int'
+	else roi.mediasource end as mediasource,
+    'ALL' AS ad_type,
+	sum(cost_value_usd) as cost,
+    SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
+FROM
+    ads_lastwar_mediasource_reattribution roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+    roi.facebook_segment IN ('country', 'N/A')
+    AND m.month_diff > 0
 GROUP BY
 	app_package,
-	install_month,
-	country_group,
-	case when mediasource = 'applovin_int' and ad_type = 'D7' then 'applovin_d7'
-		when mediasource = 'applovin_int' and ad_type = 'D28' then 'applovin_d28'
-		else mediasource
-	end
+    SUBSTR(roi.install_day, 1, 6),
+    COALESCE(cg.country_group, 'other'),
+    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D7%' then 'applovin_int_d7'
+	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D28%' then 'applovin_int_d28'
+	when roi.mediasource = 'applovin_int' then 'applovin_int'
+	else roi.mediasource end
+
 ;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 	return
+
 
 def createForUaCostRevenueMonthyTable():
 	sql = """
@@ -2077,6 +2087,283 @@ GROUP BY
 	execSql2(sql)
 	return
 
+
+
+#####################################################
+# 计算kpi_target
+
+# 从lw_20250703_cost_revenue_app_month_table_by_j中
+# 获取 tag = gpir_cohort 的 app_package、country_group、mediasource、ad_type、install_month、cost、revenue_d120
+# 获取 tag = gpir_onlyprofit_cohort 的 app_package、country_group、mediasource、ad_type、install_month、cost as cost_p、revenue_d120 as revenue_d120_p
+# 按照app_package、country_group、mediasource、ad_type、install_month 进行join
+# 计算 roi_120d = revenue_d120 / cost
+# 计算 roi_120d_p = revenue_d120_p / cost_p
+# 按照app_package、country_group、mediasource、ad_type分组
+# 并按照install_month排序，取last4、5、6 3个月的 roi_120d 平均，和 roi_120d_p 平均，记作 last456_roi_120d_avg 和 last456_roi_120d_p_avg
+# 比如install_month = 202506的 应该获取的是 install_month between 202412 and 202502 的数据进行平均，即202506 - 6 ~ 202506 - 4
+# 计算 kpi_target = 100% * (last456_roi_120d_avg / last456_roi_120d_p_avg)
+# 最终输出列： app_package、country_group、mediasource、ad_type、install_month、cost、revenue_d120、cost_p、revenue_d120_p、roi_120d、roi_120d_p、last456_roi_120d_avg、last456_roi_120d_p_avg、kpi_target
+def createGpirCohortKpiTargetView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_cohort_kpi_target_month_view_by_j AS
+WITH gpir_data AS (
+    SELECT
+        app_package,
+        country_group,
+        mediasource,
+        ad_type,
+        install_month,
+        cost,
+        revenue_d120
+    FROM
+        lw_20250703_cost_revenue_app_month_table_by_j
+    WHERE
+        tag = 'gpir_cohort'
+),
+gpir_onlyprofit_data AS (
+    SELECT
+        app_package,
+        country_group,
+        mediasource,
+        ad_type,
+        install_month,
+        cost AS cost_p,
+        revenue_d120 AS revenue_d120_p
+    FROM
+        lw_20250703_cost_revenue_app_month_table_by_j
+    WHERE
+        tag = 'gpir_onlyprofit_cohort'
+),
+joined_data AS (
+    SELECT
+        g.app_package,
+        g.country_group,
+        g.mediasource,
+        g.ad_type,
+        g.install_month,
+        g.cost,
+        g.revenue_d120,
+        gp.cost_p,
+        gp.revenue_d120_p,
+        CASE
+            WHEN g.cost > 0 THEN g.revenue_d120 / g.cost
+            ELSE NULL
+        END AS roi_120d,
+        CASE
+            WHEN gp.cost_p > 0 THEN gp.revenue_d120_p / gp.cost_p
+            ELSE NULL
+        END AS roi_120d_p
+    FROM
+        gpir_data g
+        JOIN gpir_onlyprofit_data gp ON g.app_package = gp.app_package
+        AND g.country_group = gp.country_group
+        AND g.mediasource = gp.mediasource
+        AND g.ad_type = gp.ad_type
+        AND g.install_month = gp.install_month
+),
+with_lag_data AS (
+    SELECT
+        app_package,
+        country_group,
+        mediasource,
+        ad_type,
+        install_month,
+        cost,
+        revenue_d120,
+        cost_p,
+        revenue_d120_p,
+        roi_120d,
+        roi_120d_p,
+        -- 获取前4、5、6个月的ROI数据
+        (
+            COALESCE(
+                LAG(roi_120d, 4) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            ) + COALESCE(
+                LAG(roi_120d, 5) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            ) + COALESCE(
+                LAG(roi_120d, 6) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            )
+        ) / 3 AS last456_roi_120d_avg,
+        (
+            COALESCE(
+                LAG(roi_120d_p, 4) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            ) + COALESCE(
+                LAG(roi_120d_p, 5) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            ) + COALESCE(
+                LAG(roi_120d_p, 6) OVER (
+                    PARTITION BY app_package,
+                    country_group,
+                    mediasource,
+                    ad_type
+                    ORDER BY
+                        install_month
+                ),
+                0
+            )
+        ) / 3 AS last456_roi_120d_p_avg
+    FROM
+        joined_data
+)
+SELECT
+    app_package,
+    country_group,
+    mediasource,
+    ad_type,
+    install_month,
+    cost,
+    revenue_d120,
+    cost_p,
+    revenue_d120_p,
+    roi_120d,
+    roi_120d_p,
+    last456_roi_120d_avg,
+    last456_roi_120d_p_avg,
+    CASE
+        WHEN last456_roi_120d_p_avg > 0 THEN last456_roi_120d_avg / last456_roi_120d_p_avg
+        ELSE NULL
+    END AS kpi_target
+FROM
+    with_lag_data
+ORDER BY
+    app_package,
+    country_group,
+    mediasource,
+    ad_type,
+    install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createForUaKpiTargetView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_for_ua_kpi_target_month_view_by_j AS
+SELECT *
+FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
+
+UNION ALL
+
+-- 复制applovin_int行并改为applovin_7d
+SELECT 
+    app_package,
+    country_group,
+    'applovin_7d' AS mediasource,
+    ad_type,
+    install_month,
+    cost,
+    revenue_d120,
+    cost_p,
+    revenue_d120_p,
+    roi_120d,
+    roi_120d_p,
+    last456_roi_120d_avg,
+    last456_roi_120d_p_avg,
+    kpi_target
+FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
+WHERE mediasource = 'applovin_int'
+
+UNION ALL
+
+-- 复制applovin_int行并改为applovin_28d
+SELECT 
+    app_package,
+    country_group,
+    'applovin_28d' AS mediasource,
+    ad_type,
+    install_month,
+    cost,
+    revenue_d120,
+    cost_p,
+    revenue_d120_p,
+    roi_120d,
+    roi_120d_p,
+    last456_roi_120d_avg,
+    last456_roi_120d_p_avg,
+    kpi_target
+FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
+WHERE mediasource = 'applovin_int'
+
+ORDER BY 
+    app_package,
+    country_group,
+    mediasource,
+    ad_type,
+    install_month;
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createKpiTargetTable():
+	sql = """
+DROP TABLE IF EXISTS lw_20250703_kpi_target_month_table_by_j;
+CREATE TABLE lw_20250703_kpi_target_month_table_by_j AS
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
+	'gpir_cohort' AS tag
+FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
+UNION ALL
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
+	'for_ua' AS tag
+FROM lw_20250703_for_ua_kpi_target_month_view_by_j
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 
 #####################################################
@@ -2486,6 +2773,43 @@ LEFT JOIN month_view_by_j m ON rr.install_month = m.install_month
 	execSql2(sql)
 	return
 
+
+# 合并lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j和lw_20250703_kpi_target_month_table_by_j
+def createPredictRevenueRiseRatioAndkpiTargetView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j AS
+SELECT
+	rr.*,
+	COALESCE(
+        kt.kpi_target, 
+        -- 如果动态KPI不存在，使用原来的写死逻辑
+        CASE
+            WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00
+            ELSE 
+                CASE
+                    WHEN rr.country_group = 'US' THEN 1.45
+                    WHEN rr.country_group = 'KR' THEN 1.58
+                    WHEN rr.country_group = 'JP' THEN 1.66
+                    WHEN rr.country_group = 'GCC' THEN 1.45
+                    WHEN rr.country_group = 'T1' THEN 1.65
+                    WHEN rr.country_group = 'other' THEN 1.65
+                    ELSE 1.43
+                END
+        END
+    ) AS kpi_target
+FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+LEFT JOIN lw_20250703_kpi_target_month_table_by_j kt ON
+	rr.app_package = kt.app_package
+	AND rr.country_group = kt.country_group
+	AND rr.mediasource = kt.mediasource
+	AND rr.ad_type = kt.ad_type
+	AND rr.install_month = kt.install_month
+	AND rr.tag = kt.tag
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 #####################################################
 # 推算KPI
 
@@ -2537,22 +2861,8 @@ SELECT
 FROM
 	(
 		SELECT
-			*,
-			CASE
-				WHEN tag LIKE '%onlyprofit%' THEN 1.00
-				ELSE 
-					CASE
-						WHEN country_group = 'US' THEN 1.45
-						WHEN country_group = 'KR' THEN 1.58
-						WHEN country_group = 'JP' THEN 1.66
-						WHEN country_group = 'GCC' THEN 1.45
-						WHEN country_group = 'T1' THEN 1.65
-						WHEN country_group = 'other' THEN 1.65
-						ELSE 1.43
-					END
-			END AS kpi_target
-		FROM
-			lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+			*
+		FROM lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
 	) t
 ORDER BY
 	app_package,
@@ -2634,22 +2944,8 @@ WITH roi_base AS (
 ),
 predict_base AS (
 	SELECT
-		*,
-		CASE
-			WHEN tag LIKE '%onlyprofit%' THEN 1.00
-			ELSE 
-				CASE
-					WHEN country_group = 'US' THEN 1.45
-					WHEN country_group = 'KR' THEN 1.58
-					WHEN country_group = 'JP' THEN 1.66
-					WHEN country_group = 'GCC' THEN 1.45
-					WHEN country_group = 'T1' THEN 1.65
-					WHEN country_group = 'other' THEN 1.65
-					ELSE 1.43
-				END
-		END AS kpi_target
-	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+		*
+	FROM lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
 )
 SELECT
 	r.app_package,
@@ -3626,41 +3922,20 @@ def createKpiTargetWithOrganicView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250703_kpi_target_with_organic_month_view_by_j AS
 SELECT
-	rr.*,
-	o.last456month_organic_revenue_ratio,
-	CASE
-		WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00
-		ELSE 
-			CASE
-				WHEN rr.country_group = 'US' THEN 1.45
-				WHEN rr.country_group = 'KR' THEN 1.58
-				WHEN rr.country_group = 'JP' THEN 1.66
-				WHEN rr.country_group = 'GCC' THEN 1.45
-				WHEN rr.country_group = 'T1' THEN 1.65
-				WHEN rr.country_group = 'other' THEN 1.65
-				ELSE 1.43
-			END
-	END AS kpi_target,
-	CASE
-		WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00 * ( 1 - o.last456month_organic_revenue_ratio)
-		ELSE 
-			CASE
-				WHEN rr.country_group = 'US' THEN 1.45 * ( 1 - o.last456month_organic_revenue_ratio)
-				WHEN rr.country_group = 'KR' THEN 1.58 * ( 1 - o.last456month_organic_revenue_ratio)
-				WHEN rr.country_group = 'JP' THEN 1.66 * ( 1 - o.last456month_organic_revenue_ratio)
-				WHEN rr.country_group = 'GCC' THEN 1.45 * ( 1 - o.last456month_organic_revenue_ratio)
-				WHEN rr.country_group = 'T1' THEN 1.65 * ( 1 - o.last456month_organic_revenue_ratio)
-				WHEN rr.country_group = 'other' THEN 1.65 * ( 1 - o.last456month_organic_revenue_ratio)
-				ELSE 1.43 * ( 1 - o.last456month_organic_revenue_ratio)
-			END
-	END AS kpi_target_with_organic
+    rr.*,
+    o.last456month_organic_revenue_ratio,
+    CASE
+        WHEN o.last456month_organic_revenue_ratio IS NOT NULL 
+        THEN rr.kpi_target * (1 - o.last456month_organic_revenue_ratio)
+        ELSE rr.kpi_target
+    END AS kpi_target_with_organic
 FROM
-lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+    lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j rr
 LEFT JOIN lw_20250718_android_organic_revenue_ratio_month_table_by_j o
-ON rr.app_package = o.app_package
-AND rr.install_month = o.install_month
-AND rr.country_group = o.country_group
-AND rr.tag = o.tag
+    ON rr.app_package = o.app_package
+    AND rr.install_month = o.install_month
+    AND rr.country_group = o.country_group
+    AND rr.tag = o.tag
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -3729,21 +4004,9 @@ WITH roi_base AS (
 ),
 predict_base AS (
 	SELECT
-		*,
-		CASE
-			WHEN tag LIKE '%onlyprofit%' THEN 1.00
-			ELSE CASE
-				WHEN country_group = 'US' THEN 1.45
-				WHEN country_group = 'KR' THEN 1.58
-				WHEN country_group = 'JP' THEN 1.66
-				WHEN country_group = 'GCC' THEN 1.45
-				WHEN country_group = 'T1' THEN 1.65
-				WHEN country_group = 'other' THEN 1.65
-				ELSE 1.43
-			END
-		END AS kpi_target
+		*
 	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
 )
 SELECT
 	r.app_package,
@@ -3874,21 +4137,9 @@ WITH roi_base AS (
 ),
 predict_base AS (
 	SELECT
-		*,
-		CASE
-			WHEN tag LIKE '%onlyprofit%' THEN 1.00
-			ELSE CASE
-				WHEN country_group = 'US' THEN 1.45
-				WHEN country_group = 'KR' THEN 1.58
-				WHEN country_group = 'JP' THEN 1.66
-				WHEN country_group = 'GCC' THEN 1.45
-				WHEN country_group = 'T1' THEN 1.65
-				WHEN country_group = 'other' THEN 1.65
-				ELSE 1.43
-			END
-		END AS kpi_target
+		*
 	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
+		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
 ),
 predict AS (
 	SELECT
@@ -4780,78 +5031,84 @@ def createViewsAndTables():
 	# createMonthView()
 	# createAdtypeView()
 
-	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	createAfAppCountryCostRevenueMonthyView()
-	createAfAppCostRevenueMonthyView()
-	createAfCostRevenueMonthyTable()
+	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	# createAfCostRevenueMonthyTable()
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入数据，包括普通、添加adtype 2种
-	createGPIRAppMediaCountryCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	createGPIRCostRevenueMonthyTable()
+	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
+	# createGPIRAppMediaCountryCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createGPIRCostRevenueMonthyTable()
 
-	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	createGPIRCohortCostRevenueMonthyTable()
+	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
-	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# createAfNerfBigRCostRevenueMonthyTable()
+	# # # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
+	# # createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# # createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# # createAfNerfBigRCostRevenueMonthyTable()
 
 
-	createForUaCostRevenueMonthyView()
-	createForUaCostRevenueMonthyTable()
+	# createForUaCostRevenueMonthyView()
+	# createForUaCostRevenueMonthyTable()
 
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyView()
-	createCostRevenueMonthyTable()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyView()
+	# createCostRevenueMonthyTable()
 	
-	# 计算收入增长率
-	createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
+	# # 计算kpi_target
+	# createGpirCohortKpiTargetView()
+	# createForUaKpiTargetView()
+	# createKpiTargetTable()
 
-	# 推算KPI
-	createKpiView()
-	createKpiTable()
+	# # 计算收入增长率
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
+	# createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# 推算动态KPI
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiTable()
 
-	# 自然量收入占比
-	createAfAndroidOrganicMonthView()
-	createAfCohortAndroidOrganicMonthView()
-	createAfOnlyprofitCohortAndroidOrganicMonthView()
-	createGpirAndroidOrganic2MonthView()
-	createGpirCohortAndroidOrganic2MonthView()
-	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	createForUaAndroidOrganic2MonthView()
-	createOrganicMonthTable()
+	# # 推算动态KPI
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
+
+	# # 自然量收入占比
+	# createAfAndroidOrganicMonthView()
+	# createAfCohortAndroidOrganicMonthView()
+	# createAfOnlyprofitCohortAndroidOrganicMonthView()
+	# createGpirAndroidOrganic2MonthView()
+	# createGpirCohortAndroidOrganic2MonthView()
+	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	# createForUaAndroidOrganic2MonthView()
+	# createOrganicMonthTable()
 	# 只用自然量收入占比计算含自然量回本目标
 	createKpiTargetWithOrganicView()
 
