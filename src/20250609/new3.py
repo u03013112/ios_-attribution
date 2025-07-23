@@ -653,8 +653,7 @@ SELECT
 	app_package,
 	SUBSTR(install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else mediasource end as mediasource,
+	mediasource,
 	'ALL' AS ad_type,
 	sum(cost_value_usd) as cost,
 	SUM(revenue_h24) AS revenue_d1,
@@ -677,8 +676,8 @@ group by
 	app_package,
 	SUBSTR(roi.install_day, 1, 6),
 	country_group,
-	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else mediasource end;
+	mediasource
+;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -692,8 +691,7 @@ SELECT
     app_package,
     SUBSTR(roi.install_day, 1, 6) AS install_month,
     COALESCE(cg.country_group, 'other') AS country_group,
-    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else roi.mediasource end as mediasource,
+    mediasource,
     COALESCE(cog.ad_type, 'other') AS ad_type,
 	sum(cost_value_usd) as cost,
     SUM(revenue_h24) AS revenue_d1,
@@ -717,8 +715,7 @@ GROUP BY
 	app_package,
     SUBSTR(roi.install_day, 1, 6),
     COALESCE(cg.country_group, 'other'),
-    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else roi.mediasource end,
+    mediasource,
     ad_type;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -976,8 +973,7 @@ SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else mediasource end as mediasource,
+	mediasource,
 	'ALL' AS ad_type,
 	SUM(cost_value_usd) AS cost,
 	SUM(revenue_h24) AS revenue_d1,
@@ -1016,8 +1012,7 @@ SELECT
 	app_package,
 	SUBSTR(roi.install_day, 1, 6) AS install_month,
 	COALESCE(cg.country_group, 'other') AS country_group,
-	case when mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
-	else mediasource end as mediasource,
+	mediasource,
 	CASE
         WHEN roi.mediasource IN ('Facebook Ads', 'googleadwords_int') THEN ad.ad_type
         WHEN roi.mediasource = 'applovin_int' THEN CASE
@@ -1947,7 +1942,7 @@ SELECT
     app_package,
     SUBSTR(roi.install_day, 1, 6) AS install_month,
     COALESCE(cg.country_group, 'other') AS country_group,
-    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+    case
 	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D7%' then 'applovin_int_d7'
 	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D28%' then 'applovin_int_d28'
 	when roi.mediasource = 'applovin_int' then 'applovin_int'
@@ -1974,7 +1969,7 @@ GROUP BY
 	app_package,
     SUBSTR(roi.install_day, 1, 6),
     COALESCE(cg.country_group, 'other'),
-    case when roi.mediasource in ('restricted','Facebook Ads') then 'Facebook Ads'
+    case
 	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D7%' then 'applovin_int_d7'
 	when roi.mediasource = 'applovin_int' and roi.campaign_name like '%D28%' then 'applovin_int_d28'
 	when roi.mediasource = 'applovin_int' then 'applovin_int'
@@ -2144,15 +2139,7 @@ joined_data AS (
         g.cost,
         g.revenue_d120,
         gp.cost_p,
-        gp.revenue_d120_p,
-        CASE
-            WHEN g.cost > 0 THEN g.revenue_d120 / g.cost
-            ELSE NULL
-        END AS roi_120d,
-        CASE
-            WHEN gp.cost_p > 0 THEN gp.revenue_d120_p / gp.cost_p
-            ELSE NULL
-        END AS roi_120d_p
+        gp.revenue_d120_p
     FROM
         gpir_data g
         JOIN gpir_onlyprofit_data gp ON g.app_package = gp.app_package
@@ -2161,7 +2148,8 @@ joined_data AS (
         AND g.ad_type = gp.ad_type
         AND g.install_month = gp.install_month
 ),
-with_lag_data AS (
+-- 1. 按原分组获取最近1、2、3个月的花费平均值
+cost_lag_data AS (
     SELECT
         app_package,
         country_group,
@@ -2172,78 +2160,131 @@ with_lag_data AS (
         revenue_d120,
         cost_p,
         revenue_d120_p,
-        roi_120d,
-        roi_120d_p,
-        -- 获取前4、5、6个月的ROI数据
         (
             COALESCE(
-                LAG(roi_120d, 4) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost, 1) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             ) + COALESCE(
-                LAG(roi_120d, 5) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost, 2) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             ) + COALESCE(
-                LAG(roi_120d, 6) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost, 3) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             )
-        ) / 3 AS last456_roi_120d_avg,
+        ) / 3 AS last123_cost_avg,
         (
             COALESCE(
-                LAG(roi_120d_p, 4) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost_p, 1) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             ) + COALESCE(
-                LAG(roi_120d_p, 5) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost_p, 2) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             ) + COALESCE(
-                LAG(roi_120d_p, 6) OVER (
-                    PARTITION BY app_package,
-                    country_group,
-                    mediasource,
-                    ad_type
-                    ORDER BY
-                        install_month
-                ),
-                0
+                LAG(cost_p, 3) OVER (
+                    PARTITION BY app_package, country_group, mediasource, ad_type
+                    ORDER BY install_month
+                ), 0
             )
-        ) / 3 AS last456_roi_120d_p_avg
+        ) / 3 AS last123_cost_p_avg
     FROM
         joined_data
+),
+-- 2. 只按app_package、country_group分组获取最近4、5、6个月的收入平均值
+revenue_agg_data AS (
+    SELECT
+        app_package,
+        country_group,
+        install_month,
+        SUM(revenue_d120) AS total_revenue_d120,
+        SUM(revenue_d120_p) AS total_revenue_d120_p
+    FROM
+        joined_data
+    GROUP BY
+        app_package,
+        country_group,
+        install_month
+),
+revenue_lag_data AS (
+    SELECT
+        app_package,
+        country_group,
+        install_month,
+		total_revenue_d120,
+		total_revenue_d120_p,
+        (
+            COALESCE(
+                LAG(total_revenue_d120, 4) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            ) + COALESCE(
+                LAG(total_revenue_d120, 5) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            ) + COALESCE(
+                LAG(total_revenue_d120, 6) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            )
+        ) / 3 AS last456_revenue_d120_avg,
+        (
+            COALESCE(
+                LAG(total_revenue_d120_p, 4) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            ) + COALESCE(
+                LAG(total_revenue_d120_p, 5) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            ) + COALESCE(
+                LAG(total_revenue_d120_p, 6) OVER (
+                    PARTITION BY app_package, country_group
+                    ORDER BY install_month
+                ), 0
+            )
+        ) / 3 AS last456_revenue_d120_p_avg
+    FROM
+        revenue_agg_data
+),
+-- 3. 将花费和收入数据join在一起
+final_joined AS (
+    SELECT
+        c.app_package,
+        c.country_group,
+        c.mediasource,
+        c.ad_type,
+        c.install_month,
+        c.cost,
+        c.revenue_d120,
+		r.total_revenue_d120,
+        c.cost_p,
+        c.revenue_d120_p,
+		r.total_revenue_d120_p,
+        c.last123_cost_avg,
+        c.last123_cost_p_avg,
+        r.last456_revenue_d120_avg,
+        r.last456_revenue_d120_p_avg
+    FROM
+        cost_lag_data c
+        LEFT JOIN revenue_lag_data r ON c.app_package = r.app_package
+        AND c.country_group = r.country_group
+        AND c.install_month = r.install_month
 )
+-- 4. 计算ROI和KPI目标值
 SELECT
     app_package,
     country_group,
@@ -2252,18 +2293,31 @@ SELECT
     install_month,
     cost,
     revenue_d120,
+	total_revenue_d120,
     cost_p,
     revenue_d120_p,
-    roi_120d,
-    roi_120d_p,
-    last456_roi_120d_avg,
-    last456_roi_120d_p_avg,
+	total_revenue_d120_p,
+    last123_cost_avg,
+    last123_cost_p_avg,
+    last456_revenue_d120_avg,
+    last456_revenue_d120_p_avg,
+    -- 计算基于历史数据的ROI
     CASE
-        WHEN last456_roi_120d_p_avg > 0 THEN last456_roi_120d_avg / last456_roi_120d_p_avg
+        WHEN last123_cost_avg > 0 THEN last456_revenue_d120_avg / last123_cost_avg
+        ELSE NULL
+    END AS roi_120d,
+    CASE
+        WHEN last123_cost_p_avg > 0 THEN last456_revenue_d120_p_avg / last123_cost_p_avg
+        ELSE NULL
+    END AS roi_120d_p,
+    -- 计算KPI目标值
+    CASE
+        WHEN last123_cost_p_avg > 0 AND last456_revenue_d120_p_avg > 0 
+        THEN (last456_revenue_d120_avg / last123_cost_avg) / (last456_revenue_d120_p_avg / last123_cost_p_avg)
         ELSE NULL
     END AS kpi_target
 FROM
-    with_lag_data
+    final_joined
 ORDER BY
     app_package,
     country_group,
@@ -2293,12 +2347,16 @@ SELECT
     install_month,
     cost,
     revenue_d120,
+	total_revenue_d120,
     cost_p,
     revenue_d120_p,
+	total_revenue_d120_p,
+	last123_cost_avg,
+    last123_cost_p_avg,
+    last456_revenue_d120_avg,
+    last456_revenue_d120_p_avg,
     roi_120d,
     roi_120d_p,
-    last456_roi_120d_avg,
-    last456_roi_120d_p_avg,
     kpi_target
 FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
 WHERE mediasource = 'applovin_int'
@@ -2314,12 +2372,16 @@ SELECT
     install_month,
     cost,
     revenue_d120,
+	total_revenue_d120,
     cost_p,
     revenue_d120_p,
+	total_revenue_d120_p,
+	last123_cost_avg,
+    last123_cost_p_avg,
+    last456_revenue_d120_avg,
+    last456_revenue_d120_p_avg,
     roi_120d,
     roi_120d_p,
-    last456_roi_120d_avg,
-    last456_roi_120d_p_avg,
     kpi_target
 FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
 WHERE mediasource = 'applovin_int'
@@ -5031,41 +5093,41 @@ def createViewsAndTables():
 	# createMonthView()
 	# createAdtypeView()
 
-	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createAfAppCountryCostRevenueMonthyView()
-	# createAfAppCostRevenueMonthyView()
-	# createAfCostRevenueMonthyTable()
+	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	createAfAppCountryCostRevenueMonthyView()
+	createAfAppCostRevenueMonthyView()
+	createAfCostRevenueMonthyTable()
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
-	# createGPIRAppMediaCountryCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createGPIRCostRevenueMonthyTable()
+	# GPIR 花费、收入数据，包括普通、添加adtype 2种
+	createGPIRAppMediaCountryCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	createGPIRCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	# createGPIRCohortCostRevenueMonthyTable()
+	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
 	# # # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
 	# # createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
@@ -5073,12 +5135,12 @@ def createViewsAndTables():
 	# # createAfNerfBigRCostRevenueMonthyTable()
 
 
-	# createForUaCostRevenueMonthyView()
-	# createForUaCostRevenueMonthyTable()
+	createForUaCostRevenueMonthyView()
+	createForUaCostRevenueMonthyTable()
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyView()
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 	
 	# 计算kpi_target
 	createGpirCohortKpiTargetView()
@@ -5110,8 +5172,8 @@ def createViewsAndTables():
 	# createForUaAndroidOrganic2MonthView()
 	# createOrganicMonthTable()
 	
-	# # 只用自然量收入占比计算含自然量回本目标
-	# createKpiTargetWithOrganicView()
+	# 只用自然量收入占比计算含自然量回本目标
+	createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
@@ -5128,18 +5190,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# # 回本周期计算
-	# createPayback1View()
-	# createPayback1ViewFix()
-	# createPayback2View()
-	# createPayback2ViewFix()
-	# createPaybackTable()
+	# 回本周期计算
+	createPayback1View()
+	createPayback1ViewFix()
+	createPayback2View()
+	createPayback2ViewFix()
+	createPaybackTable()
 
-	# createPayback1OrganicView()
-	# createPayback1OrganicViewFix()
-	# createPayback2OrganicView()
-	# createPayback2OrganicViewFix()
-	# createPaybackOrganicTable()
+	createPayback1OrganicView()
+	createPayback1OrganicViewFix()
+	createPayback2OrganicView()
+	createPayback2OrganicViewFix()
+	createPaybackOrganicTable()
 
 	pass
 
