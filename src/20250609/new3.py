@@ -2288,7 +2288,7 @@ UNION ALL
 SELECT 
     app_package,
     country_group,
-    'applovin_7d' AS mediasource,
+    'applovin_int_d7' AS mediasource,
     ad_type,
     install_month,
     cost,
@@ -2309,7 +2309,7 @@ UNION ALL
 SELECT 
     app_package,
     country_group,
-    'applovin_28d' AS mediasource,
+    'applovin_int_d28' AS mediasource,
     ad_type,
     install_month,
     cost,
@@ -5080,25 +5080,25 @@ def createViewsAndTables():
 	# createCostRevenueMonthyView()
 	# createCostRevenueMonthyTable()
 	
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
-	# # 计算收入增长率
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
-	# createPredictRevenueRiseRatioAndkpiTargetView()
+	# 计算收入增长率
+	createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
 	# # 自然量收入占比
 	# createAfAndroidOrganicMonthView()
@@ -5109,8 +5109,9 @@ def createViewsAndTables():
 	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
 	# createForUaAndroidOrganic2MonthView()
 	# createOrganicMonthTable()
-	# 只用自然量收入占比计算含自然量回本目标
-	createKpiTargetWithOrganicView()
+	
+	# # 只用自然量收入占比计算含自然量回本目标
+	# createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
@@ -5127,18 +5128,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# 回本周期计算
-	createPayback1View()
-	createPayback1ViewFix()
-	createPayback2View()
-	createPayback2ViewFix()
-	createPaybackTable()
+	# # 回本周期计算
+	# createPayback1View()
+	# createPayback1ViewFix()
+	# createPayback2View()
+	# createPayback2ViewFix()
+	# createPaybackTable()
 
-	createPayback1OrganicView()
-	createPayback1OrganicViewFix()
-	createPayback2OrganicView()
-	createPayback2OrganicViewFix()
-	createPaybackOrganicTable()
+	# createPayback1OrganicView()
+	# createPayback1OrganicViewFix()
+	# createPayback2OrganicView()
+	# createPayback2OrganicViewFix()
+	# createPaybackOrganicTable()
 
 	pass
 
