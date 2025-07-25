@@ -1981,7 +1981,123 @@ GROUP BY
 	execSql2(sql)
 	return
 
-
+def createAppLovinRatioView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_applovin_ratio_view_by_j AS
+WITH base_data AS (
+    SELECT 
+        app_package,
+        install_month,
+        country_group,
+        SUM(CASE WHEN mediasource = 'applovin_int' THEN revenue_d1 ELSE 0 END) AS applovin_int_revenue_d1,
+        SUM(CASE WHEN mediasource = 'applovin_int' THEN revenue_d3 ELSE 0 END) AS applovin_int_revenue_d3,
+        SUM(CASE WHEN mediasource = 'applovin_int' THEN revenue_d7 ELSE 0 END) AS applovin_int_revenue_d7,
+        SUM(CASE WHEN mediasource = 'applovin_int_d7' THEN revenue_d1 ELSE 0 END) AS applovin_int_d7_revenue_d1,
+        SUM(CASE WHEN mediasource = 'applovin_int_d7' THEN revenue_d3 ELSE 0 END) AS applovin_int_d7_revenue_d3,
+        SUM(CASE WHEN mediasource = 'applovin_int_d7' THEN revenue_d7 ELSE 0 END) AS applovin_int_d7_revenue_d7,
+        SUM(CASE WHEN mediasource = 'applovin_int_d28' THEN revenue_d1 ELSE 0 END) AS applovin_int_d28_revenue_d1,
+        SUM(CASE WHEN mediasource = 'applovin_int_d28' THEN revenue_d3 ELSE 0 END) AS applovin_int_d28_revenue_d3,
+        SUM(CASE WHEN mediasource = 'applovin_int_d28' THEN revenue_d7 ELSE 0 END) AS applovin_int_d28_revenue_d7,
+        SUM(CASE WHEN mediasource IN ('applovin_int', 'applovin_int_d7', 'applovin_int_d28') THEN revenue_d1 ELSE 0 END) AS total_applovin_revenue_d1,
+        SUM(CASE WHEN mediasource IN ('applovin_int', 'applovin_int_d7', 'applovin_int_d28') THEN revenue_d3 ELSE 0 END) AS total_applovin_revenue_d3,
+        SUM(CASE WHEN mediasource IN ('applovin_int', 'applovin_int_d7', 'applovin_int_d28') THEN revenue_d7 ELSE 0 END) AS total_applovin_revenue_d7
+    FROM lw_20250703_for_ua_cost_revenue_app_month_view_by_j
+    GROUP BY app_package, install_month, country_group
+),
+monthly_ratios AS (
+    SELECT 
+        app_package,
+        install_month,
+        country_group,
+        applovin_int_revenue_d1,
+        applovin_int_revenue_d3,
+        applovin_int_revenue_d7,
+        applovin_int_d7_revenue_d1,
+        applovin_int_d7_revenue_d3,
+        applovin_int_d7_revenue_d7,
+        applovin_int_d28_revenue_d1,
+        applovin_int_d28_revenue_d3,
+        applovin_int_d28_revenue_d7,
+        total_applovin_revenue_d1,
+        total_applovin_revenue_d3,
+        total_applovin_revenue_d7,
+        -- 计算当月比例
+        CASE 
+            WHEN total_applovin_revenue_d1 > 0 
+            THEN ROUND(applovin_int_revenue_d1 / total_applovin_revenue_d1, 4)
+            ELSE 0 
+        END AS current_month_r1_ratio,
+        CASE 
+            WHEN total_applovin_revenue_d3 > 0 
+            THEN ROUND(applovin_int_revenue_d3 / total_applovin_revenue_d3, 4)
+            ELSE 0 
+        END AS current_month_r3_ratio,
+        CASE 
+            WHEN total_applovin_revenue_d7 > 0 
+            THEN ROUND(applovin_int_revenue_d7 / total_applovin_revenue_d7, 4)
+            ELSE 0 
+        END AS current_month_r7_ratio,
+        ROW_NUMBER() OVER (
+            PARTITION BY app_package, country_group 
+            ORDER BY install_month
+        ) AS rn
+    FROM base_data
+),
+with_lag_ratios AS (
+    SELECT 
+        *,
+        COALESCE(LAG(current_month_r1_ratio, 1) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag1_r1_ratio,
+        COALESCE(LAG(current_month_r1_ratio, 2) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag2_r1_ratio,
+        COALESCE(LAG(current_month_r1_ratio, 3) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag3_r1_ratio,
+        COALESCE(LAG(current_month_r3_ratio, 1) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag1_r3_ratio,
+        COALESCE(LAG(current_month_r3_ratio, 2) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag2_r3_ratio,
+        COALESCE(LAG(current_month_r3_ratio, 3) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag3_r3_ratio,
+        COALESCE(LAG(current_month_r7_ratio, 1) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag1_r7_ratio,
+        COALESCE(LAG(current_month_r7_ratio, 2) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag2_r7_ratio,
+        COALESCE(LAG(current_month_r7_ratio, 3) OVER (PARTITION BY app_package, country_group ORDER BY install_month), 0) AS lag3_r7_ratio
+    FROM monthly_ratios
+)
+SELECT 
+    app_package,
+    install_month,
+    country_group,
+    -- 当月各项收入
+    applovin_int_revenue_d1,
+    applovin_int_revenue_d3,
+    applovin_int_revenue_d7,
+    applovin_int_d7_revenue_d1,
+    applovin_int_d7_revenue_d3,
+    applovin_int_d7_revenue_d7,
+    applovin_int_d28_revenue_d1,
+    applovin_int_d28_revenue_d3,
+    applovin_int_d28_revenue_d7,
+    -- 当月比例
+    current_month_r1_ratio,
+    current_month_r3_ratio,
+    current_month_r7_ratio,
+    -- 最近3个月去掉最大值后的平均值
+    ROUND(
+        (lag1_r1_ratio + lag2_r1_ratio + lag3_r1_ratio - 
+         GREATEST(lag1_r1_ratio, lag2_r1_ratio, lag3_r1_ratio)) / 2, 4
+    ) AS applovin_int_other_r1_ratio,
+    
+    ROUND(
+        (lag1_r3_ratio + lag2_r3_ratio + lag3_r3_ratio - 
+         GREATEST(lag1_r3_ratio, lag2_r3_ratio, lag3_r3_ratio)) / 2, 4
+    ) AS applovin_int_other_r3_ratio,
+    
+    ROUND(
+        (lag1_r7_ratio + lag2_r7_ratio + lag3_r7_ratio - 
+         GREATEST(lag1_r7_ratio, lag2_r7_ratio, lag3_r7_ratio)) / 2, 4
+    ) AS applovin_int_other_r7_ratio
+FROM with_lag_ratios
+ORDER BY app_package, country_group, install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+	
 def createForUaCostRevenueMonthyTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250703_for_ua_cost_revenue_app_month_table_by_j;
@@ -2938,11 +3054,61 @@ ORDER BY
 	execSql2(sql)
 	return
 
+def createKpiWithDiscountView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_kpi_month_with_discount_view_by_j AS
+SELECT
+    k.app_package,
+    k.country_group,
+    k.mediasource,
+    k.ad_type,
+    k.tag,
+    k.install_month,
+    k.kpi_target,
+    CASE
+        WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
+             AND k.tag = 'for_ua' 
+             AND r.applovin_int_other_r1_ratio IS NOT NULL
+        THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
+        ELSE k.kpi1
+    END AS kpi1,
+    CASE
+        WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
+             AND k.tag = 'for_ua' 
+             AND r.applovin_int_other_r3_ratio IS NOT NULL
+        THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
+        ELSE k.kpi3
+    END AS kpi3,
+    CASE
+        WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
+             AND k.tag = 'for_ua' 
+             AND r.applovin_int_other_r7_ratio IS NOT NULL
+        THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
+        ELSE k.kpi7
+    END AS kpi7
+FROM
+    lw_20250703_af_kpi_month_view_by_j k
+    LEFT JOIN lw_20250703_applovin_ratio_view_by_j r 
+        ON k.app_package = r.app_package 
+        AND k.install_month = r.install_month 
+        AND k.country_group = r.country_group
+ORDER BY
+    k.app_package,
+    k.country_group,
+    k.mediasource,
+    k.ad_type,
+    k.tag,
+    k.install_month;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 def createKpiTable():
 	sql = """
 DROP TABLE IF EXISTS lw_20250703_af_kpi_month_table_by_j;
 CREATE TABLE lw_20250703_af_kpi_month_table_by_j AS
-SELECT * FROM lw_20250703_af_kpi_month_view_by_j;
+SELECT * FROM lw_20250703_af_kpi_month_with_discount_view_by_j;
 	"""
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
@@ -5093,74 +5259,76 @@ def createViewsAndTables():
 	# createMonthView()
 	# createAdtypeView()
 
-	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	createAfAppCountryCostRevenueMonthyView()
-	createAfAppCostRevenueMonthyView()
-	createAfCostRevenueMonthyTable()
+	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createAfAppCountryCostRevenueMonthyView()
+	# createAfAppCostRevenueMonthyView()
+	# createAfCostRevenueMonthyTable()
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入数据，包括普通、添加adtype 2种
-	createGPIRAppMediaCountryCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	createGPIRCostRevenueMonthyTable()
+	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
+	# createGPIRAppMediaCountryCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	# createGPIRCostRevenueMonthyTable()
 
-	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	createGPIRCohortCostRevenueMonthyTable()
+	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# # # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
-	# # createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# # createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
-	# # createAfNerfBigRCostRevenueMonthyTable()
+	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
+	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfAppMediaCountryAdtypeNerfBigRCostRevenueMonthyView(percentile=0.999)
+	# createAfNerfBigRCostRevenueMonthyTable()
 
 
-	createForUaCostRevenueMonthyView()
-	createForUaCostRevenueMonthyTable()
+	# createForUaCostRevenueMonthyView()
+	createAppLovinRatioView()
+	# createForUaCostRevenueMonthyTable()
 
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyView()
-	createCostRevenueMonthyTable()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyView()
+	# createCostRevenueMonthyTable()
 	
-	# 计算kpi_target
-	createGpirCohortKpiTargetView()
-	createForUaKpiTargetView()
-	createKpiTargetTable()
+	# # 计算kpi_target
+	# createGpirCohortKpiTargetView()
+	# createForUaKpiTargetView()
+	# createKpiTargetTable()
 
-	# 计算收入增长率
-	createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
-	createPredictRevenueRiseRatioAndkpiTargetView()
+	# # 计算收入增长率
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
+	# createPredictRevenueRiseRatioAndkpiTargetView()
 
 	# 推算KPI
 	createKpiView()
+	createKpiWithDiscountView()
 	createKpiTable()
 
-	# 推算动态KPI
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# # 推算动态KPI
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
 
 	# # 自然量收入占比
 	# createAfAndroidOrganicMonthView()
@@ -5172,8 +5340,8 @@ def createViewsAndTables():
 	# createForUaAndroidOrganic2MonthView()
 	# createOrganicMonthTable()
 	
-	# 只用自然量收入占比计算含自然量回本目标
-	createKpiTargetWithOrganicView()
+	# # 只用自然量收入占比计算含自然量回本目标
+	# createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
@@ -5190,18 +5358,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# 回本周期计算
-	createPayback1View()
-	createPayback1ViewFix()
-	createPayback2View()
-	createPayback2ViewFix()
-	createPaybackTable()
+	# # 回本周期计算
+	# createPayback1View()
+	# createPayback1ViewFix()
+	# createPayback2View()
+	# createPayback2ViewFix()
+	# createPaybackTable()
 
-	createPayback1OrganicView()
-	createPayback1OrganicViewFix()
-	createPayback2OrganicView()
-	createPayback2OrganicViewFix()
-	createPaybackOrganicTable()
+	# createPayback1OrganicView()
+	# createPayback1OrganicViewFix()
+	# createPayback2OrganicView()
+	# createPayback2OrganicViewFix()
+	# createPaybackOrganicTable()
 
 	pass
 
