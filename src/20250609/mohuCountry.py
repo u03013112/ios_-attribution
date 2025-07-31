@@ -100,7 +100,6 @@ def getAfData(df, mediaList):
             'revenue_h72': f'af_{media}_revenue_h72',
             'revenue_h168': f'af_{media}_revenue_h168'
         })
-        print(df0)
         if afDf.empty:
             afDf = df0
         else:
@@ -187,9 +186,9 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
     
     # 自然量先验配置：20%, 30%, 40%
     organicRevenueConfigList = [
-        {'ratio': 0.2, 'mu': totalRevenueMean * 0.2, 'sigma': totalRevenueMean * 0.05},
-        {'ratio': 0.3, 'mu': totalRevenueMean * 0.3, 'sigma': totalRevenueMean * 0.05},
-        {'ratio': 0.4, 'mu': totalRevenueMean * 0.4, 'sigma': totalRevenueMean * 0.05}
+        {'ratio': 0.2, 'mu': totalRevenueMean * 0.2, 'sigma': totalRevenueMean * 0.01},
+        {'ratio': 0.3, 'mu': totalRevenueMean * 0.3, 'sigma': totalRevenueMean * 0.01},
+        {'ratio': 0.4, 'mu': totalRevenueMean * 0.4, 'sigma': totalRevenueMean * 0.01}
     ]
     
     resultDf = pd.DataFrame()
@@ -337,7 +336,9 @@ def main():
     # 只保留必要的列：install_day, country_group, total_revenue_h168 和所有媒体收入列
     keepColumns = ['install_day', 'country_group', 'total_revenue_h168']
     mediaColumns = [col for col in df.columns if col.startswith('af_') and col.endswith('_revenue_h168')]
+    mediaCostColumns = [col for col in df.columns if col.startswith('af_') and col.endswith('_cost')]
     keepColumns.extend(mediaColumns)
+    keepColumns.extend(mediaCostColumns)
     df = df[keepColumns]
 
     countryList = df['country_group'].unique()
