@@ -5309,10 +5309,10 @@ def createViewsAndTables():
 	# createCostRevenueMonthyView()
 	# createCostRevenueMonthyTable()
 	
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
 	# # 计算收入增长率
 	# createRevenueRiseRatioView()
