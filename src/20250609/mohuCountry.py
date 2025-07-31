@@ -356,6 +356,90 @@ def analyze_results(resultDf, country):
     
     return bestResult
 
+def validate_model_by_period(df, country, bestResult, mediaList):
+    """使用最佳拟合结果对不同时间周期进行验算"""
+    countryDf = df[df['country_group'] == country].copy()
+    
+    if countryDf.empty:
+        print(f"警告: 国家 {country} 没有数据")
+        return
+    
+    # 提取最佳结果的参数
+    organicRevenueMean = bestResult['organic_revenue_mean']
+    mediaCoeffs = {}
+    for media in mediaList:
+        mediaCoeffs[media] = bestResult.get(f'{media}_coeff', 1.0)
+    
+    # 添加周和月的时间列
+    countryDf['year_week'] = countryDf['install_day'].dt.strftime('%Y-W%U')
+    countryDf['year_month'] = countryDf['install_day'].dt.strftime('%Y-%m')
+    
+    # 按周汇总验算
+    print(f"\n=== {country} 按周汇总验算 ===")
+    weekly_mape = calculate_period_mape(countryDf, 'year_week', organicRevenueMean, mediaCoeffs, mediaList)
+    print(f"按周汇总的MAPE: {weekly_mape:.2f}%")
+    
+    # 按月汇总验算
+    print(f"\n=== {country} 按月汇总验算 ===")
+    monthly_mape = calculate_period_mape(countryDf, 'year_month', organicRevenueMean, mediaCoeffs, mediaList)
+    print(f"按月汇总的MAPE: {monthly_mape:.2f}%")
+    
+    return weekly_mape, monthly_mape
+
+def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs, mediaList):
+    """计算指定时间周期的MAPE"""
+    # 按时间周期汇总数据
+    period_df = countryDf.groupby(period_col).agg({
+        'total_revenue_h168': 'sum',
+        **{f'af_{media}_revenue_h168': 'sum' for media in mediaList}
+    }).reset_index()
+    
+    # 计算每个周期的天数（用于计算自然量）
+    period_days = countryDf.groupby(period_col).size().reset_index(name='days')
+    period_df = pd.merge(period_df, period_days, on=period_col)
+    
+    # 计算预测值
+    predicted_revenues = []
+    actual_revenues = []
+    
+    for _, row in period_df.iterrows():
+        # 预测的自然量收入 = 每日自然量均值 * 该周期的天数
+        predicted_organic = organicRevenueMean * row['days']
+        
+        # 预测的媒体收入 = 模糊归因收入 * 系数
+        predicted_media_total = 0
+        for media in mediaList:
+            af_revenue_col = f'af_{media}_revenue_h168'
+            if af_revenue_col in row:
+                coeff = mediaCoeffs.get(media, 1.0)
+                predicted_media_total += row[af_revenue_col] * coeff
+        
+        # 预测的总收入
+        predicted_total = predicted_organic + predicted_media_total
+        predicted_revenues.append(predicted_total)
+        
+        # 实际总收入
+        actual_revenues.append(row['total_revenue_h168'])
+    
+    # 计算MAPE
+    predicted_revenues = np.array(predicted_revenues)
+    actual_revenues = np.array(actual_revenues)
+    
+    # 过滤掉实际收入为0的情况
+    valid_mask = actual_revenues > 0
+    if valid_mask.sum() == 0:
+        return 0
+    
+    mape = np.mean(np.abs((actual_revenues[valid_mask] - predicted_revenues[valid_mask]) / actual_revenues[valid_mask])) * 100
+    
+    # 输出详细信息
+    print(f"时间周期数: {len(period_df)}")
+    print(f"平均实际收入: ${np.mean(actual_revenues):,.2f}")
+    print(f"平均预测收入: ${np.mean(predicted_revenues):,.2f}")
+    print(f"预测准确度: {100 - mape:.2f}%")
+    
+    return mape
+
 def main():
     startDayStr = '20240729'
     endDayStr = '20250729'
@@ -390,8 +474,19 @@ def main():
             # 分析结果
             bestResult = analyze_results(resultDf, country)
             
+            # 使用最佳结果进行按周和按月的验算
+            weekly_mape, monthly_mape = validate_model_by_period(df, country, bestResult, mediaList)
+            
+            # 将验算结果添加到最佳结果中
+            bestResult['weekly_mape'] = weekly_mape
+            bestResult['monthly_mape'] = monthly_mape
+            
             # 保存结果
             resultDf.to_csv(f'/src/data/bayesian_fit_result_{country}_{startDayStr}_{endDayStr}.csv', index=False)
+            
+            # 保存包含验算结果的最佳方案
+            best_result_with_validation = pd.DataFrame([bestResult])
+            best_result_with_validation.to_csv(f'/src/data/best_result_with_validation_{country}_{startDayStr}_{endDayStr}.csv', index=False)
 
 
 
