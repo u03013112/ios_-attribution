@@ -259,13 +259,18 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
             # 计算修正后的ROI
             modifiedROIs = calculate_modified_rois(countryDf, mediaList, coeffResults)
             
+            # 计算预估自然量的实际占比
+            organicRevenueMean = summary.loc['organicRevenue', 'mean']
+            actual_organic_ratio = organicRevenueMean / totalRevenueMean if totalRevenueMean > 0 else 0
+            
             # 保存结果
             result = {
                 'country': country,
                 'organic_ratio': organicConfig['ratio'],
-                'organic_revenue_mean': summary.loc['organicRevenue', 'mean'],
+                'organic_revenue_mean': organicRevenueMean,
                 'organic_revenue_hdi_lower': summary.loc['organicRevenue', 'hdi_2.5%'],
                 'organic_revenue_hdi_upper': summary.loc['organicRevenue', 'hdi_97.5%'],
+                'actual_organic_ratio': actual_organic_ratio,
                 'mape': mape,
                 **{f'{media}_coeff': coeffResults.get(media, {}).get('coeff_mean', 1.0) for media in mediaList},
                 **{f'{media}_modified_roi': modifiedROIs.get(media, 0) for media in mediaList}
@@ -307,12 +312,13 @@ def analyze_results(resultDf, country):
     
     print("各方案MAPE对比:")
     for _, row in resultDf_sorted.iterrows():
-        print(f"自然量占比 {row['organic_ratio']:.0%}: MAPE = {row['mape']:.2f}%")
+        print(f"自然量占比 {row['organic_ratio']:.0%}: MAPE = {row['mape']:.2f}%, 实际自然量占比 = {row['actual_organic_ratio']:.2%}")
     
     # 显示最佳方案的详细结果
     bestResult = resultDf_sorted.iloc[0]
-    print(f"\n最佳方案 (自然量占比 {bestResult['organic_ratio']:.0%}):")
+    print(f"\n最佳方案 (预设自然量占比 {bestResult['organic_ratio']:.0%}):")
     print(f"自然量收入: ${bestResult['organic_revenue_mean']:,.2f}")
+    print(f"实际自然量占比: {bestResult['actual_organic_ratio']:.2%}")
     
     mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
     print("\n媒体系数:")
