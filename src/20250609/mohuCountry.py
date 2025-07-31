@@ -259,6 +259,9 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
             # 计算修正后的ROI
             modifiedROIs = calculate_modified_rois(countryDf, mediaList, coeffResults)
             
+            # 计算真实平均ROI
+            trueROIs = calculate_true_average_rois(countryDf, mediaList)
+            
             # 计算预估自然量的实际占比
             organicRevenueMean = summary.loc['organicRevenue', 'mean']
             actual_organic_ratio = organicRevenueMean / totalRevenueMean if totalRevenueMean > 0 else 0
@@ -273,7 +276,8 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
                 'actual_organic_ratio': actual_organic_ratio,
                 'mape': mape,
                 **{f'{media}_coeff': coeffResults.get(media, {}).get('coeff_mean', 1.0) for media in mediaList},
-                **{f'{media}_modified_roi': modifiedROIs.get(media, 0) for media in mediaList}
+                **{f'{media}_modified_roi': modifiedROIs.get(media, 0) for media in mediaList},
+                **{f'{media}_true_roi': trueROIs.get(media, 0) for media in mediaList}
             }
             
             resultDf = pd.concat([resultDf, pd.DataFrame([result])], ignore_index=True)
@@ -303,6 +307,28 @@ def calculate_modified_rois(countryDf, mediaList, coeffResults):
     
     return modifiedROIs
 
+def calculate_true_average_rois(countryDf, mediaList):
+    """计算真实平均ROI（未修正的原始ROI）"""
+    trueROIs = {}
+    
+    for media in mediaList:
+        afRevenueCol = f'af_{media}_revenue_h168'
+        afCostCol = f'af_{media}_cost'
+        
+        if afRevenueCol in countryDf.columns and afCostCol in countryDf.columns:
+            totalRevenue = countryDf[afRevenueCol].sum()
+            totalCost = countryDf[afCostCol].sum()
+            
+            if totalCost > 0:
+                trueROI = totalRevenue / totalCost
+                trueROIs[media] = trueROI
+            else:
+                trueROIs[media] = 0
+        else:
+            trueROIs[media] = 0
+    
+    return trueROIs
+
 def analyze_results(resultDf, country):
     """分析拟合结果"""
     print(f"\n=== {country} 拟合结果分析 ===")
@@ -321,11 +347,12 @@ def analyze_results(resultDf, country):
     print(f"实际自然量占比: {bestResult['actual_organic_ratio']:.2%}")
     
     mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
-    print("\n媒体系数:")
+    print("\n媒体系数和ROI:")
     for media in mediaList:
         coeff = bestResult.get(f'{media}_coeff', 1.0)
-        roi = bestResult.get(f'{media}_modified_roi', 0)
-        print(f"  {media}: 系数={coeff:.3f}, 修正ROI={roi:.3f}")
+        modified_roi = bestResult.get(f'{media}_modified_roi', 0)
+        true_roi = bestResult.get(f'{media}_true_roi', 0)
+        print(f"  {media}: 系数={coeff:.3f}, 真实ROI={true_roi:.2%}, 修正ROI={modified_roi:.2%}")
     
     return bestResult
 
