@@ -3705,239 +3705,1052 @@ SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
 #####################################################
 # 自然量收入占比
 
-# af版本的自然量收入占比，120日版本
-def createAfAndroidOrganicMonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource = 'Organic' THEN revenue_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_d120) AS revenue_d120
-	FROM
-		dws_overseas_public_roi roi
-		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.app = '502'
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-		AND roi.facebook_segment IN ('country', 'N/A')
-	GROUP BY
-		install_month,
-		country_group
-),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
-)
-SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'af' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
-ORDER BY
-	country_group,
-	install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
+# # af版本的自然量收入占比，120日版本
+# def createAfAndroidOrganicMonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_af_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource = 'Organic' THEN revenue_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_d120) AS revenue_d120
+# 	FROM
+# 		dws_overseas_public_roi roi
+# 		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.app = '502'
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 		AND roi.facebook_segment IN ('country', 'N/A')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'af' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
 
-# af_cohort版本的自然量收入占比，120日版本
+# # af_cohort版本的自然量收入占比，120日版本
+# def createAfCohortAndroidOrganicMonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_af_cohort_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource = 'Organic' THEN revenue_cohort_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_cohort_d120) AS revenue_d120
+# 	FROM
+# 		dws_overseas_public_roi roi
+# 		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.app = '502'
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 		AND roi.facebook_segment IN ('country', 'N/A')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'af_cohort' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+# # af_onlyprofit_cohort版本的自然量收入占比，120日版本
+# def createAfOnlyprofitCohortAndroidOrganicMonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource = 'Organic' THEN revenue_cohort_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_cohort_d120) AS revenue_d120
+# 	FROM
+# 		dws_overseas_lastwar_roi_onlyprofit roi
+# 		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.app = '502'
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'af_onlyprofit_cohort' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+# # gpir版本的自然量收入占比，120日版本
+# def createGpirAndroidOrganic2MonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource in ('Organic','organic') THEN revenue_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_d120) AS revenue_d120
+# 	FROM
+# 		ads_lastwar_mediasource_reattribution roi
+# 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.facebook_segment IN ('country', 'N/A')
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'gpir' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_gpir_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			-- 计算上3个月（不含本月）的累计值，不足3个月补0
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+# # gpir_cohort版本的自然量收入占比，120日版本
+# def createGpirCohortAndroidOrganic2MonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_cohort_d120) AS revenue_d120
+# 	FROM
+# 		ads_lastwar_mediasource_reattribution roi
+# 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.facebook_segment IN ('country', 'N/A')
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'gpir_cohort' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_gpir_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			-- 计算上3个月（不含本月）的累计值，不足3个月补0
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+# # gpir_onlyprofit_cohort版本的自然量收入占比，120日版本
+# def createGpirOnlyprofitCohortAndroidOrganic2MonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
+# WITH base_data AS (
+# 	SELECT
+# 		SUBSTR(install_day, 1, 6) AS install_month,
+# 		COALESCE(cg.country_group, 'other') AS country_group,
+# 		SUM(cost_value_usd) AS cost,
+# 		SUM(
+# 			CASE
+# 				WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
+# 				ELSE 0
+# 			END
+# 		) AS organic_revenue_d120,
+# 		SUM(revenue_cohort_d120) AS revenue_d120
+# 	FROM
+# 		dws_lastwar_roi_profit_reafattribution roi
+# 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+# 	WHERE
+# 		roi.app = '502'
+# 		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+# 	GROUP BY
+# 		install_month,
+# 		country_group
+# ),
+# ordered_data AS (
+# 	SELECT
+# 		install_month,
+# 		country_group,
+# 		organic_revenue_d120,
+# 		revenue_d120,
+# 		ROW_NUMBER() OVER (
+# 			PARTITION BY country_group
+# 			ORDER BY
+# 				install_month
+# 		) AS rn
+# 	FROM
+# 		base_data
+# )
+# SELECT
+# 	'com.fun.lastwar.gp' AS app_package,
+# 	install_month,
+# 	country_group,
+# 	'gpir_onlyprofit_cohort' as tag,
+# 	CASE
+# 		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
+# 		ELSE ROUND(
+# 			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
+# 			4
+# 		)
+# 	END AS last456month_gpir_organic_revenue_ratio
+# FROM
+# 	(
+# 		SELECT
+# 			install_month,
+# 			country_group,
+# 			-- 计算上3个月（不含本月）的累计值，不足3个月补0
+# 			COALESCE(
+# 				LAG(organic_revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(organic_revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_organic_revenue_d120,
+# 			COALESCE(
+# 				LAG(revenue_d120, 4) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 5) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) + COALESCE(
+# 				LAG(revenue_d120, 6) OVER (
+# 					PARTITION BY country_group
+# 					ORDER BY
+# 						install_month
+# 				),
+# 				0
+# 			) AS prev3_revenue_d120
+# 		FROM
+# 			ordered_data
+# 	) t
+# group by
+# 	install_month,
+# 	country_group
+# ORDER BY
+# 	country_group,
+# 	install_month
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+# # for_ua 版本的自然量收入占比，内容和gpir_cohort版本一致,只是tag不一样
+# def createForUaAndroidOrganic2MonthView():
+# 	sql = """
+# CREATE OR REPLACE VIEW lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j AS
+# SELECT
+# 	app_package,
+# 	install_month,
+# 	country_group,
+# 	'for_ua' as tag,
+# 	last456month_gpir_organic_revenue_ratio
+# FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+
+# def createOrganicMonthTable():
+# 	sql = """
+# DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
+# CREATE TABLE lw_20250718_android_organic_revenue_ratio_month_table_by_j AS
+# SELECT * FROM lw_20250703_af_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_af_cohort_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
+# UNION ALL
+# SELECT * FROM lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j
+# ;
+# 	"""
+# 	print(f"Executing SQL: {sql}")
+# 	execSql2(sql)
+# 	return
+
+###############################################
+# 自然量占比，重构版本
+
+# af版本的自然量收入占比，120日版本 - 重构版
+def createAfAndroidOrganicMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'af' as tag,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_d120) AS revenue_d120
+FROM
+    dws_overseas_public_roi roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.app = '502'
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+    AND roi.facebook_segment IN ('country', 'N/A')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+# af_cohort版本的自然量收入占比，120日版本 - 重构版
 def createAfCohortAndroidOrganicMonthView():
-	sql = """
+    sql = """
 CREATE OR REPLACE VIEW lw_20250703_af_cohort_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource = 'Organic' THEN revenue_cohort_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_cohort_d120) AS revenue_d120
-	FROM
-		dws_overseas_public_roi roi
-		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.app = '502'
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-		AND roi.facebook_segment IN ('country', 'N/A')
-	GROUP BY
-		install_month,
-		country_group
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'af_cohort' as tag,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_cohort_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+    dws_overseas_public_roi roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.app = '502'
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+    AND roi.facebook_segment IN ('country', 'N/A')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createAfOnlyprofitCohortAndroidOrganicMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'af_onlyprofit_cohort' as tag,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_cohort_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+    dws_overseas_lastwar_roi_onlyprofit roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.app = '502'
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createGpirAndroidOrganic2MonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'gpir' as tag,
+    SUM(
+        CASE
+            WHEN mediasource in ('Organic','organic') THEN revenue_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_d120) AS revenue_d120
+FROM
+    ads_lastwar_mediasource_reattribution roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.facebook_segment IN ('country', 'N/A')
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createGpirCohortAndroidOrganic2MonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'gpir_cohort' as tag,
+    SUM(
+        CASE
+            WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+    ads_lastwar_mediasource_reattribution roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.facebook_segment IN ('country', 'N/A')
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createGpirOnlyprofitCohortAndroidOrganic2MonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    'com.fun.lastwar.gp' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    COALESCE(cg.country_group, 'other') AS country_group,
+    'gpir_onlyprofit_cohort' as tag,
+    SUM(
+        CASE
+            WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_cohort_d120) AS revenue_d120
+FROM
+    dws_lastwar_roi_profit_reafattribution roi
+    LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+WHERE
+    roi.app = '502'
+    AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createForUaAndroidOrganic2MonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j AS
+SELECT
+    app_package,
+    install_month,
+    country_group,
+    'for_ua' as tag,
+    organic_revenue_d120,
+    revenue_d120
+FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+def createOrganicMonthTable():
+    sql = """
+DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
+CREATE TABLE lw_20250718_android_organic_revenue_ratio_month_table_by_j AS
+WITH union_data AS (
+    SELECT * FROM lw_20250703_af_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_af_cohort_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
+    UNION ALL
+    SELECT * FROM lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j
 ),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
+calculated_data AS (
+    SELECT
+        app_package,
+        install_month,
+        country_group,
+        tag,
+        organic_revenue_d120,
+        revenue_d120,
+        -- 计算最近456月的数据（即第4、5、6个月前的数据）
+        COALESCE(
+            LAG(organic_revenue_d120, 4) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) + COALESCE(
+            LAG(organic_revenue_d120, 5) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) + COALESCE(
+            LAG(organic_revenue_d120, 6) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) AS prev456_organic_revenue_d120,
+        COALESCE(
+            LAG(revenue_d120, 4) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) + COALESCE(
+            LAG(revenue_d120, 5) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) + COALESCE(
+            LAG(revenue_d120, 6) OVER (
+                PARTITION BY country_group, tag
+                ORDER BY install_month
+            ), 0
+        ) AS prev456_revenue_d120
+    FROM union_data
 )
 SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'af_cohort' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
+    app_package,
+    install_month,
+    country_group,
+    tag,
+    organic_revenue_d120,
+    revenue_d120,
+    CASE
+        WHEN prev456_revenue_d120 = 0 THEN NULL
+        ELSE ROUND(prev456_organic_revenue_d120 / prev456_revenue_d120, 4)
+    END AS last456month_organic_revenue_ratio
+FROM calculated_data
 ORDER BY
-	country_group,
-	install_month
+    tag,
+    country_group,
+    install_month
 ;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 
 # iOS af_cohort版本的自然量收入占比，120日版本
 # 由于iOS隐私条款限制，无法获取到完整的自然量数据，因此只能估算
@@ -3957,512 +4770,7 @@ CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_revenue_ratio_month_vie
 	execSql2(sql)
 	return
 
-# af_onlyprofit_cohort版本的自然量收入占比，120日版本
-def createAfOnlyprofitCohortAndroidOrganicMonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource = 'Organic' THEN revenue_cohort_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_cohort_d120) AS revenue_d120
-	FROM
-		dws_overseas_lastwar_roi_onlyprofit roi
-		LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.app = '502'
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-	GROUP BY
-		install_month,
-		country_group
-),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
-)
-SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'af_onlyprofit_cohort' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
-ORDER BY
-	country_group,
-	install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
 
-# gpir版本的自然量收入占比，120日版本
-def createGpirAndroidOrganic2MonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource in ('Organic','organic') THEN revenue_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_d120) AS revenue_d120
-	FROM
-		ads_lastwar_mediasource_reattribution roi
-	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.facebook_segment IN ('country', 'N/A')
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-	GROUP BY
-		install_month,
-		country_group
-),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
-)
-SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'gpir' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_gpir_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			-- 计算上3个月（不含本月）的累计值，不足3个月补0
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
-ORDER BY
-	country_group,
-	install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# gpir_cohort版本的自然量收入占比，120日版本
-def createGpirCohortAndroidOrganic2MonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_cohort_d120) AS revenue_d120
-	FROM
-		ads_lastwar_mediasource_reattribution roi
-	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.facebook_segment IN ('country', 'N/A')
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-	GROUP BY
-		install_month,
-		country_group
-),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
-)
-SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'gpir_cohort' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_gpir_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			-- 计算上3个月（不含本月）的累计值，不足3个月补0
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
-ORDER BY
-	country_group,
-	install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# gpir_onlyprofit_cohort版本的自然量收入占比，120日版本
-def createGpirOnlyprofitCohortAndroidOrganic2MonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j AS
-WITH base_data AS (
-	SELECT
-		SUBSTR(install_day, 1, 6) AS install_month,
-		COALESCE(cg.country_group, 'other') AS country_group,
-		SUM(cost_value_usd) AS cost,
-		SUM(
-			CASE
-				WHEN mediasource in ('Organic','organic') THEN revenue_cohort_d120
-				ELSE 0
-			END
-		) AS organic_revenue_d120,
-		SUM(revenue_cohort_d120) AS revenue_d120
-	FROM
-		dws_lastwar_roi_profit_reafattribution roi
-	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-	WHERE
-		roi.app = '502'
-		AND roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
-	GROUP BY
-		install_month,
-		country_group
-),
-ordered_data AS (
-	SELECT
-		install_month,
-		country_group,
-		organic_revenue_d120,
-		revenue_d120,
-		ROW_NUMBER() OVER (
-			PARTITION BY country_group
-			ORDER BY
-				install_month
-		) AS rn
-	FROM
-		base_data
-)
-SELECT
-	'com.fun.lastwar.gp' AS app_package,
-	install_month,
-	country_group,
-	'gpir_onlyprofit_cohort' as tag,
-	CASE
-		WHEN SUM(prev3_revenue_d120) = 0 THEN NULL
-		ELSE ROUND(
-			SUM(prev3_organic_revenue_d120) / SUM(prev3_revenue_d120),
-			4
-		)
-	END AS last456month_gpir_organic_revenue_ratio
-FROM
-	(
-		SELECT
-			install_month,
-			country_group,
-			-- 计算上3个月（不含本月）的累计值，不足3个月补0
-			COALESCE(
-				LAG(organic_revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(organic_revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_organic_revenue_d120,
-			COALESCE(
-				LAG(revenue_d120, 4) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 5) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) + COALESCE(
-				LAG(revenue_d120, 6) OVER (
-					PARTITION BY country_group
-					ORDER BY
-						install_month
-				),
-				0
-			) AS prev3_revenue_d120
-		FROM
-			ordered_data
-	) t
-group by
-	install_month,
-	country_group
-ORDER BY
-	country_group,
-	install_month
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-# for_ua 版本的自然量收入占比，内容和gpir_cohort版本一致,只是tag不一样
-def createForUaAndroidOrganic2MonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j AS
-SELECT
-	app_package,
-	install_month,
-	country_group,
-	'for_ua' as tag,
-	last456month_gpir_organic_revenue_ratio
-FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
-
-
-def createOrganicMonthTable():
-	sql = """
-DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
-CREATE TABLE lw_20250718_android_organic_revenue_ratio_month_table_by_j AS
-SELECT * FROM lw_20250703_af_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_af_cohort_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_af_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_gpir_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
-UNION ALL
-SELECT * FROM lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j
-;
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
 
 
 # 自然量与lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j
@@ -5630,11 +5938,11 @@ def createViewsAndTables():
 	# createCostRevenueMonthyView()
 	# createCostRevenueMonthyTable()
 	
-	# 计算kpi_target
-	createGpirCohortKpiTargetView()
-	createIosCohortKpiTargetView()
-	createForUaKpiTargetView()
-	createKpiTargetTable()
+	# # 计算kpi_target
+	# createGpirCohortKpiTargetView()
+	# createIosCohortKpiTargetView()
+	# createForUaKpiTargetView()
+	# createKpiTargetTable()
 
 	# # 计算收入增长率
 	# createRevenueRiseRatioView()
@@ -5642,10 +5950,10 @@ def createViewsAndTables():
 	# createPredictRevenueRiseRatioTable()
 	# createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# 推算KPI
-	createKpiView()
-	createKpiWithDiscountView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiWithDiscountView()
+	# createKpiTable()
 
 	# # 推算动态KPI
 	# createKpi2View()
@@ -5662,8 +5970,8 @@ def createViewsAndTables():
 	createForUaAndroidOrganic2MonthView()
 	createOrganicMonthTable()
 	
-	# 只用自然量收入占比计算含自然量回本目标
-	createKpiTargetWithOrganicView()
+	# # 只用自然量收入占比计算含自然量回本目标
+	# createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
