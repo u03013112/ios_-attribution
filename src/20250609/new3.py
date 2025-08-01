@@ -3922,6 +3922,127 @@ FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
     execSql2(sql)
     return
 
+
+# iOS af_cohort版本的自然量收入占比，120日版本
+# 由于iOS隐私条款限制，无法获取到完整的自然量数据，因此只能估算
+# 逻辑是从dws_overseas_public_roi获取app_package in ('id6448786147','id6736925794')的数据
+# mediasource 共有 'Facebook Ads','applovin_int','bytedanceglobal_int','googleadwords_int','snapchat_int','moloco_int','Twitter','Apple Search Ads','mintegral_int','unityads_int'
+# 还有一些其他媒体，但是没有花费和收入数值，忽略不计
+# 其中大部分媒体都有模糊归因，googleadwords_int的模糊归因偏差比较大
+# 简单的按照花费比例来估测模糊归因不准的收入
+# 所以，googleadwords_int 收入 = googleadwords_int花费 / 所有媒体花费 * 总收入
+# 其他媒体收入取revenue_cohort_d120
+# 后续按照安卓逻辑，找到最近的456个月的数据，计算自然量占比的平均值
+def createAfCohorotIosOrganicMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j AS
+WITH all_revenue AS (
+    -- 获取所有媒体的总收入（包括自然量）
+    SELECT
+        SUBSTR(install_day, 1, 6) AS install_month,
+        COALESCE(cg.country_group, 'other') AS country_group,
+        SUM(revenue_cohort_d120) AS total_revenue
+    FROM
+        dws_overseas_public_roi roi
+        LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    WHERE
+        roi.app = '502'
+        AND roi.app_package in ('id6448786147','id6736925794')
+        AND roi.facebook_segment IN ('country', 'N/A')
+    GROUP BY
+        install_month,
+        country_group
+),
+paid_media_data AS (
+    -- 获取指定付费媒体的花费和收入数据
+    SELECT
+        SUBSTR(install_day, 1, 6) AS install_month,
+        COALESCE(cg.country_group, 'other') AS country_group,
+        mediasource,
+        SUM(cost_value_usd) AS cost,
+        SUM(revenue_cohort_d120) AS revenue_cohort_d120
+    FROM
+        dws_overseas_public_roi roi
+        LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+    WHERE
+        roi.app = '502'
+        AND roi.app_package in ('id6448786147','id6736925794')
+        AND roi.facebook_segment IN ('country', 'N/A')
+        AND roi.mediasource in (
+            'Facebook Ads','applovin_int','bytedanceglobal_int','googleadwords_int',
+            'snapchat_int','moloco_int','Twitter','Apple Search Ads','mintegral_int','unityads_int'
+        )
+    GROUP BY
+        install_month,
+        country_group,
+        mediasource
+),
+paid_totals AS (
+    -- 计算付费媒体的总花费
+    SELECT
+        install_month,
+        country_group,
+        SUM(cost) AS total_paid_cost,
+        SUM(revenue_cohort_d120) AS total_paid_revenue
+    FROM paid_media_data
+    GROUP BY
+        install_month,
+        country_group
+),
+adjusted_paid_revenue AS (
+    -- 调整googleadwords_int的收入，其他媒体保持原收入
+    SELECT
+        pmd.install_month,
+        pmd.country_group,
+        pmd.mediasource,
+        pmd.cost,
+        CASE
+            WHEN pmd.mediasource = 'googleadwords_int' THEN
+                CASE
+                    WHEN pt.total_paid_cost > 0 THEN 
+                        (pmd.cost / pt.total_paid_cost) * ar.total_revenue
+                    ELSE 0
+                END
+            ELSE pmd.revenue_cohort_d120
+        END AS adjusted_revenue_cohort_d120
+    FROM paid_media_data pmd
+    LEFT JOIN paid_totals pt ON pmd.install_month = pt.install_month 
+                             AND pmd.country_group = pt.country_group
+    LEFT JOIN all_revenue ar ON pmd.install_month = ar.install_month 
+                             AND pmd.country_group = ar.country_group
+),
+final_paid_revenue AS (
+    -- 汇总调整后的付费媒体收入
+    SELECT
+        install_month,
+        country_group,
+        SUM(adjusted_revenue_cohort_d120) AS total_adjusted_paid_revenue
+    FROM adjusted_paid_revenue
+    GROUP BY
+        install_month,
+        country_group
+)
+SELECT
+    'id6448786147' AS app_package,
+    ar.install_month,
+    ar.country_group,
+    'af_cohort' as tag,
+    -- 自然量收入 = 总收入 - 调整后的付费收入
+    GREATEST(0, ar.total_revenue - COALESCE(fpr.total_adjusted_paid_revenue, 0)) AS organic_revenue_d120,
+    ar.total_revenue AS revenue_d120
+FROM all_revenue ar
+LEFT JOIN final_paid_revenue fpr ON ar.install_month = fpr.install_month 
+                                 AND ar.country_group = fpr.country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 def createOrganicMonthTable():
     sql = """
 DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
@@ -3940,6 +4061,8 @@ WITH union_data AS (
     SELECT * FROM lw_20250703_gpir_onlyprofit_cohort_android_organic_revenue_ratio_month_view_by_j
     UNION ALL
     SELECT * FROM lw_20250703_for_ua_android_organic_revenue_ratio_month_view_by_j
+	UNION ALL
+    SELECT * FROM lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j
 ),
 calculated_data AS (
     SELECT
@@ -4007,23 +4130,7 @@ ORDER BY
     return
 
 
-# iOS af_cohort版本的自然量收入占比，120日版本
-# 由于iOS隐私条款限制，无法获取到完整的自然量数据，因此只能估算
-# 逻辑是从dws_overseas_public_roi获取app_package in ('id6448786147','id6736925794')的数据
-# mediasource 共有 'Facebook Ads','applovin_int','bytedanceglobal_int','googleadwords_int','snapchat_int','moloco_int','Twitter','Apple Search Ads','mintegral_int','unityads_int'
-# 还有一些其他媒体，但是没有花费和收入数值，忽略不计
-# 其中大部分媒体都有模糊归因，googleadwords_int的模糊归因偏差比较大
-# 简单的按照花费比例来估测模糊归因不准的收入
-# 所以，googleadwords_int 收入 = googleadwords_int花费 / 所有媒体花费 * 总收入
-# 其他媒体收入取revenue_cohort_d120
-# 后续按照安卓逻辑，找到最近的456个月的数据，计算自然量占比的平均值
-def createAfCohorotIosOrganicMonthView():
-	sql = """
-CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j AS
-	"""
-	print(f"Executing SQL: {sql}")
-	execSql2(sql)
-	return
+
 
 
 
@@ -5216,13 +5323,16 @@ def createViewsAndTables():
 	# createKpi2FixTable()
 
 	# 自然量收入占比
-	createAfAndroidOrganicMonthView()
-	createAfCohortAndroidOrganicMonthView()
-	createAfOnlyprofitCohortAndroidOrganicMonthView()
-	createGpirAndroidOrganic2MonthView()
-	createGpirCohortAndroidOrganic2MonthView()
-	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	createForUaAndroidOrganic2MonthView()
+	# createAfAndroidOrganicMonthView()
+	# createAfCohortAndroidOrganicMonthView()
+	# createAfOnlyprofitCohortAndroidOrganicMonthView()
+	# createGpirAndroidOrganic2MonthView()
+	# createGpirCohortAndroidOrganic2MonthView()
+	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	# createForUaAndroidOrganic2MonthView()
+
+	createAfCohorotIosOrganicMonthView()
+	
 	createOrganicMonthTable()
 	
 	# # 只用自然量收入占比计算含自然量回本目标
