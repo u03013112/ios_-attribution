@@ -3939,6 +3939,25 @@ ORDER BY
 	execSql2(sql)
 	return
 
+# iOS af_cohort版本的自然量收入占比，120日版本
+# 由于iOS隐私条款限制，无法获取到完整的自然量数据，因此只能估算
+# 逻辑是从dws_overseas_public_roi获取app_package in ('id6448786147','id6736925794')的数据
+# mediasource 共有 'Facebook Ads','applovin_int','bytedanceglobal_int','googleadwords_int','snapchat_int','moloco_int','Twitter','Apple Search Ads','mintegral_int','unityads_int'
+# 还有一些其他媒体，但是没有花费和收入数值，忽略不计
+# 其中大部分媒体都有模糊归因，googleadwords_int和Twitter的模糊归因偏差比较大
+# 简单的按照花费比例来估测模糊归因不准的收入
+# 所以，googleadwords_int 收入 = googleadwords_int花费 / 所有媒体花费 * 总收入
+# Twitter 收入 仿照googleadwords_int
+# 其他媒体收入取revenue_cohort_d120
+# 后续按照安卓逻辑，找到最近的456个月的数据，计算自然量占比的平均值
+def createAfCohorotIosOrganicMonthView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j AS
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
 # af_onlyprofit_cohort版本的自然量收入占比，120日版本
 def createAfOnlyprofitCohortAndroidOrganicMonthView():
 	sql = """
