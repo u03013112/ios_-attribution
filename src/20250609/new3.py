@@ -367,6 +367,58 @@ GROUP BY
 	execSql2(sql)
 	return
 
+
+# iOS 版本，额外applovin_int 拆分成 applovin_int_d7 和 applovin_int_d28
+# AF 花费、收入数据 24小时版本
+def createAfIosAppMediaCountryCohortCostRevenueMonthyView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		ELSE mediasource
+	END as mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
+FROM
+	dws_overseas_public_roi roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+WHERE
+	roi.app = '502'
+	AND m.month_diff > 0
+	AND roi.facebook_segment IN ('country', 'N/A')
+	AND app_package IN ('id6448786147','id6736925794')
+GROUP BY
+	app_package,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		ELSE mediasource
+	END,
+	ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+
 # AF 花费、收入数据 24小时版本 带Adtype的版本
 def createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView():
 	sql = """
@@ -2120,19 +2172,19 @@ CREATE OR REPLACE VIEW lw_20250703_for_ua_cost_revenue_ios_month_view_by_j AS
 SELECT 
 	* ,
 	'20250804_20' AS tag
-FROM lw_20250703_for_ua_cost_revenue_app_month_view_by_j
+FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
 SELECT 
 	* ,
 	'20250804_30' AS tag
-FROM lw_20250703_for_ua_cost_revenue_app_month_view_by_j
+FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
 SELECT 
 	* ,
 	'20250804_40' AS tag
-FROM lw_20250703_for_ua_cost_revenue_app_month_view_by_j
+FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 ;
 	"""
@@ -3405,24 +3457,105 @@ SELECT
     k.install_month,
     k.kpi_target,
     CASE
+        -- 原有逻辑：applovin折扣
         WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
              AND k.tag = 'for_ua' 
              AND r.applovin_int_other_r1_ratio IS NOT NULL
         THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
+        -- 20250804新增：iOS媒体系数折扣
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d7' 
+             AND b.applovin_int_d7_coeff IS NOT NULL
+        THEN ROUND(k.kpi1 / b.applovin_int_d7_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d28' 
+             AND b.applovin_int_d28_coeff IS NOT NULL
+        THEN ROUND(k.kpi1 / b.applovin_int_d28_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'Facebook Ads' 
+             AND b.facebook_ads_coeff IS NOT NULL
+        THEN ROUND(k.kpi1 / b.facebook_ads_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'moloco_int' 
+             AND b.moloco_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi1 / b.moloco_int_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'bytedanceglobal_int' 
+             AND b.bytedanceglobal_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi1 / b.bytedanceglobal_int_coeff, 4)
         ELSE k.kpi1
     END AS kpi1,
     CASE
+        -- 原有逻辑：applovin折扣
         WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
              AND k.tag = 'for_ua' 
              AND r.applovin_int_other_r3_ratio IS NOT NULL
         THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
+        -- 20250804新增：iOS媒体系数折扣
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d7' 
+             AND b.applovin_int_d7_coeff IS NOT NULL
+        THEN ROUND(k.kpi3 / b.applovin_int_d7_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d28' 
+             AND b.applovin_int_d28_coeff IS NOT NULL
+        THEN ROUND(k.kpi3 / b.applovin_int_d28_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'Facebook Ads' 
+             AND b.facebook_ads_coeff IS NOT NULL
+        THEN ROUND(k.kpi3 / b.facebook_ads_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'moloco_int' 
+             AND b.moloco_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi3 / b.moloco_int_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'bytedanceglobal_int' 
+             AND b.bytedanceglobal_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi3 / b.bytedanceglobal_int_coeff, 4)
         ELSE k.kpi3
     END AS kpi3,
     CASE
+        -- 原有逻辑：applovin折扣
         WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
              AND k.tag = 'for_ua' 
              AND r.applovin_int_other_r7_ratio IS NOT NULL
         THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
+        -- 20250804新增：iOS媒体系数折扣
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d7' 
+             AND b.applovin_int_d7_coeff IS NOT NULL
+        THEN ROUND(k.kpi7 / b.applovin_int_d7_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'applovin_int_d28' 
+             AND b.applovin_int_d28_coeff IS NOT NULL
+        THEN ROUND(k.kpi7 / b.applovin_int_d28_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'Facebook Ads' 
+             AND b.facebook_ads_coeff IS NOT NULL
+        THEN ROUND(k.kpi7 / b.facebook_ads_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'moloco_int' 
+             AND b.moloco_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi7 / b.moloco_int_coeff, 4)
+        WHEN k.app_package = 'id6448786147' 
+             AND k.tag IN ('20250804_20', '20250804_30', '20250804_40')
+             AND k.mediasource = 'bytedanceglobal_int' 
+             AND b.bytedanceglobal_int_coeff IS NOT NULL
+        THEN ROUND(k.kpi7 / b.bytedanceglobal_int_coeff, 4)
         ELSE k.kpi7
     END AS kpi7
 FROM
@@ -3431,6 +3564,9 @@ FROM
         ON k.app_package = r.app_package 
         AND k.install_month = r.install_month 
         AND k.country_group = r.country_group
+    LEFT JOIN lw_20250703_ios_bayesian_result_by_j b
+        ON k.country_group = b.country_group
+        AND k.tag = b.tag
 ORDER BY
     k.app_package,
     k.country_group,
@@ -5453,12 +5589,12 @@ def createViewsAndTables():
 	# createAfAppCostRevenueMonthyView()
 	# createAfCostRevenueMonthyTable()
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
 	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
 	# createGPIRAppMediaCountryCostRevenueMonthyView()
@@ -5492,32 +5628,33 @@ def createViewsAndTables():
 	# createAppLovinRatioView()
 	# createForUaCostRevenueMonthyTable()
 
+	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	createIosTagCostRevenueMonthyView()
 	# 所有的花费、收入数据汇总
 	createCostRevenueMonthyView()
 	createCostRevenueMonthyTable()
 	
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createIosCohortKpiTargetView()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createIosCohortKpiTargetView()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
-	# # 计算收入增长率
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
-	# createPredictRevenueRiseRatioAndkpiTargetView()
+	# 计算收入增长率
+	createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioAndkpiTargetView()
 
 	# 推算KPI
 	createKpiView()
 	createKpiWithDiscountView()
 	createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
 	# 自然量收入占比
 	# createAfAndroidOrganicMonthView()
