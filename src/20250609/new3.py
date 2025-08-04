@@ -3390,6 +3390,9 @@ ORDER BY
 	return
 
 # 针对applovin的kpi进行折扣，解决applovin gpir 部分用户不能归因。
+# 20250804添加，与lw_20250703_ios_bayesian_result_by_j join
+# 然后针对lw_20250703_ios_bayesian_result_by_j中涉及到的媒体进行kpi折扣
+# applovin_int_d7、applovin_int_d28、Facebook Ads、moloco_int、bytedanceglobal_int 的kpi除以对应系数如果join到系数就除以系数，否则除以1或者保持不变）
 def createKpiWithDiscountView():
     sql = """
 CREATE OR REPLACE VIEW lw_20250703_af_kpi_month_with_discount_view_by_j AS
