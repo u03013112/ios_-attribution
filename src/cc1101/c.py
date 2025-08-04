@@ -116,7 +116,8 @@ def hack1(transceiver):
 
 # 新版本test和hack（test2和hack2）
 def test2(transceiver):
-    hex_string = '4bb108'
+    # hex_string = '4bb108'
+    hex_string = '5bb108'
     tx_data = hex2code1527(hex_string)
     for _ in range(2):
         send_data(transceiver, tx_data)
@@ -153,8 +154,8 @@ def main2():
     logging.getLogger("cc1101").setLevel(logging.WARNING)
     transceiver = init_transceiver(frequency=433.92e6, symbol_rate=2700, power=(0, 0xC0))  # 假设新版本更低的symbol_rate
     try:
-        # test2(transceiver)
-        hack2(transceiver)
+        test2(transceiver)
+        # hack2(transceiver)
     finally:
         close_transceiver(transceiver)
 
