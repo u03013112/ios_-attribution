@@ -4043,6 +4043,24 @@ ORDER BY
     return
 
 
+# 自然量估测
+# sql 逻辑参考createAfCohorotIosOrganicMonthView函数
+# 主要区别：1、applovin_int 拆分成 applovin_int_d7 和 applovin_int_d28；2、使用 lw_20250703_ios_bayesian_result_by_j 中的倍率系数
+# 读取lw_20250703_ios_bayesian_result_by_j中的所有分区（tag）
+# 获得媒体倍率，其中tag 是 20250804_20、20250804_30、20250804_40，作为分组，最后输出列中的tag就沿用这个tag
+# 获取每个国家分组，每个月的分媒体120日收入（revenue_cohort_d120）
+# 其中 applovin_int_d7、applovin_int_d28、Facebook Ads、moloco_int、bytedanceglobal_int 的收入要乘以对应的系数
+# 其他媒体收入不变
+# 后续计算organic_revenue_d120逻辑与createAfCohorotIosOrganicMonthView函数一致
+def createAfCohorotIos20250804OrganicMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250804_af_cohort_ios_organic_revenue_ratio_month_view_by_j AS
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 def createOrganicMonthTable():
     sql = """
 DROP TABLE IF EXISTS lw_20250718_android_organic_revenue_ratio_month_table_by_j;
