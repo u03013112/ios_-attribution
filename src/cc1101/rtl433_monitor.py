@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RTL433 信号监控脚本 - 基于时间的模式切换版
+RTL433 信号监控脚本 - 小时级模式控制版
 功能：
 1. 启动rtl_433进程进行信号录制
 2. 定期检查录制目录的新文件
 3. 统计文件数量和大小
 4. 发送通知到飞书webhook
-5. 基于时间的双模式切换（高效30分钟/节能10分钟）
-6. 工作时间控制（0:00-6:00休息）
+5. 基于小时的精确模式控制（关闭/高功率/低功率/混合）
+6. 忽略模式切换后1分钟内的信号
 7. 自动偏置电源管理
 """
 
@@ -35,15 +35,41 @@ class RTL433Monitor:
         self.running = True
         
         # 模式控制
-        self.current_mode = "high_performance"  # high_performance 或 energy_saving
+        self.current_mode = "off"  # off, high_power, low_power, mixed
+        self.current_sub_mode = None  # 在mixed模式下的当前子模式
         self.mode_start_time = time.time()
-        self.high_performance_duration = 30 * 60  # 高效模式30分钟
-        self.energy_saving_duration = 10 * 60     # 节能模式10分钟
-        self.is_working_hours = False
+        self.mixed_switch_interval = 10 * 60  # 混合模式下10分钟切换一次
+        self.ignore_signals_duration = 60  # 切换后忽略信号的时间（秒）
+        self.last_mode_switch_time = 0
         
-        # 工作时间设置 (24小时制)
-        self.rest_start_hour = 1   # 0:00开始休息
-        self.rest_end_hour = 6     # 6:00结束休息
+        # 24小时模式配置 (0-23小时)
+        # 'off': 关闭, 'high': 纯高功率, 'low': 纯低功率, 'mixed': 混合模式
+        self.hourly_schedule = {
+            0: 'off',      # 00:00-01:00 关闭
+            1: 'off',      # 01:00-02:00 关闭
+            2: 'off',      # 02:00-03:00 关闭
+            3: 'off',      # 03:00-04:00 关闭
+            4: 'off',      # 04:00-05:00 关闭
+            5: 'off',      # 05:00-06:00 关闭
+            6: 'high',     # 06:00-07:00 纯高功率
+            7: 'high',     # 07:00-08:00 纯高功率
+            8: 'mixed',    # 08:00-09:00 混合模式
+            9: 'mixed',    # 09:00-10:00 混合模式
+            10: 'high',    # 10:00-11:00 纯高功率
+            11: 'high',    # 11:00-12:00 纯高功率
+            12: 'mixed',   # 12:00-13:00 混合模式
+            13: 'mixed',   # 13:00-14:00 混合模式
+            14: 'high',    # 14:00-15:00 纯高功率
+            15: 'high',    # 15:00-16:00 纯高功率
+            16: 'mixed',   # 16:00-17:00 混合模式
+            17: 'mixed',   # 17:00-18:00 混合模式
+            18: 'high',    # 18:00-19:00 纯高功率
+            19: 'high',    # 19:00-20:00 纯高功率
+            20: 'mixed',   # 20:00-21:00 混合模式
+            21: 'low',     # 21:00-22:00 纯低功率
+            22: 'low',     # 22:00-23:00 纯低功率
+            23: 'low',     # 23:00-24:00 纯低功率
+        }
         
         # 创建工作目录
         self.work_dir.mkdir(exist_ok=True)
@@ -58,21 +84,44 @@ class RTL433Monitor:
         """程序退出时关闭偏置电源"""
         try:
             print(f"[{datetime.now()}] 正在关闭偏置电源...")
-            subprocess.run(['rtl_biast', '-b', '0'], 
-                         capture_output=True, timeout=5)
-            print(f"[{datetime.now()}] 偏置电源已关闭")
+            result = subprocess.run(['rtl_biast', '-b', '0'], 
+                                  capture_output=True, timeout=5)
+            if result.returncode == 0:
+                print(f"[{datetime.now()}] 偏置电源已关闭")
+            else:
+                print(f"[{datetime.now()}] 偏置电源关闭命令执行，返回码: {result.returncode}")
         except Exception as e:
             print(f"[{datetime.now()}] 关闭偏置电源失败: {e}")
-
-    def check_working_hours(self):
-        """检查是否在工作时间"""
-        current_time = datetime.now().time()
-        current_hour = current_time.hour
-        
-        # 判断是否在休息时间 (0:00-6:00)
-        if self.rest_start_hour <= current_hour < self.rest_end_hour:
+    
+    def set_bias_tee(self, enable):
+        """设置偏置电源状态"""
+        try:
+            state = '1' if enable else '0'
+            result = subprocess.run(['rtl_biast', '-b', state], 
+                                  capture_output=True, timeout=5)
+            action = "开启" if enable else "关闭"
+            if result.returncode == 0:
+                print(f"[{datetime.now()}] 偏置电源已{action}")
+                return True
+            else:
+                print(f"[{datetime.now()}] 偏置电源{action}失败，返回码: {result.returncode}")
+                return False
+        except Exception as e:
+            print(f"[{datetime.now()}] 设置偏置电源失败: {e}")
             return False
-        return True
+
+    def get_current_schedule_mode(self):
+        """获取当前小时应该使用的模式"""
+        current_hour = datetime.now().hour
+        return self.hourly_schedule.get(current_hour, 'off')
+    
+    def should_ignore_signal(self):
+        """检查是否应该忽略当前信号（刚切换模式后1分钟内）"""
+        if self.last_mode_switch_time == 0:
+            return False
+        
+        time_since_switch = time.time() - self.last_mode_switch_time
+        return time_since_switch < self.ignore_signals_duration
 
     def sendMessageToWebhook2(self, title, text, aText="", aUrl="", webhook=None):
         """发送消息到飞书webhook"""
@@ -84,15 +133,24 @@ class RTL433Monitor:
             return
             
         # 在消息中添加当前模式信息
-        mode_emoji = "🚀" if self.current_mode == "high_performance" else "🧊"
-        mode_text = "高效模式" if self.current_mode == "high_performance" else "节能模式"
-        mode_info = f"\n⚙️ 当前模式: {mode_text} {mode_emoji}"
+        schedule_mode = self.get_current_schedule_mode()
+        if schedule_mode == 'off':
+            mode_info = "\n⚙️ 当前模式: 关闭模式 ⏹️"
+        elif schedule_mode == 'high':
+            mode_info = "\n⚙️ 当前模式: 纯高功率模式 🚀"
+        elif schedule_mode == 'low':
+            mode_info = "\n⚙️ 当前模式: 纯低功率模式 🧊"
+        elif schedule_mode == 'mixed':
+            sub_mode = "高功率" if self.current_sub_mode == "high_power" else "低功率"
+            mode_info = f"\n⚙️ 当前模式: 混合模式 ({sub_mode}) 🔄"
+        else:
+            mode_info = f"\n⚙️ 当前模式: {schedule_mode}"
         
-        # 添加工作状态信息
-        work_status = "工作中" if self.is_working_hours else "休息中"
-        work_info = f"\n⏰ 工作状态: {work_status}"
+        # 添加当前时间信息
+        current_hour = datetime.now().hour
+        time_info = f"\n⏰ 当前时间: {datetime.now().strftime('%H:%M')} (第{current_hour}小时)"
         
-        text_with_info = text + mode_info + work_info
+        text_with_info = text + mode_info + time_info
             
         url = webhook
         headers = {'Content-Type': 'application/json'}
@@ -154,8 +212,8 @@ class RTL433Monitor:
         
         return f"{size_bytes:.2f} {size_names[i]}"
     
-    def get_rtl433_command(self, mode="high_performance"):
-        """根据模式获取rtl433命令"""
+    def get_rtl433_command(self, power_mode="high_power"):
+        """根据功率模式获取rtl433命令"""
         base_cmd = [
             "rtl_433",
             "-f", "433920000",
@@ -165,15 +223,15 @@ class RTL433Monitor:
             "-M", "level"
         ]
         
-        if mode == "high_performance":
-            # 高效模式：启用偏置电源
+        if power_mode == "high_power":
+            # 高功率模式：启用偏置电源
             cmd = base_cmd + [
                 "-t", "biastee=1,offset_tune=1",
                 "-g", "49.6",
                 "-Y", "level=-25"
             ]
-        else:  # energy_saving mode
-            # 节能模式：只关闭偏置电源，其他参数相同
+        else:  # low_power mode
+            # 低功率模式：关闭偏置电源
             cmd = base_cmd + [
                 "-t", "offset_tune=1",
                 "-g", "49.6",
@@ -182,24 +240,27 @@ class RTL433Monitor:
         
         return cmd
     
-    def start_rtl433(self, mode=None):
+    def start_rtl433(self, power_mode="high_power"):
         """启动rtl_433进程"""
-        if mode is None:
-            mode = self.current_mode
-            
-        cmd = self.get_rtl433_command(mode)
+        cmd = self.get_rtl433_command(power_mode)
         
         try:
             # 切换到工作目录
             os.chdir(self.work_dir)
             
-            mode_text = "高效模式" if mode == "high_performance" else "节能模式"
-            print(f"[{datetime.now()}] 启动RTL433监听 ({mode_text})...")
+            power_text = "高功率" if power_mode == "high_power" else "低功率"
+            print(f"[{datetime.now()}] 启动RTL433监听 ({power_text}模式)...")
             print(f"[{datetime.now()}] 工作目录: {self.work_dir}")
             print(f"[{datetime.now()}] 命令: {' '.join(cmd)}")
             
+            # 设置偏置电源
+            if power_mode == "high_power":
+                self.set_bias_tee(True)
+            else:
+                self.set_bias_tee(False)
+            
             # 启动进程，重定向输出到日志文件
-            log_file = self.work_dir / f"rtl433_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{mode}.log"
+            log_file = self.work_dir / f"rtl433_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{power_mode}.log"
             with open(log_file, 'w') as f:
                 self.rtl433_process = subprocess.Popen(
                     cmd,
@@ -208,19 +269,21 @@ class RTL433Monitor:
                     cwd=self.work_dir
                 )
             
-            self.current_mode = mode
+            self.current_sub_mode = power_mode
             self.mode_start_time = time.time()
+            self.last_mode_switch_time = time.time()
             
             # 发送启动通知
-            bias_status = "开启" if mode == "high_performance" else "关闭"
+            bias_status = "开启" if power_mode == "high_power" else "关闭"
             
             self.sendMessageToWebhook2(
-                f"🎯 RTL433监听已启动 ({mode_text})",
+                f"🎯 RTL433监听已启动 ({power_text}模式)",
                 f"监听频率: 433.92MHz\n"
                 f"采样率: 250kHz\n"
                 f"工作目录: {self.work_dir}\n"
                 f"日志文件: {log_file.name}\n"
-                f"偏置电源: {bias_status}",
+                f"偏置电源: {bias_status}\n"
+                f"注意: 切换后1分钟内的信号将被忽略",
                 "查看详情", 
                 f"file://{log_file}"
             )
@@ -235,96 +298,112 @@ class RTL433Monitor:
             )
             return False
     
-    def should_switch_mode(self):
-        """检查是否应该切换模式"""
-        current_time = time.time()
-        running_time = current_time - self.mode_start_time
-        
-        if self.current_mode == "high_performance":
-            # 高效模式运行30分钟后切换到节能模式
-            return running_time >= self.high_performance_duration
-        else:
-            # 节能模式运行10分钟后切换到高效模式
-            return running_time >= self.energy_saving_duration
-    
-    def switch_mode(self):
-        """切换工作模式"""
-        old_mode = self.current_mode
-        new_mode = "energy_saving" if old_mode == "high_performance" else "high_performance"
-        
-        running_time = time.time() - self.mode_start_time
-        running_minutes = int(running_time / 60)
-        
-        print(f"[{datetime.now()}] 切换模式: {old_mode} -> {new_mode}, 运行时间: {running_minutes}分钟")
-        
-        # 停止当前进程
+    def stop_rtl433(self):
+        """停止rtl433进程"""
         if self.rtl433_process:
+            print(f"[{datetime.now()}] 停止RTL433进程...")
             self.rtl433_process.terminate()
             try:
                 self.rtl433_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.rtl433_process.kill()
+            self.rtl433_process = None
         
-        # 如果从高效模式切换到节能模式，需要关闭偏置电源
-        if old_mode == "high_performance" and new_mode == "energy_saving":
-            self.cleanup_bias_tee()
-            time.sleep(1)  # 等待1秒
+        # 关闭偏置电源
+        self.set_bias_tee(False)
+    
+    def should_switch_in_mixed_mode(self):
+        """在混合模式下检查是否应该切换子模式"""
+        if self.get_current_schedule_mode() != 'mixed':
+            return False
         
-        # 启动新模式
-        if self.start_rtl433(new_mode):
-            old_mode_text = "高效模式" if old_mode == "high_performance" else "节能模式"
-            new_mode_text = "高效模式" if new_mode == "high_performance" else "节能模式"
-            
-            next_switch_minutes = 30 if new_mode == "high_performance" else 10
+        running_time = time.time() - self.mode_start_time
+        return running_time >= self.mixed_switch_interval
+    
+    def switch_sub_mode(self):
+        """在混合模式下切换子模式"""
+        if not self.rtl433_process:
+            return
+        
+        old_sub_mode = self.current_sub_mode
+        new_sub_mode = "low_power" if old_sub_mode == "high_power" else "high_power"
+        
+        running_time = time.time() - self.mode_start_time
+        running_minutes = int(running_time / 60)
+        
+        print(f"[{datetime.now()}] 混合模式切换: {old_sub_mode} -> {new_sub_mode}, 运行时间: {running_minutes}分钟")
+        
+        # 停止当前进程
+        self.stop_rtl433()
+        time.sleep(1)  # 等待1秒
+        
+        # 启动新的子模式
+        if self.start_rtl433(new_sub_mode):
+            old_text = "高功率" if old_sub_mode == "high_power" else "低功率"
+            new_text = "高功率" if new_sub_mode == "high_power" else "低功率"
             
             self.sendMessageToWebhook2(
-                f"🔄 模式切换: {old_mode_text} → {new_mode_text}",
-                f"上一模式运行时间: {running_minutes}分钟\n"
-                f"新模式将运行: {next_switch_minutes}分钟\n"
-                f"切换时间: {datetime.now().strftime('%H:%M:%S')}"
+                f"🔄 混合模式切换: {old_text} → {new_text}",
+                f"上一子模式运行时间: {running_minutes}分钟\n"
+                f"新子模式将运行: 10分钟\n"
+                f"切换时间: {datetime.now().strftime('%H:%M:%S')}\n"
+                f"注意: 切换后1分钟内的信号将被忽略"
             )
     
-    def check_working_hours_and_control(self):
-        """检查工作时间并控制进程"""
-        should_work = self.check_working_hours()
-        if should_work and not self.is_working_hours:
-            # 从休息转为工作
-            self.is_working_hours = True
-            
-            self.sendMessageToWebhook2(
-                "⏰ 工作时间开始",
-                f"当前时间: {datetime.now().strftime('%H:%M:%S')}\n"
-                f"开始工作，启动信号监听\n"
-                f"工作时间: 6:00-24:00"
-            )
-            
-            # 启动rtl433（默认高效模式）
-            self.current_mode = "high_performance"
-            self.start_rtl433()
-            
-        elif not should_work and self.is_working_hours:
-            # 从工作转为休息
-            self.is_working_hours = False
-            
-            # 停止rtl433进程
+    def check_schedule_and_control(self):
+        """检查时间表并控制进程"""
+        required_mode = self.get_current_schedule_mode()
+        
+        if required_mode == 'off':
+            # 需要关闭
             if self.rtl433_process:
-                self.rtl433_process.terminate()
-                try:
-                    self.rtl433_process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    self.rtl433_process.kill()
-                self.rtl433_process = None
+                self.stop_rtl433()
+                self.sendMessageToWebhook2(
+                    "⏹️ 进入关闭模式",
+                    f"当前时间: {datetime.now().strftime('%H:%M:%S')}\n"
+                    f"根据时间表，当前小时应该关闭\n"
+                    f"偏置电源已关闭"
+                )
+                self.current_mode = 'off'
+        
+        elif required_mode in ['high', 'low']:
+            # 需要纯模式
+            power_mode = "high_power" if required_mode == 'high' else "low_power"
             
-            # 关闭偏置电源
-            self.cleanup_bias_tee()
-            
-            self.sendMessageToWebhook2(
-                "😴 进入休息时间",
-                f"当前时间: {datetime.now().strftime('%H:%M:%S')}\n"
-                f"停止工作，进入休息模式\n"
-                f"休息时间: 0:00-6:00\n"
-                f"偏置电源已关闭"
-            )
+            if not self.rtl433_process or self.current_mode != required_mode:
+                if self.rtl433_process:
+                    self.stop_rtl433()
+                
+                self.start_rtl433(power_mode)
+                self.current_mode = required_mode
+                
+                mode_text = "纯高功率" if required_mode == 'high' else "纯低功率"
+                self.sendMessageToWebhook2(
+                    f"⚡ 切换到{mode_text}模式",
+                    f"当前时间: {datetime.now().strftime('%H:%M:%S')}\n"
+                    f"根据时间表，当前小时使用{mode_text}模式"
+                )
+        
+        elif required_mode == 'mixed':
+            # 需要混合模式
+            if self.current_mode != 'mixed':
+                if self.rtl433_process:
+                    self.stop_rtl433()
+                
+                # 混合模式默认从高功率开始
+                self.start_rtl433("high_power")
+                self.current_mode = 'mixed'
+                
+                self.sendMessageToWebhook2(
+                    "🔄 切换到混合模式",
+                    f"当前时间: {datetime.now().strftime('%H:%M:%S')}\n"
+                    f"根据时间表，当前小时使用混合模式\n"
+                    f"开始子模式: 高功率 (10分钟后切换到低功率)"
+                )
+            else:
+                # 已经在混合模式，检查是否需要切换子模式
+                if self.should_switch_in_mixed_mode():
+                    self.switch_sub_mode()
     
     def check_new_files(self):
         """检查新文件"""
@@ -343,6 +422,15 @@ class RTL433Monitor:
             new_files = current_files - self.known_files
             
             if new_files:
+                # 检查是否应该忽略信号
+                if self.should_ignore_signal():
+                    print(f"[{datetime.now()}] 忽略 {len(new_files)} 个新文件（刚切换模式）")
+                    # 更新已知文件但不发送通知
+                    self.known_files.update(new_files)
+                    self.total_files = len(current_files)
+                    self.total_size = current_total_size
+                    return
+                
                 new_files_info = []
                 new_files_size = 0
                 
@@ -402,34 +490,37 @@ class RTL433Monitor:
             else:
                 process_status = f"🔴 已停止 (退出码: {self.rtl433_process.returncode})"
         else:
-            if self.is_working_hours:
-                process_status = "⚪ 未启动"
-            else:
-                process_status = "😴 休息中"
+            process_status = "⏹️ 已关闭"
         
         # 磁盘使用情况
         disk_usage = os.statvfs(self.work_dir)
         free_space = disk_usage.f_frsize * disk_usage.f_available
         
-        # 工作状态和模式信息
-        work_status = "工作中" if self.is_working_hours else "休息中 (0:00-6:00)"
-        mode_text = "高效模式" if self.current_mode == "high_performance" else "节能模式"
+        # 当前模式信息
+        schedule_mode = self.get_current_schedule_mode()
+        current_hour = datetime.now().hour
         
-        # 计算当前模式剩余时间
-        if self.is_working_hours and self.rtl433_process:
-            running_time = time.time() - self.mode_start_time
-            if self.current_mode == "high_performance":
-                remaining_time = max(0, self.high_performance_duration - running_time)
+        if schedule_mode == 'off':
+            mode_info = "关闭模式"
+        elif schedule_mode == 'high':
+            mode_info = "纯高功率模式"
+        elif schedule_mode == 'low':
+            mode_info = "纯低功率模式"
+        elif schedule_mode == 'mixed':
+            if self.rtl433_process:
+                running_time = time.time() - self.mode_start_time
+                remaining_time = max(0, self.mixed_switch_interval - running_time)
+                remaining_minutes = int(remaining_time / 60)
+                sub_mode = "高功率" if self.current_sub_mode == "high_power" else "低功率"
+                mode_info = f"混合模式 ({sub_mode}, 剩余{remaining_minutes}分钟)"
             else:
-                remaining_time = max(0, self.energy_saving_duration - running_time)
-            remaining_minutes = int(remaining_time / 60)
-            mode_info = f"{mode_text} (剩余{remaining_minutes}分钟)"
+                mode_info = "混合模式 (未运行)"
         else:
-            mode_info = mode_text
+            mode_info = f"未知模式: {schedule_mode}"
         
         message = (f"📈 RTL433监控状态报告\n\n"
                   f"🔧 进程状态: {process_status}\n"
-                  f"⏰ 工作状态: {work_status}\n"
+                  f"⏰ 当前时间: {datetime.now().strftime('%H:%M')} (第{current_hour}小时)\n"
                   f"⚙️ 当前模式: {mode_info}\n"
                   f"📁 工作目录: {self.work_dir}\n"
                   f"📊 已捕获: {self.total_files} 个信号文件\n"
@@ -449,32 +540,30 @@ class RTL433Monitor:
         last_status_time = time.time()
         status_interval = 3600  # 每小时发送一次状态报告
         
-        # 初始检查工作时间
-        self.check_working_hours_and_control()
+        # 初始检查时间表
+        self.check_schedule_and_control()
         
         while self.running:
             try:
-                # 检查工作时间
-                self.check_working_hours_and_control()
+                # 检查时间表和模式控制
+                self.check_schedule_and_control()
                 
-                # 只在工作时间进行以下检查
-                if self.is_working_hours:
-                    # 检查是否需要切换模式
-                    if self.should_switch_mode():
-                        self.switch_mode()
-                    
+                # 只在有进程运行时检查文件
+                if self.rtl433_process:
                     # 检查新文件
                     self.check_new_files()
                     
                     # 检查rtl433进程是否还在运行
-                    if self.rtl433_process and self.rtl433_process.poll() is not None:
+                    if self.rtl433_process.poll() is not None:
                         print(f"[{datetime.now()}] RTL433进程意外退出，尝试重启...")
                         self.sendMessageToWebhook2(
                             "⚠️ RTL433进程异常",
                             f"进程意外退出，退出码: {self.rtl433_process.returncode}\n正在尝试重启..."
                         )
+                        self.rtl433_process = None
                         time.sleep(5)
-                        self.start_rtl433()
+                        # 重新检查时间表来决定是否重启
+                        self.check_schedule_and_control()
                 
                 # 检查是否需要发送状态报告
                 current_time = time.time()
@@ -496,19 +585,8 @@ class RTL433Monitor:
         """停止监控"""
         self.running = False
         
-        if self.rtl433_process:
-            print(f"[{datetime.now()}] 正在停止RTL433进程...")
-            self.rtl433_process.terminate()
-            
-            # 等待进程结束
-            try:
-                self.rtl433_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                print(f"[{datetime.now()}] 强制结束RTL433进程...")
-                self.rtl433_process.kill()
-        
-        # 关闭偏置电源
-        self.cleanup_bias_tee()
+        # 停止rtl433进程
+        self.stop_rtl433()
         
         # 发送停止通知
         self.sendMessageToWebhook2(
@@ -552,8 +630,25 @@ def main():
         webhook_url=testWebhookUrl
     )
     
+    # 发送启动通知，包含时间表信息
+    schedule_info = "📅 24小时时间表:\n"
+    for hour in range(24):
+        mode = monitor.hourly_schedule[hour]
+        mode_text = {
+            'off': '关闭',
+            'high': '高功率',
+            'low': '低功率',
+            'mixed': '混合'
+        }.get(mode, mode)
+        schedule_info += f"{hour:02d}:00-{(hour+1)%24:02d}:00 {mode_text}\n"
+    
+    monitor.sendMessageToWebhook2(
+        "🚀 RTL433监控系统启动",
+        f"系统已启动，开始按时间表运行\n\n{schedule_info}"
+    )
+    
     try:
-        # 开始监控循环（会自动判断是否启动rtl433）
+        # 开始监控循环
         monitor.monitor_loop()
             
     except Exception as e:
