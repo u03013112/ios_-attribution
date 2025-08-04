@@ -4046,8 +4046,9 @@ ORDER BY
 # 自然量估测
 # sql 逻辑参考createAfCohorotIosOrganicMonthView函数
 # 主要区别：1、applovin_int 拆分成 applovin_int_d7 和 applovin_int_d28；2、使用 lw_20250703_ios_bayesian_result_by_j 中的倍率系数
-# 读取lw_20250703_ios_bayesian_result_by_j中的所有分区（tag）
-# 获得媒体倍率，其中tag 是 20250804_20、20250804_30、20250804_40，作为分组，最后输出列中的tag就沿用这个tag
+# lw_20250703_ios_bayesian_result_by_j 创建CREATE TABLE IF NOT EXISTS rg_bi.lw_20250703_ios_bayesian_result_by_j(country_group STRING COMMENT '国家组', organic_revenue DOUBLE COMMENT '自然量收入', applovin_int_d7_coeff DOUBLE COMMENT 'applovin_int_d7系数', applovin_int_d28_coeff DOUBLE COMMENT 'applovin_int_d28系数', facebook_ads_coeff DOUBLE COMMENT 'Facebook Ads系数', moloco_int_coeff DOUBLE COMMENT 'moloco_int系数', bytedanceglobal_int_coeff DOUBLE COMMENT 'bytedanceglobal_int系数') PARTITIONED BY (tag STRING COMMENT '标签分区，格式：20250804_{organic_ratio}') STORED AS ALIORC TBLPROPERTIES ('columnar.nested.type'='true');
+# lw_20250703_ios_bayesian_result_by_j 是./mohuCountry.py中创建的，详见源文件
+# 获得媒体倍率，其中分区列：tag 是 20250804_20、20250804_30、20250804_40，作为分组，最后输出列中的tag就沿用这个tag
 # 获取每个国家分组，每个月的分媒体120日收入（revenue_cohort_d120）
 # 其中 applovin_int_d7、applovin_int_d28、Facebook Ads、moloco_int、bytedanceglobal_int 的收入要乘以对应的系数
 # 其他媒体收入不变
