@@ -440,6 +440,129 @@ def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs
     
     return mape
 
+
+def create_result_table():
+    """创建结果表（分区表）"""
+    from odps.models import Schema, Column, Partition
+    
+    o = getO()
+    
+    # 定义表结构（不包含tag，因为tag将作为分区）
+    columns = [
+        Column(name='country_group', type='string', comment='国家组'),
+        Column(name='organic_revenue', type='double', comment='自然量收入'),
+        Column(name='applovin_int_d7_coeff', type='double', comment='applovin_int_d7系数'),
+        Column(name='applovin_int_d28_coeff', type='double', comment='applovin_int_d28系数'),
+        Column(name='facebook_ads_coeff', type='double', comment='Facebook Ads系数'),
+        Column(name='moloco_int_coeff', type='double', comment='moloco_int系数'),
+        Column(name='bytedanceglobal_int_coeff', type='double', comment='bytedanceglobal_int系数')
+    ]
+    
+    # 定义分区（tag作为分区字段）
+    partitions = [
+        Partition(name='tag', type='string', comment='标签分区，格式：20250804_{organic_ratio}')
+    ]
+    
+    schema = Schema(columns=columns, partitions=partitions)
+    
+    # 创建表
+    table_name = 'lw_20250703_ios_bayesian_result_by_j'
+    try:
+        table = o.create_table(table_name, schema, if_not_exists=True)
+        print(f"分区表 {table_name} 创建成功或已存在")
+        return table
+    except Exception as e:
+        print(f"创建表失败: {e}")
+        return None
+
+
+def write_results_to_odps(allResultsDf):
+    """将所有结果写入ODPS数据库（分区表）"""
+    if allResultsDf.empty:
+        print("没有数据需要写入")
+        return
+    
+    # 创建表（如果不存在）
+    table = create_result_table()
+    if table is None:
+        print("无法创建表，写入失败")
+        return
+    
+    try:
+        # 获取ODPS连接
+        o = getO()
+        table = o.get_table('lw_20250703_ios_bayesian_result_by_j')
+        
+        # 按tag分组，为每个tag创建分区并写入数据
+        tag_groups = allResultsDf.groupby('organic_ratio')
+        
+        for organic_ratio, group_df in tag_groups:
+            # 生成tag：20250804_{organic_ratio}
+            organic_ratio_str = f"{organic_ratio:.0%}".replace('%', '')  # 20% -> 20
+            tag = f"20250804_{organic_ratio_str}"
+            
+            print(f"处理分区: {tag}")
+            
+            # 准备写入的数据（不包含tag列，因为tag是分区字段）
+            write_data = []
+            
+            for _, row in group_df.iterrows():
+                data_row = {
+                    'country_group': row['country'],
+                    'organic_revenue': row['organic_revenue_mean'],
+                    'applovin_int_d7_coeff': row.get('applovin_int_d7_coeff', 1.0),
+                    'applovin_int_d28_coeff': row.get('applovin_int_d28_coeff', 1.0),
+                    'facebook_ads_coeff': row.get('Facebook Ads_coeff', 1.0),
+                    'moloco_int_coeff': row.get('moloco_int_coeff', 1.0),
+                    'bytedanceglobal_int_coeff': row.get('bytedanceglobal_int_coeff', 1.0)
+                }
+                write_data.append(data_row)
+            
+            # 转换为DataFrame
+            write_df = pd.DataFrame(write_data)
+            
+            # 删除已存在的分区（如果存在）
+            try:
+                table.delete_partition(f"tag='{tag}'", if_exists=True)
+                print(f"已删除分区: tag='{tag}'")
+            except Exception as e:
+                print(f"删除分区失败（可能不存在）: {e}")
+            
+            # 创建新分区
+            try:
+                table.create_partition(f"tag='{tag}'", if_not_exists=True)
+                print(f"已创建分区: tag='{tag}'")
+            except Exception as e:
+                print(f"创建分区失败: {e}")
+                continue
+            
+            # 写入数据到分区
+            try:
+                with table.open_writer(partition=f"tag='{tag}'", arrow=True) as writer:
+                    writer.write(write_df)
+                
+                print(f"成功写入 {len(write_df)} 条记录到分区 tag='{tag}'")
+                print(f"分区 {tag} 数据预览:")
+                print(write_df.head())
+                print("-" * 50)
+                
+            except Exception as e:
+                print(f"写入分区 {tag} 失败: {e}")
+                # 保存到本地作为备份
+                backup_filename = f'/src/data/odps_backup_{tag}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                write_df.to_csv(backup_filename, index=False)
+                print(f"分区 {tag} 数据已备份到: {backup_filename}")
+        
+        print(f"\n所有分区写入完成！")
+        
+    except Exception as e:
+        print(f"写入ODPS失败: {e}")
+        # 保存到本地作为备份
+        backup_filename = f'/src/data/odps_backup_all_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        allResultsDf.to_csv(backup_filename, index=False)
+        print(f"所有数据已备份到: {backup_filename}")
+
+
 def main():
     startDayStr = '20240729'
     endDayStr = '20250729'
@@ -448,8 +571,6 @@ def main():
     # 进行适度过滤，install_day > '20250101'
     df = df[df['install_day'] >= '20250101']
     
-    # df.tail(100).to_csv(f'/src/data/iOS20250729_Debug_{startDayStr}_{endDayStr}.csv', index=False)
-
     # 只保留必要的列：install_day, country_group, total_revenue_h168 和所有媒体收入列
     keepColumns = ['install_day', 'country_group', 'total_revenue_h168']
     mediaColumns = [col for col in df.columns if col.startswith('af_') and col.endswith('_revenue_h168')]
@@ -460,35 +581,68 @@ def main():
 
     countryList = df['country_group'].unique()
     # for quick test，测试完成后，注释下面一行
-    countryList = ['US']
+    # countryList = ['US']
 
     mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
 
+    # 用于存储所有国家的所有结果（包括20%, 30%, 40%三种情况）
+    allResults = []
+    
     for country in countryList:
+        print(f"\n{'='*60}")
+        print(f"开始处理国家: {country}")
+        print(f"{'='*60}")
+        
         calculate_media_attribution(df, country)
 
         # 贝叶斯拟合
         resultDf = bayesian_fit_media_coefficients(df, country, mediaList)
         
         if resultDf is not None:
-            # 分析结果
+            # 分析结果（获取最佳结果用于验算）
             bestResult = analyze_results(resultDf, country)
             
             # 使用最佳结果进行按周和按月的验算
             weekly_mape, monthly_mape = validate_model_by_period(df, country, bestResult, mediaList)
             
-            # 将验算结果添加到最佳结果中
-            bestResult['weekly_mape'] = weekly_mape
-            bestResult['monthly_mape'] = monthly_mape
+            # 将所有结果（20%, 30%, 40%）添加到列表中
+            for _, row in resultDf.iterrows():
+                # 为每个结果添加验算信息（使用最佳结果的验算结果）
+                row_dict = row.to_dict()
+                row_dict['weekly_mape'] = weekly_mape
+                row_dict['monthly_mape'] = monthly_mape
+                allResults.append(row_dict)
             
-            # 保存结果
+            # 保存单个国家的所有结果
             resultDf.to_csv(f'/src/data/bayesian_fit_result_{country}_{startDayStr}_{endDayStr}.csv', index=False)
             
             # 保存包含验算结果的最佳方案
             best_result_with_validation = pd.DataFrame([bestResult])
             best_result_with_validation.to_csv(f'/src/data/best_result_with_validation_{country}_{startDayStr}_{endDayStr}.csv', index=False)
+    
+    # 合并所有国家的所有结果
+    if allResults:
+        allResultsDf = pd.DataFrame(allResults)
+        
+        # 保存合并后的所有结果
+        combined_filename = f'/src/data/combined_all_results_{startDayStr}_{endDayStr}.csv'
+        allResultsDf.to_csv(combined_filename, index=False)
+        print(f"\n所有国家的结果已合并保存到: {combined_filename}")
+        print(f"总共处理了 {len(allResultsDf)} 条记录")
+        
+        # 调用write_results_to_odps将合并后的结果写入数据库
+        print(f"\n开始将合并后的结果写入ODPS数据库...")
+        write_results_to_odps(allResultsDf)
+        
+        print(f"\n=== 处理完成 ===")
+        print(f"处理的国家数量: {len(countryList)}")
+        print(f"总记录数: {len(allResultsDf)}")
+        print(f"数据已保存到本地文件: {combined_filename}")
+        print(f"数据已写入ODPS表: lw_20250703_ios_bayesian_result_by_j")
+        
+    else:
+        print("警告: 没有生成任何结果数据")
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
