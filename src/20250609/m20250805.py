@@ -118,8 +118,90 @@ def getAfData(df, mediaList):
 # 简单估计google的收入 = 所有有花费媒体收入 * google的花费 / 所有有花费媒体的花费
 # 其中有花费媒体可以通过getMediaList(df)获取
 # 最后将修正后的数值，直接赋值给afDf['af_googleadwords_int_revenue_h168']
-def fixAfDataForGoogle(afDf):
-    pass
+def fixAfDataForGoogle(afDf, mediaList):
+    """
+    修正AF数据中Google的收入数据
+    由于Google没有模糊归因，但花费很高，需要估算其收入
+    估算方法：Google收入 = 付费媒体收入(排除Google) * Google花费 / 付费媒体花费(排除Google)
+    """
+    # 检查是否存在Google相关列
+    google_cost_col = 'af_googleadwords_int_cost'
+    google_revenue_col = 'af_googleadwords_int_revenue_h168'
+    
+    if google_cost_col not in afDf.columns:
+        print("警告: 未找到Google花费数据列，跳过修正")
+        return afDf
+    
+    # 从mediaList中获取付费媒体列表，排除Google
+    if len(mediaList) == 0:
+        print("警告: mediaList为空，跳过修正")
+        return afDf
+    
+    # 构建付费媒体的花费和收入列名（都排除Google）
+    cost_columns = []
+    revenue_columns = []
+    
+    for media in mediaList:
+        # 排除Google媒体
+        if media != 'googleadwords_int':
+            cost_col = f'af_{media}_cost'
+            revenue_col = f'af_{media}_revenue_h168'
+            
+            # 花费列（排除Google）
+            if cost_col in afDf.columns:
+                cost_columns.append(cost_col)
+            
+            # 收入列（排除Google）
+            if revenue_col in afDf.columns:
+                revenue_columns.append(revenue_col)
+    
+    if not cost_columns or not revenue_columns:
+        print("警告: 未找到付费媒体（排除Google）的花费或收入数据，跳过修正")
+        return afDf
+    
+    # 使用向量化操作计算Google的估算收入
+    # 计算付费媒体总花费（排除Google）
+    afDf['temp_total_cost'] = afDf[cost_columns].sum(axis=1)
+    
+    # 计算付费媒体总收入（排除Google）
+    afDf['temp_total_revenue'] = afDf[revenue_columns].sum(axis=1)
+    
+    # 获取Google的花费
+    google_cost = afDf[google_cost_col].fillna(0)
+    
+    # 计算Google估算收入：只有当其他媒体有花费且有收入，且Google有花费时才计算
+    mask = (afDf['temp_total_cost'] > 0) & (afDf['temp_total_revenue'] > 0) & (google_cost > 0)
+    
+    # 创建Google收入列（如果不存在）
+    if google_revenue_col not in afDf.columns:
+        afDf[google_revenue_col] = 0
+    
+    # 使用向量化操作计算估算收入
+    afDf.loc[mask, google_revenue_col] = (
+        afDf.loc[mask, 'temp_total_revenue'] * 
+        afDf.loc[mask, google_cost_col] / 
+        afDf.loc[mask, 'temp_total_cost']
+    )
+    
+    # 对于无法估算的情况，设置为0
+    afDf.loc[~mask, google_revenue_col] = 0
+    
+    # 删除临时列
+    afDf.drop(['temp_total_cost', 'temp_total_revenue'], axis=1, inplace=True)
+    
+    print(f"已完成Google收入数据修正，修正列: {google_revenue_col}")
+    print(f"使用的付费媒体列表（排除Google）: {[media for media in mediaList if media != 'googleadwords_int']}")
+    print(f"收入计算列（排除Google）: {revenue_columns}")
+    print(f"花费计算列（排除Google）: {cost_columns}")
+    
+    # 输出修正后的统计信息
+    total_google_cost = afDf[google_cost_col].sum()
+    total_google_revenue = afDf[google_revenue_col].sum()
+    if total_google_cost > 0:
+        estimated_roi = total_google_revenue / total_google_cost
+        print(f"Google修正后统计: 总花费=${total_google_cost:,.2f}, 估算总收入=${total_google_revenue:,.2f}, 估算ROI={estimated_roi:.2%}")
+    
+    return afDf
 
 def getData(startDayStr, endDayStr):
     df = getBiData(startDayStr, endDayStr)
@@ -128,6 +210,9 @@ def getData(startDayStr, endDayStr):
 
     totalDf = getTotalData(df)
     afDf = getAfData(df,mediaList)
+    
+    # 修正Google的收入数据
+    afDf = fixAfDataForGoogle(afDf, mediaList)
 
     mergedDf = pd.merge(totalDf, afDf, on=['install_day', 'country_group'], how='outer')
     mergedDf['install_day'] = pd.to_datetime(mergedDf['install_day'].astype(str), format='%Y%m%d')
@@ -360,7 +445,7 @@ def analyze_results(resultDf, country):
     print(f"自然量收入: ${bestResult['organic_revenue_mean']:,.2f}")
     print(f"实际自然量占比: {bestResult['actual_organic_ratio']:.2%}")
     
-    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
+    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int', 'googleadwords_int']
     print("\n媒体系数和ROI:")
     for media in mediaList:
         coeff = bestResult.get(f'{media}_coeff', 1.0)
@@ -474,7 +559,7 @@ def create_result_table():
     
     # 定义分区（tag作为分区字段）
     partitions = [
-        Partition(name='tag', type='string', comment='标签分区，格式：20250804_{organic_ratio}')
+        Partition(name='tag', type='string', comment='标签分区，格式：20250805_{organic_ratio}')
     ]
     
     schema = Schema(columns=columns, partitions=partitions)
@@ -511,9 +596,9 @@ def write_results_to_odps(allResultsDf):
         tag_groups = allResultsDf.groupby('organic_ratio')
         
         for organic_ratio, group_df in tag_groups:
-            # 生成tag：20250804_{organic_ratio}
+            # 生成tag：20250805_{organic_ratio}
             organic_ratio_str = f"{organic_ratio:.0%}".replace('%', '')  # 20% -> 20
-            tag = f"20250804_{organic_ratio_str}"
+            tag = f"20250805_{organic_ratio_str}"
             
             print(f"处理分区: {tag}")
             
@@ -585,7 +670,7 @@ def main():
     # 进行适度过滤，install_day > '20250101'
     df = df[df['install_day'] >= '20250101']
     df.to_csv(f'/src/data/20250805_data_{startDayStr}_{endDayStr}.csv', index=False)
-    return
+    # return
 
     # 只保留必要的列：install_day, country_group, total_revenue_h168 和所有媒体收入列
     keepColumns = ['install_day', 'country_group', 'total_revenue_h168']
@@ -599,7 +684,7 @@ def main():
     # for quick test，测试完成后，注释下面一行
     # countryList = ['US']
 
-    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
+    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int','googleadwords_int']
 
     # 用于存储所有国家的所有结果（包括20%, 30%, 40%三种情况）
     allResults = []
