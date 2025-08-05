@@ -2824,61 +2824,6 @@ SELECT
     kpi_target
 FROM lw_20250703_gpir_cohort_kpi_target_month_view_by_j
 WHERE mediasource = 'applovin_int'
-
-UNION ALL
-SELECT *
-FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
-
-UNION ALL
-
--- 复制applovin_int行并改为applovin_7d
-SELECT 
-    app_package,
-    country_group,
-    'applovin_int_d7' AS mediasource,
-    ad_type,
-    install_month,
-    cost,
-    revenue_d120,
-	total_revenue_d120,
-    cost_p,
-    revenue_d120_p,
-	total_revenue_d120_p,
-	last123_cost_avg,
-    last123_cost_p_avg,
-    last456_revenue_d120_avg,
-    last456_revenue_d120_p_avg,
-    roi_120d,
-    roi_120d_p,
-    kpi_target
-FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
-WHERE mediasource = 'applovin_int'
-
-UNION ALL
-
--- 复制applovin_int行并改为applovin_28d
-SELECT 
-    app_package,
-    country_group,
-    'applovin_int_d28' AS mediasource,
-    ad_type,
-    install_month,
-    cost,
-    revenue_d120,
-	total_revenue_d120,
-    cost_p,
-    revenue_d120_p,
-	total_revenue_d120_p,
-	last123_cost_avg,
-    last123_cost_p_avg,
-    last456_revenue_d120_avg,
-    last456_revenue_d120_p_avg,
-    roi_120d,
-    roi_120d_p,
-    kpi_target
-FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
-WHERE mediasource = 'applovin_int'
-
 ORDER BY 
     app_package,
     country_group,
