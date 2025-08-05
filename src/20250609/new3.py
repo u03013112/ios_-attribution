@@ -2769,6 +2769,49 @@ ORDER BY
 	execSql2(sql)
 	return
 
+
+
+# 计算iOS的kpi_target 针对applovin的7d 和 28d 兼容
+def createIosCohortKpiTargetView2():
+	sql = f"""
+CREATE OR REPLACE VIEW lw_20250703_ios_cohort_kpi_target_month_view2_by_j AS
+SELECT 
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target
+FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+UNION ALL
+-- 复制applovin_int行并改为applovin_7d
+SELECT 
+	app_package,
+	country_group,
+	'applovin_int_d7' AS mediasource,
+	ad_type,
+	install_month,
+	kpi_target
+FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+WHERE mediasource = 'applovin_int'
+UNION ALL
+-- 复制applovin_int行并改为applovin_28d
+SELECT 
+	app_package,
+	country_group,
+	'applovin_int_d28' AS mediasource,
+	ad_type,
+	install_month,
+	kpi_target
+FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+WHERE mediasource = 'applovin_int'
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
 def createForUaKpiTargetView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250703_for_ua_kpi_target_month_view_by_j AS
@@ -2859,6 +2902,39 @@ SELECT
 	kpi_target,
 	'af_cohort' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+UNION ALL
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
+	'20250804_20' AS tag
+FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
+
+UNION ALL
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
+	'20250804_30' AS tag
+FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
+
+UNION ALL
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
+	'20250804_40' AS tag
+FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
+
 UNION ALL
 SELECT
 	app_package,
@@ -4300,7 +4376,7 @@ SELECT
     'id6448786147' AS app_package,
     ar.install_month,
     ar.country_group,
-    CONCAT('af_cohort_', fpr.tag) as tag,
+    fpr.tag as tag,
     -- 自然量收入 = 总收入 - 调整后的付费收入
     GREATEST(0, ar.total_revenue - COALESCE(fpr.total_adjusted_paid_revenue, 0)) AS organic_revenue_d120,
     ar.total_revenue AS revenue_d120
@@ -5534,12 +5610,12 @@ def createViewsAndTables():
 	# createAfAppCostRevenueMonthyView()
 	# createAfCostRevenueMonthyTable()
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
 	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
 	# createGPIRAppMediaCountryCostRevenueMonthyView()
@@ -5573,33 +5649,34 @@ def createViewsAndTables():
 	# createAppLovinRatioView()
 	# createForUaCostRevenueMonthyTable()
 
-	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
-	createIosTagCostRevenueMonthyView()
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyView()
-	createCostRevenueMonthyTable()
+	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	# createIosTagCostRevenueMonthyView()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyView()
+	# createCostRevenueMonthyTable()
 	
-	# 计算kpi_target
-	createGpirCohortKpiTargetView()
-	createIosCohortKpiTargetView()
-	createForUaKpiTargetView()
-	createKpiTargetTable()
+	# # 计算kpi_target
+	# createGpirCohortKpiTargetView()
+	# createIosCohortKpiTargetView()
+	# createIosCohortKpiTargetView2()
+	# createForUaKpiTargetView()
+	# createKpiTargetTable()
 
-	# 计算收入增长率
-	createRevenueRiseRatioView()
-	createPredictRevenueRiseRatioView()
-	createPredictRevenueRiseRatioTable()
-	createPredictRevenueRiseRatioAndkpiTargetView()
+	# # 计算收入增长率
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
+	# createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# 推算KPI
-	createKpiView()
-	createKpiWithDiscountView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiWithDiscountView()
+	# createKpiTable()
 
-	# 推算动态KPI
-	createKpi2View()
-	createKpi2ViewFix()
-	createKpi2FixTable()
+	# # 推算动态KPI
+	# createKpi2View()
+	# createKpi2ViewFix()
+	# createKpi2FixTable()
 
 	# 自然量收入占比
 	# createAfAndroidOrganicMonthView()
