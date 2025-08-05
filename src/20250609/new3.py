@@ -4193,7 +4193,7 @@ adjusted_paid_revenue AS (
             WHEN pmd.mediasource = 'googleadwords_int' THEN
                 CASE
                     WHEN pt.total_paid_cost > 0 THEN 
-                        (pmd.cost / pt.total_paid_cost) * ar.total_revenue
+                        (pmd.cost / pt.total_paid_cost) * pt.total_paid_revenue
                     ELSE 0
                 END
             ELSE pmd.revenue_cohort_d120
@@ -4336,7 +4336,7 @@ adjusted_paid_revenue AS (
             WHEN pmd.mediasource = 'googleadwords_int' THEN
                 CASE
                     WHEN pt.total_paid_cost > 0 THEN 
-                        (pmd.cost / pt.total_paid_cost) * ar.total_revenue
+                        (pmd.cost / pt.total_paid_cost) * pt.total_paid_revenue
                     ELSE 0
                 END
             WHEN pmd.mediasource = 'applovin_int_d7' THEN 
@@ -5687,7 +5687,7 @@ def createViewsAndTables():
 	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
 	# createForUaAndroidOrganic2MonthView()
 
-	# createAfCohorotIosOrganicMonthView()
+	createAfCohorotIosOrganicMonthView()
 	createAfCohorotIos20250804OrganicMonthView()
 	createOrganicMonthTable()
 	
