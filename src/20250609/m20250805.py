@@ -66,7 +66,13 @@ group by
         return df
     
 def getTotalData(df):
-    totalDf = df.groupby(['install_day','country_group']).sum().reset_index()
+    totalDf = df.groupby(['install_day','country_group']).agg({
+        'cost': 'sum',
+        'installs': 'sum',
+        'revenue_h24': 'sum',
+        'revenue_h72': 'sum',
+        'revenue_h168': 'sum'
+    }).reset_index()
     totalDf =  totalDf.rename(columns={
         'cost':'total_cost',
         'installs':'total_installs',
@@ -106,6 +112,14 @@ def getAfData(df, mediaList):
             afDf = pd.merge(afDf, df0, on=['install_day', 'country_group'], how='outer')
     afDf = afDf.fillna(0)
     return afDf
+
+# 由于google的花费比预想的要高（202501~202507，花费超过10%），google又没有模糊归因，google的收入很大幅度的影响大盘收入。所以需要对AF数据进行修正
+# 将afDf中的media == 'googleadwords_int' 的数据进行修正
+# 简单估计google的收入 = 所有有花费媒体收入 * google的花费 / 所有有花费媒体的花费
+# 其中有花费媒体可以通过getMediaList(df)获取
+# 最后将修正后的数值，直接赋值给afDf['af_googleadwords_int_revenue_h168']
+def fixAfDataForGoogle(afDf):
+    pass
 
 def getData(startDayStr, endDayStr):
     df = getBiData(startDayStr, endDayStr)
@@ -564,13 +578,15 @@ def write_results_to_odps(allResultsDf):
 
 
 def main():
-    startDayStr = '20250729'
+    startDayStr = '20240729'
     endDayStr = '20250729'
     df = getData(startDayStr, endDayStr)
     
     # 进行适度过滤，install_day > '20250101'
     df = df[df['install_day'] >= '20250101']
-    
+    df.to_csv(f'/src/data/20250805_data_{startDayStr}_{endDayStr}.csv', index=False)
+    return
+
     # 只保留必要的列：install_day, country_group, total_revenue_h168 和所有媒体收入列
     keepColumns = ['install_day', 'country_group', 'total_revenue_h168']
     mediaColumns = [col for col in df.columns if col.startswith('af_') and col.endswith('_revenue_h168')]
