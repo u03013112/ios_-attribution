@@ -319,7 +319,7 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
                     mediaTrueRevenues[media] = 0
             
             # 计算预测的总收入
-            predictedTotalRevenue = organicRevenue + sum(mediaTrueRevenues.values())
+            predictedTotalRevenue = organicRevenue + sum(mediaTrueRevenues.values()) + countryDf['af_googleadwords_int_revenue_h168']
             
             # 观测节点：总收入
             total_revenue_obs = pm.Normal(
@@ -445,7 +445,7 @@ def analyze_results(resultDf, country):
     print(f"自然量收入: ${bestResult['organic_revenue_mean']:,.2f}")
     print(f"实际自然量占比: {bestResult['actual_organic_ratio']:.2%}")
     
-    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int', 'googleadwords_int']
+    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
     print("\n媒体系数和ROI:")
     for media in mediaList:
         coeff = bestResult.get(f'{media}_coeff', 1.0)
@@ -684,7 +684,7 @@ def main():
     # for quick test，测试完成后，注释下面一行
     # countryList = ['US']
 
-    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int','googleadwords_int']
+    mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
 
     # 用于存储所有国家的所有结果（包括20%, 30%, 40%三种情况）
     allResults = []
