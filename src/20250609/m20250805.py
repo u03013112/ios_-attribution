@@ -207,7 +207,7 @@ def getData(startDayStr, endDayStr):
     df = getBiData(startDayStr, endDayStr)
     
     mediaList = getMediaList(df)
-
+    print(f"获取到的媒体列表: {mediaList}")
     totalDf = getTotalData(df)
     afDf = getAfData(df,mediaList)
     
@@ -272,7 +272,7 @@ def calculate_media_attribution(df, country):
     print("-" * 50)
 
 
-def bayesian_fit_media_coefficients(df, country, mediaList):
+def bayesian_fit_media_coefficients(df, country, mediaList,mediaOtherList):
     """使用贝叶斯方法拟合媒体系数"""
     countryDf = df[df['country_group'] == country].copy()
     
@@ -283,11 +283,10 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
     # 计算总收入均值，用于设置自然量先验
     totalRevenueMean = countryDf['total_revenue_h168'].mean()
     
-    # 自然量先验配置：20%, 30%, 40%
     organicRevenueConfigList = [
-        {'ratio': 0.2, 'mu': totalRevenueMean * 0.2, 'sigma': totalRevenueMean * 0.01},
-        {'ratio': 0.3, 'mu': totalRevenueMean * 0.3, 'sigma': totalRevenueMean * 0.01},
-        {'ratio': 0.4, 'mu': totalRevenueMean * 0.4, 'sigma': totalRevenueMean * 0.01}
+        {'ratio': 0.1, 'mu': totalRevenueMean * 0.1, 'sigma': totalRevenueMean * 0.008},
+        {'ratio': 0.2, 'mu': totalRevenueMean * 0.2, 'sigma': totalRevenueMean * 0.008},
+        {'ratio': 0.3, 'mu': totalRevenueMean * 0.3, 'sigma': totalRevenueMean * 0.008}
     ]
     
     resultDf = pd.DataFrame()
@@ -318,8 +317,18 @@ def bayesian_fit_media_coefficients(df, country, mediaList):
                     print(f"警告: 找不到列 {afRevenueCol}")
                     mediaTrueRevenues[media] = 0
             
+            otherMediaRevenues = {}
+            # 其他媒体的真实收入（如果有）
+            for media in mediaOtherList:
+                afRevenueCol = f'af_{media}_revenue_h168'
+                if afRevenueCol in countryDf.columns:
+                    otherMediaRevenues[media] = countryDf[afRevenueCol]
+                else:
+                    print(f"警告: 找不到列 {afRevenueCol}")
+                    otherMediaRevenues[media] = 0
+
             # 计算预测的总收入
-            predictedTotalRevenue = organicRevenue + sum(mediaTrueRevenues.values()) + countryDf['af_googleadwords_int_revenue_h168']
+            predictedTotalRevenue = organicRevenue + sum(mediaTrueRevenues.values()) + sum(otherMediaRevenues.values())
             
             # 观测节点：总收入
             total_revenue_obs = pm.Normal(
@@ -455,7 +464,7 @@ def analyze_results(resultDf, country):
     
     return bestResult
 
-def validate_model_by_period(df, country, bestResult, mediaList):
+def validate_model_by_period(df, country, bestResult, mediaList, mediaOtherList):
     """使用最佳拟合结果对不同时间周期进行验算"""
     countryDf = df[df['country_group'] == country].copy()
     
@@ -475,22 +484,33 @@ def validate_model_by_period(df, country, bestResult, mediaList):
     
     # 按周汇总验算
     print(f"\n=== {country} 按周汇总验算 ===")
-    weekly_mape = calculate_period_mape(countryDf, 'year_week', organicRevenueMean, mediaCoeffs, mediaList)
+    weekly_mape = calculate_period_mape(countryDf, 'year_week', organicRevenueMean, mediaCoeffs, mediaList, mediaOtherList)
     print(f"按周汇总的MAPE: {weekly_mape:.2f}%")
     
     # 按月汇总验算
     print(f"\n=== {country} 按月汇总验算 ===")
-    monthly_mape = calculate_period_mape(countryDf, 'year_month', organicRevenueMean, mediaCoeffs, mediaList)
+    monthly_mape = calculate_period_mape(countryDf, 'year_month', organicRevenueMean, mediaCoeffs, mediaList, mediaOtherList)
     print(f"按月汇总的MAPE: {monthly_mape:.2f}%")
     
     return weekly_mape, monthly_mape
 
-def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs, mediaList):
+def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs, mediaList, mediaOtherList):
     """计算指定时间周期的MAPE"""
+    # 构建所有需要汇总的媒体列（主要媒体 + 其他媒体）
+    all_media_columns = {}
+    
+    # 主要媒体列
+    for media in mediaList:
+        all_media_columns[f'af_{media}_revenue_h168'] = 'sum'
+    
+    # 其他媒体列
+    for media in mediaOtherList:
+        all_media_columns[f'af_{media}_revenue_h168'] = 'sum'
+    
     # 按时间周期汇总数据
     period_df = countryDf.groupby(period_col).agg({
         'total_revenue_h168': 'sum',
-        **{f'af_{media}_revenue_h168': 'sum' for media in mediaList}
+        **all_media_columns
     }).reset_index()
     
     # 计算每个周期的天数（用于计算自然量）
@@ -505,16 +525,23 @@ def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs
         # 预测的自然量收入 = 每日自然量均值 * 该周期的天数
         predicted_organic = organicRevenueMean * row['days']
         
-        # 预测的媒体收入 = 模糊归因收入 * 系数
-        predicted_media_total = 0
+        # 预测的主要媒体收入 = 模糊归因收入 * 系数
+        predicted_main_media_total = 0
         for media in mediaList:
             af_revenue_col = f'af_{media}_revenue_h168'
             if af_revenue_col in row:
                 coeff = mediaCoeffs.get(media, 1.0)
-                predicted_media_total += row[af_revenue_col] * coeff
+                predicted_main_media_total += row[af_revenue_col] * coeff
         
-        # 预测的总收入
-        predicted_total = predicted_organic + predicted_media_total
+        # 预测的其他媒体收入 = 直接使用原始收入
+        predicted_other_media_total = 0
+        for media in mediaOtherList:
+            af_revenue_col = f'af_{media}_revenue_h168'
+            if af_revenue_col in row:
+                predicted_other_media_total += row[af_revenue_col]
+        
+        # 预测的总收入 = 自然量 + 主要媒体修正收入 + 其他媒体原始收入
+        predicted_total = predicted_organic + predicted_main_media_total + predicted_other_media_total
         predicted_revenues.append(predicted_total)
         
         # 实际总收入
@@ -536,6 +563,7 @@ def calculate_period_mape(countryDf, period_col, organicRevenueMean, mediaCoeffs
     print(f"平均实际收入: ${np.mean(actual_revenues):,.2f}")
     print(f"平均预测收入: ${np.mean(predicted_revenues):,.2f}")
     print(f"预测准确度: {100 - mape:.2f}%")
+    print(f"主要媒体数量: {len(mediaList)}, 其他媒体数量: {len(mediaOtherList)}")
     
     return mape
 
@@ -663,7 +691,7 @@ def write_results_to_odps(allResultsDf):
 
 
 def main():
-    startDayStr = '20240729'
+    startDayStr = '20250101'
     endDayStr = '20250729'
     df = getData(startDayStr, endDayStr)
     
@@ -684,7 +712,17 @@ def main():
     # for quick test，测试完成后，注释下面一行
     # countryList = ['US']
 
+    # 所有有过花费的媒体
+    mediaAllList = [
+        'Apple Search Ads','Facebook Ads','Twitter','applovin_int'
+        ,'applovin_int_d28','applovin_int_d7','bytedanceglobal_int'
+        ,'googleadwords_int','liftoff_int','mintegral_int','moloco_int'
+        ,'smartnewsads_int','snapchat_int','unityads_int'
+    ]
+    # 主要分析并拟合的媒体
     mediaList = ['applovin_int_d7','Facebook Ads','moloco_int','applovin_int_d28','bytedanceglobal_int']
+    # 剩余媒体
+    mediaOtherList = [media for media in mediaAllList if media not in mediaList]
 
     # 用于存储所有国家的所有结果（包括20%, 30%, 40%三种情况）
     allResults = []
@@ -697,14 +735,14 @@ def main():
         calculate_media_attribution(df, country)
 
         # 贝叶斯拟合
-        resultDf = bayesian_fit_media_coefficients(df, country, mediaList)
+        resultDf = bayesian_fit_media_coefficients(df, country, mediaList,mediaOtherList)
         
         if resultDf is not None:
             # 分析结果（获取最佳结果用于验算）
             bestResult = analyze_results(resultDf, country)
             
             # 使用最佳结果进行按周和按月的验算
-            weekly_mape, monthly_mape = validate_model_by_period(df, country, bestResult, mediaList)
+            weekly_mape, monthly_mape = validate_model_by_period(df, country, bestResult, mediaList, mediaOtherList)
             
             # 将所有结果（20%, 30%, 40%）添加到列表中
             for _, row in resultDf.iterrows():
