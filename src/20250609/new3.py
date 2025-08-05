@@ -4732,7 +4732,7 @@ WITH union_data AS (
 	UNION ALL
     SELECT * FROM lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j
 	UNION ALL
-	SELECT * FROM lw_20250804_af_cohort_ios_organic_revenue_ratio_month_view_by_j
+	SELECT * FROM lw_20250805_af_cohort_ios_data_step3_month_view_by_j
 ),
 calculated_data AS (
     SELECT
@@ -6004,13 +6004,13 @@ def createViewsAndTables():
 	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
 	# createForUaAndroidOrganic2MonthView()
 
-	# createAfCohorotIosOrganicMonthView()
+	createAfCohorotIosOrganicMonthView()
 	# createAfCohorotIos20250804OrganicMonthView()
-	createAfCohorotIos20250805DataStep1MonthView()
-	createAfCohorotIos20250805DataStep2MonthView()
-	createAfCohorotIos20250805DataStep3MonthView()
+	# createAfCohorotIos20250805DataStep1MonthView()
+	# createAfCohorotIos20250805DataStep2MonthView()
+	# createAfCohorotIos20250805DataStep3MonthView()
 	
-	# createOrganicMonthTable()
+	createOrganicMonthTable()
 	
 	# # 只用自然量收入占比计算含自然量回本目标
 	# createKpiTargetWithOrganicView()
