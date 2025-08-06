@@ -2186,6 +2186,11 @@ SELECT
 	'20250805_30' AS tag
 FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
+UNION ALL
+SELECT
+	* ,
+	'af_cohort_fix' AS tag
+FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_fix_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -2316,6 +2321,7 @@ FROM
 WHERE
 	roi.app = '502'
 	AND roi.facebook_segment IN ('country', 'N/A')
+	AND app_package IN ('id6448786147', 'id6736925794')
 GROUP BY
 	app_package,
 	roi.install_day,
@@ -2585,6 +2591,37 @@ ORDER BY
     execSql2(sql)
     return
 
+def createIosAfCostRevenueMonthyFixView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_fix_view_by_j AS
+SELECT
+	app_package,
+	SUBSTR(install_day, 1, 6) AS install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	SUM(cost) AS cost,
+	SUM(revenue_d1) AS revenue_d1,
+	SUM(revenue_d3) AS revenue_d3,
+	SUM(revenue_d7) AS revenue_d7,
+	SUM(revenue_d14) AS revenue_d14,
+	SUM(revenue_d30) AS revenue_d30,
+	SUM(revenue_d60) AS revenue_d60,
+	SUM(revenue_d90) AS revenue_d90,
+	SUM(revenue_d120) AS revenue_d120,
+	SUM(revenue_d150) AS revenue_d150
+FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+GROUP BY
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 # 拟合表，用上面修正表的数据，结合拟合结果，预测各媒体收入
 # 拟合结果在表lw_20250703_ios_bayesian_result_by_j中
@@ -2592,6 +2629,7 @@ ORDER BY
 # 将媒体收入数据乘以对应的系数，得到拟合后的收入，没有媒体系数的不变
 # 将原有自然量放弃，直接使用lw_20250703_ios_bayesian_result_by_j中的organic_revenue作为自然量收入
 # organic_revenue中的tag代表不同的拟合结果，其中暂时只关注 20250805_10、20250805_20、20250805_30 3个，对应的，应该成成3套拟合后收入
+# 只关注7日收入和120日收入，其中7日收入用于验算拟合效果，120日收入用于估测自然量
 def createIosAfCostRevenueDayFitTable():
     sql = """
 DROP TABLE IF EXISTS lw_20250805_af_cohort_cost_revenue_day_fit_table_by_j;
@@ -2605,17 +2643,24 @@ WITH base_data AS (
         mediasource,
         ad_type,
         cost,
-        revenue_d1,
-        revenue_d3,
         revenue_d7,
-        revenue_d14,
-        revenue_d30,
-        revenue_d60,
-        revenue_d90,
-        revenue_d120,
-        revenue_d150
+        revenue_d120
     FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
     WHERE mediasource != 'Organic'
+),
+original_totals AS (
+    -- 获取原始数据的总收入（用于计算120日自然量）
+    SELECT
+        app_package,
+        install_day,
+        country_group,
+        SUM(revenue_d7) AS total_original_revenue_d7,
+        SUM(revenue_d120) AS total_original_revenue_d120
+    FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+    GROUP BY
+        app_package,
+        install_day,
+        country_group
 ),
 bayesian_results AS (
     -- 获取拟合系数和自然量收入
@@ -2644,32 +2689,6 @@ fitted_paid_media AS (
         -- 根据媒体类型应用对应系数，没有系数的保持不变
         CASE
             WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d1 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d1 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d1 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d1 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d1 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d1
-        END AS fitted_revenue_d1,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d3 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d3 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d3 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d3 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d3 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d3
-        END AS fitted_revenue_d3,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
                 bd.revenue_d7 * COALESCE(br.applovin_int_d7_coeff, 1.0)
             WHEN bd.mediasource = 'applovin_int_d28' THEN 
                 bd.revenue_d7 * COALESCE(br.applovin_int_d28_coeff, 1.0)
@@ -2683,58 +2702,6 @@ fitted_paid_media AS (
         END AS fitted_revenue_d7,
         CASE
             WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d14 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d14 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d14 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d14 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d14 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d14
-        END AS fitted_revenue_d14,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d30 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d30 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d30 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d30 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource =  'bytedanceglobal_int' THEN 
-                bd.revenue_d30 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d30
-        END AS fitted_revenue_d30,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d60 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d60 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d60 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d60 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d60 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d60
-        END AS fitted_revenue_d60,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d90 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d90 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d90 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d90 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d90 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d90
-        END AS fitted_revenue_d90,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
                 bd.revenue_d120 * COALESCE(br.applovin_int_d7_coeff, 1.0)
             WHEN bd.mediasource = 'applovin_int_d28' THEN 
                 bd.revenue_d120 * COALESCE(br.applovin_int_d28_coeff, 1.0)
@@ -2745,25 +2712,28 @@ fitted_paid_media AS (
             WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
                 bd.revenue_d120 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
             ELSE bd.revenue_d120
-        END AS fitted_revenue_d120,
-        CASE
-            WHEN bd.mediasource = 'applovin_int_d7' THEN 
-                bd.revenue_d150 * COALESCE(br.applovin_int_d7_coeff, 1.0)
-            WHEN bd.mediasource = 'applovin_int_d28' THEN 
-                bd.revenue_d150 * COALESCE(br.applovin_int_d28_coeff, 1.0)
-            WHEN bd.mediasource = 'Facebook Ads' THEN 
-                bd.revenue_d150 * COALESCE(br.facebook_ads_coeff, 1.0)
-            WHEN bd.mediasource = 'moloco_int' THEN 
-                bd.revenue_d150 * COALESCE(br.moloco_int_coeff, 1.0)
-            WHEN bd.mediasource = 'bytedanceglobal_int' THEN 
-                bd.revenue_d150 * COALESCE(br.bytedanceglobal_int_coeff, 1.0)
-            ELSE bd.revenue_d150
-        END AS fitted_revenue_d150
+        END AS fitted_revenue_d120
     FROM base_data bd
     LEFT JOIN bayesian_results br ON bd.country_group = br.country_group
 ),
+fitted_paid_totals AS (
+    -- 计算调整后的付费媒体总收入（用于计算120日自然量）
+    SELECT
+        app_package,
+        install_day,
+        country_group,
+        tag,
+        SUM(fitted_revenue_d7) AS total_fitted_paid_revenue_d7,
+        SUM(fitted_revenue_d120) AS total_fitted_paid_revenue_d120
+    FROM fitted_paid_media
+    GROUP BY
+        app_package,
+        install_day,
+        country_group,
+        tag
+),
 organic_data AS (
-    -- 生成自然量数据，使用拟合结果中的organic_revenue
+    -- 生成自然量数据
     SELECT DISTINCT
         bd.app_package,
         bd.install_day,
@@ -2772,20 +2742,22 @@ organic_data AS (
         'ALL' as ad_type,
         0.0 as cost,
         br.tag,
-        br.organic_revenue as fitted_revenue_d1,
-        br.organic_revenue as fitted_revenue_d3,
+        -- 7日自然量：直接使用预测表里的自然量收入
         br.organic_revenue as fitted_revenue_d7,
-        br.organic_revenue as fitted_revenue_d14,
-        br.organic_revenue as fitted_revenue_d30,
-        br.organic_revenue as fitted_revenue_d60,
-        br.organic_revenue as fitted_revenue_d90,
-        br.organic_revenue as fitted_revenue_d120,
-        br.organic_revenue as fitted_revenue_d150
+        -- 120日自然量：原始总收入 - 调整后的付费媒体总收入
+        GREATEST(0, ot.total_original_revenue_d120 - COALESCE(fpt.total_fitted_paid_revenue_d120, 0)) as fitted_revenue_d120
     FROM (
         SELECT DISTINCT app_package, install_day, country_group 
         FROM base_data
     ) bd
     LEFT JOIN bayesian_results br ON bd.country_group = br.country_group
+    LEFT JOIN original_totals ot ON bd.app_package = ot.app_package
+                                 AND bd.install_day = ot.install_day
+                                 AND bd.country_group = ot.country_group
+    LEFT JOIN fitted_paid_totals fpt ON bd.app_package = fpt.app_package
+                                     AND bd.install_day = fpt.install_day
+                                     AND bd.country_group = fpt.country_group
+                                     AND br.tag = fpt.tag
     WHERE br.organic_revenue IS NOT NULL
 )
 -- 合并付费媒体和自然量数据
@@ -2797,15 +2769,8 @@ SELECT
     ad_type,
     cost,
     tag,
-    fitted_revenue_d1 as revenue_d1,
-    fitted_revenue_d3 as revenue_d3,
     fitted_revenue_d7 as revenue_d7,
-    fitted_revenue_d14 as revenue_d14,
-    fitted_revenue_d30 as revenue_d30,
-    fitted_revenue_d60 as revenue_d60,
-    fitted_revenue_d90 as revenue_d90,
-    fitted_revenue_d120 as revenue_d120,
-    fitted_revenue_d150 as revenue_d150
+    fitted_revenue_d120 as revenue_d120
 FROM fitted_paid_media
 
 UNION ALL
@@ -2818,15 +2783,8 @@ SELECT
     ad_type,
     cost,
     tag,
-    fitted_revenue_d1 as revenue_d1,
-    fitted_revenue_d3 as revenue_d3,
     fitted_revenue_d7 as revenue_d7,
-    fitted_revenue_d14 as revenue_d14,
-    fitted_revenue_d30 as revenue_d30,
-    fitted_revenue_d60 as revenue_d60,
-    fitted_revenue_d90 as revenue_d90,
-    fitted_revenue_d120 as revenue_d120,
-    fitted_revenue_d150 as revenue_d150
+    fitted_revenue_d120 as revenue_d120
 FROM organic_data
 
 ORDER BY
@@ -2840,8 +2798,6 @@ ORDER BY
     print(f"Executing SQL: {sql}")
     execSql2(sql)
     return
-
-
 
 
 #####################################################
@@ -4677,132 +4633,27 @@ FROM lw_20250703_gpir_cohort_android_organic_revenue_ratio_month_view_by_j;
 
 
 # iOS af_cohort版本的自然量收入占比，120日版本
-# 由于iOS隐私条款限制，无法获取到完整的自然量数据，因此只能估算
-# 逻辑是从dws_overseas_public_roi获取app_package in ('id6448786147','id6736925794')的数据
-# mediasource 共有 'Facebook Ads','applovin_int','bytedanceglobal_int','googleadwords_int','snapchat_int','moloco_int','Twitter','Apple Search Ads','mintegral_int','unityads_int'
-# 还有一些其他媒体，但是没有花费和收入数值，忽略不计
-# 其中大部分媒体都有模糊归因，googleadwords_int的模糊归因偏差比较大
-# 简单的按照花费比例来估测模糊归因不准的收入
-# 所以，googleadwords_int 收入 = googleadwords_int花费 / 所有媒体花费 * 总收入
-# 其他媒体收入取revenue_cohort_d120
-# 后续按照安卓逻辑，找到最近的456个月的数据，计算自然量占比的平均值
+# 直接取原始数据
 def createAfCohorotIosOrganicMonthView():
     sql = """
 CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j AS
-WITH all_revenue AS (
-    -- 获取所有媒体的总收入（包括自然量）
-    SELECT
-        SUBSTR(install_day, 1, 6) AS install_month,
-        COALESCE(cg.country_group, 'other') AS country_group,
-        SUM(revenue_cohort_d120) AS total_revenue
-    FROM
-        dws_overseas_public_roi roi
-        LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-    WHERE
-        roi.app = '502'
-        AND roi.app_package in ('id6448786147','id6736925794')
-        AND roi.facebook_segment IN ('country', 'N/A')
-    GROUP BY
-        install_month,
-        country_group
-),
-paid_media_data AS (
-    -- 获取指定付费媒体的花费和收入数据
-    SELECT
-        SUBSTR(install_day, 1, 6) AS install_month,
-        COALESCE(cg.country_group, 'other') AS country_group,
-        mediasource,
-        SUM(cost_value_usd) AS cost,
-        SUM(revenue_cohort_d120) AS revenue_cohort_d120
-    FROM
-        dws_overseas_public_roi roi
-        LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
-    WHERE
-        roi.app = '502'
-        AND roi.app_package in ('id6448786147','id6736925794')
-        AND roi.facebook_segment IN ('country', 'N/A')
-        AND roi.mediasource in (
-            'Apple Search Ads','Facebook Ads','Twitter','applovin_int'
-			,'applovin_int_d28','applovin_int_d7','bytedanceglobal_int'
-			,'googleadwords_int','liftoff_int','mintegral_int','moloco_int'
-			,'smartnewsads_int','snapchat_int','unityads_int'
-        )
-    GROUP BY
-        install_month,
-        country_group,
-        mediasource
-),
-paid_totals AS (
-    -- 计算付费媒体的总花费
-    SELECT
-        install_month,
-        country_group,
-        SUM(cost) AS total_paid_cost,
-        SUM(revenue_cohort_d120) AS total_paid_revenue
-    FROM paid_media_data
-    GROUP BY
-        install_month,
-        country_group
-),
-other_paid_totals AS (
-    -- 计算除了googleadwords_int之外的付费媒体的总花费和收入
-    SELECT
-        install_month,
-        country_group,
-        SUM(cost) AS other_paid_cost,
-        SUM(revenue_cohort_d120) AS other_paid_revenue
-    FROM paid_media_data
-    WHERE mediasource != 'googleadwords_int'
-    GROUP BY
-        install_month,
-        country_group
-),
-adjusted_paid_revenue AS (
-    -- 调整googleadwords_int的收入，其他媒体保持原收入
-    SELECT
-        pmd.install_month,
-        pmd.country_group,
-        pmd.mediasource,
-        pmd.cost,
-        CASE
-            WHEN pmd.mediasource = 'googleadwords_int' THEN
-                CASE
-                    WHEN opt.other_paid_cost > 0 THEN 
-                        opt.other_paid_revenue * (pmd.cost / opt.other_paid_cost)
-                    ELSE 0
-                END
-            ELSE pmd.revenue_cohort_d120
-        END AS adjusted_revenue_cohort_d120
-    FROM paid_media_data pmd
-    LEFT JOIN paid_totals pt ON pmd.install_month = pt.install_month 
-                             AND pmd.country_group = pt.country_group
-    LEFT JOIN other_paid_totals opt ON pmd.install_month = opt.install_month 
-                                    AND pmd.country_group = opt.country_group
-    LEFT JOIN all_revenue ar ON pmd.install_month = ar.install_month 
-                             AND pmd.country_group = ar.country_group
-),
-final_paid_revenue AS (
-    -- 汇总调整后的付费媒体收入
-    SELECT
-        install_month,
-        country_group,
-        SUM(adjusted_revenue_cohort_d120) AS total_adjusted_paid_revenue
-    FROM adjusted_paid_revenue
-    GROUP BY
-        install_month,
-        country_group
-)
 SELECT
     'id6448786147' AS app_package,
-    ar.install_month,
-    ar.country_group,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    country_group,
     'af_cohort' as tag,
-    -- 自然量收入 = 总收入 - 调整后的付费收入
-    GREATEST(0, ar.total_revenue - COALESCE(fpr.total_adjusted_paid_revenue, 0)) AS organic_revenue_d120,
-    ar.total_revenue AS revenue_d120
-FROM all_revenue ar
-LEFT JOIN final_paid_revenue fpr ON ar.install_month = fpr.install_month 
-                                 AND ar.country_group = fpr.country_group
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_d120) AS revenue_d120
+FROM
+    lw_20250805_af_cohort_cost_revenue_app_country_group_media_day_view_by_j
+GROUP BY
+    install_month,
+    country_group
 ORDER BY
     country_group,
     install_month
@@ -4811,6 +4662,71 @@ ORDER BY
     print(f"Executing SQL: {sql}")
     execSql2(sql)
     return
+
+
+# iOS af_cohort版本的自然量收入占比，120日版本
+# 修正版本，将google按照花费比例估算收入后的cohort自然量占比
+def createAfCohorotIosOrganicFixMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_fix_revenue_ratio_month_view_by_j AS
+SELECT
+    'id6448786147' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    country_group,
+    'af_cohort_fix' as tag,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_d120) AS revenue_d120
+FROM
+    lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+GROUP BY
+    install_month,
+    country_group
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+# iOS af_cohort版本的自然量收入占比，120日版本
+# 拟合版本，将拟合结果加入后的cohort自然量占比
+def createAfCohorotIosOrganicFitMonthView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_cohort_ios_organic_fit_revenue_ratio_month_view_by_j AS
+SELECT
+    'id6448786147' AS app_package,
+    SUBSTR(install_day, 1, 6) AS install_month,
+    country_group,
+    tag,
+    SUM(
+        CASE
+            WHEN mediasource = 'Organic' THEN revenue_d120
+            ELSE 0
+        END
+    ) AS organic_revenue_d120,
+    SUM(revenue_d120) AS revenue_d120
+FROM
+    lw_20250805_af_cohort_cost_revenue_day_fit_table_by_j
+GROUP BY
+    install_month,
+    country_group,
+	tag
+ORDER BY
+    country_group,
+    install_month
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 
 
 # 自然量估测
@@ -5292,7 +5208,9 @@ WITH union_data AS (
 	UNION ALL
     SELECT * FROM lw_20250703_af_cohort_ios_organic_revenue_ratio_month_view_by_j
 	UNION ALL
-	SELECT * FROM lw_20250805_af_cohort_ios_data_step3_month_view_by_j
+	SELECT * FROM lw_20250703_af_cohort_ios_organic_fix_revenue_ratio_month_view_by_j
+	UNION ALL
+	SELECT * FROM lw_20250703_af_cohort_ios_organic_fit_revenue_ratio_month_view_by_j
 ),
 calculated_data AS (
     SELECT
@@ -5305,33 +5223,33 @@ calculated_data AS (
         -- 计算最近456月的数据（即第4、5、6个月前的数据）
         COALESCE(
             LAG(organic_revenue_d120, 4) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) + COALESCE(
             LAG(organic_revenue_d120, 5) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) + COALESCE(
             LAG(organic_revenue_d120, 6) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) AS prev456_organic_revenue_d120,
         COALESCE(
             LAG(revenue_d120, 4) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) + COALESCE(
             LAG(revenue_d120, 5) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) + COALESCE(
             LAG(revenue_d120, 6) OVER (
-                PARTITION BY country_group, tag
+                PARTITION BY app_package,country_group, tag
                 ORDER BY install_month
             ), 0
         ) AS prev456_revenue_d120
@@ -6527,16 +6445,22 @@ def createViewsAndTables():
 	# createForUaCostRevenueMonthyTable()
 
 	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	
+
+	# # 拟合iOS结果相关
+	# createIosAfCostRevenueDayView()
+	# createIosAfCostRevenueDayFixTable()
+	# createIosAfCostRevenueMonthyFixView()
+	# createIosAfCostRevenueDayFitTable()
+
 	# createIosTagCostRevenueMonthyView()
+
 	# # 所有的花费、收入数据汇总
 	# createCostRevenueMonthyView()
 	# createCostRevenueMonthyTable()
 
 
-	# 拟合iOS结果相关
-	# createIosAfCostRevenueDayView()
-	createIosAfCostRevenueDayFixTable()
-	createIosAfCostRevenueDayFitTable()
+	
 
 
 	# # 计算kpi_target
@@ -6572,12 +6496,10 @@ def createViewsAndTables():
 	# createForUaAndroidOrganic2MonthView()
 
 	# createAfCohorotIosOrganicMonthView()
-	# createAfCohorotIos20250804OrganicMonthView()
-	# createAfCohorotIos20250805DataStep1MonthView()
-	# createAfCohorotIos20250805DataStep2MonthView()
-	# createAfCohorotIos20250805DataStep3MonthView()
-	
-	# createOrganicMonthTable()
+	# createAfCohorotIosOrganicFixMonthView()
+	# createAfCohorotIosOrganicFitMonthView()
+
+	createOrganicMonthTable()
 	
 	# # 只用自然量收入占比计算含自然量回本目标
 	# createKpiTargetWithOrganicView()
