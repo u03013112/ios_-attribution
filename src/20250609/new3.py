@@ -3426,6 +3426,16 @@ SELECT
 	ad_type,
 	install_month,
 	kpi_target,
+	'af_cohort_fix' AS tag
+FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+UNION ALL
+SELECT
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month,
+	kpi_target,
 	'20250805_10' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 
@@ -6481,10 +6491,10 @@ def createViewsAndTables():
 	# createKpiWithDiscountView()
 	# createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
 	# 自然量收入占比
 	# createAfAndroidOrganicMonthView()
@@ -6499,7 +6509,7 @@ def createViewsAndTables():
 	# createAfCohorotIosOrganicFixMonthView()
 	# createAfCohorotIosOrganicFitMonthView()
 
-	createOrganicMonthTable()
+	# createOrganicMonthTable()
 	
 	# # 只用自然量收入占比计算含自然量回本目标
 	# createKpiTargetWithOrganicView()
