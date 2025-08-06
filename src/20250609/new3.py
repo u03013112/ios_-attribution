@@ -6004,11 +6004,11 @@ def createViewsAndTables():
 	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
 	# createForUaAndroidOrganic2MonthView()
 
-	createAfCohorotIosOrganicMonthView()
+	# createAfCohorotIosOrganicMonthView()
 	# createAfCohorotIos20250804OrganicMonthView()
-	# createAfCohorotIos20250805DataStep1MonthView()
-	# createAfCohorotIos20250805DataStep2MonthView()
-	# createAfCohorotIos20250805DataStep3MonthView()
+	createAfCohorotIos20250805DataStep1MonthView()
+	createAfCohorotIos20250805DataStep2MonthView()
+	createAfCohorotIos20250805DataStep3MonthView()
 	
 	createOrganicMonthTable()
 	

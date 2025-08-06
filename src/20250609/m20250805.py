@@ -700,6 +700,12 @@ def main():
     df.to_csv(f'/src/data/20250805_data_{startDayStr}_{endDayStr}.csv', index=False)
     # return
 
+    # 进行数据校验，抽检，202502月数据，KR
+    debugDf = df[(df['install_day'] >= '20250201') & (df['install_day'] <= '20250228') & (df['country_group'] == 'KR')]
+    debugDf2 = debugDf.groupby(['install_day', 'country_group']).sum().reset_index()
+    debugDf2.to_csv(f'/src/data/20250805_debug_data_{startDayStr}_{endDayStr}.csv', index=False)
+    # return
+
     # 只保留必要的列：install_day, country_group, total_revenue_h168 和所有媒体收入列
     keepColumns = ['install_day', 'country_group', 'total_revenue_h168']
     mediaColumns = [col for col in df.columns if col.startswith('af_') and col.endswith('_revenue_h168')]
