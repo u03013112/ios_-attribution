@@ -2171,19 +2171,19 @@ def createIosTagCostRevenueMonthyView():
 CREATE OR REPLACE VIEW lw_20250703_for_ua_cost_revenue_ios_month_view_by_j AS
 SELECT 
 	* ,
-	'20250805_10' AS tag
+	'20250806_10' AS tag
 FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
 SELECT 
 	* ,
-	'20250805_20' AS tag
+	'20250806_20' AS tag
 FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
 SELECT 
 	* ,
-	'20250805_30' AS tag
+	'20250806_30' AS tag
 FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
@@ -2294,7 +2294,7 @@ GROUP BY
 # 基础表，按天 花费、收入
 def createIosAfCostRevenueDayView():
 	sql = """
-CREATE OR REPLACE VIEW lw_20250805_af_cohort_cost_revenue_app_country_group_media_day_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250806_af_cohort_cost_revenue_app_country_group_media_day_view_by_j AS
 SELECT
 	app_package,
 	roi.install_day,
@@ -2342,8 +2342,8 @@ GROUP BY
 # 改为直接创建table，防止后续试图循环引用的复杂问题
 def createIosAfCostRevenueDayFixTable():
     sql = """
-DROP TABLE IF EXISTS lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j;
-CREATE TABLE lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j AS
+DROP TABLE IF EXISTS lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j;
+CREATE TABLE lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j AS
 WITH base_data AS (
     -- 获取基础数据
     SELECT
@@ -2362,7 +2362,7 @@ WITH base_data AS (
         revenue_d90,
         revenue_d120,
         revenue_d150
-    FROM lw_20250805_af_cohort_cost_revenue_app_country_group_media_day_view_by_j
+    FROM lw_20250806_af_cohort_cost_revenue_app_country_group_media_day_view_by_j
 ),
 paid_media_totals AS (
     -- 计算付费媒体的总花费（用于计算Google的收入比例）
@@ -2610,7 +2610,7 @@ SELECT
 	SUM(revenue_d90) AS revenue_d90,
 	SUM(revenue_d120) AS revenue_d120,
 	SUM(revenue_d150) AS revenue_d150
-FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+FROM lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j
 GROUP BY
 	app_package,
 	install_month,
@@ -2628,12 +2628,12 @@ GROUP BY
 # lw_20250703_ios_bayesian_result_by_j 创建CREATE TABLE IF NOT EXISTS rg_bi.lw_20250703_ios_bayesian_result_by_j(country_group STRING COMMENT '国家组', organic_revenue DOUBLE COMMENT '自然量收入', applovin_int_d7_coeff DOUBLE COMMENT 'applovin_int_d7系数', applovin_int_d28_coeff DOUBLE COMMENT 'applovin_int_d28系数', facebook_ads_coeff DOUBLE COMMENT 'Facebook Ads系数', moloco_int_coeff DOUBLE COMMENT 'moloco_int系数', bytedanceglobal_int_coeff DOUBLE COMMENT 'bytedanceglobal_int系数') PARTITIONED BY (tag STRING COMMENT '标签分区，格式：20250804_{organic_ratio}') STORED AS ALIORC TBLPROPERTIES ('columnar.nested.type'='true');
 # 将媒体收入数据乘以对应的系数，得到拟合后的收入，没有媒体系数的不变
 # 将原有自然量放弃，直接使用lw_20250703_ios_bayesian_result_by_j中的organic_revenue作为自然量收入
-# organic_revenue中的tag代表不同的拟合结果，其中暂时只关注 20250805_10、20250805_20、20250805_30 3个，对应的，应该成成3套拟合后收入
+# organic_revenue中的tag代表不同的拟合结果，其中暂时只关注 20250806_10、20250806_20、20250806_30 3个，对应的，应该成成3套拟合后收入
 # 只关注7日收入和120日收入，其中7日收入用于验算拟合效果，120日收入用于估测自然量
 def createIosAfCostRevenueDayFitTable():
     sql = """
-DROP TABLE IF EXISTS lw_20250805_af_cohort_cost_revenue_day_fit_table_by_j;
-CREATE TABLE lw_20250805_af_cohort_cost_revenue_day_fit_table_by_j AS
+DROP TABLE IF EXISTS lw_20250806_af_cohort_cost_revenue_day_fit_table_by_j;
+CREATE TABLE lw_20250806_af_cohort_cost_revenue_day_fit_table_by_j AS
 WITH base_data AS (
     -- 获取修正后的基础数据（排除自然量，后续用拟合结果替换）
     SELECT
@@ -2645,7 +2645,7 @@ WITH base_data AS (
         cost,
         revenue_d7,
         revenue_d120
-    FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+    FROM lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j
     WHERE mediasource != 'Organic'
 ),
 original_totals AS (
@@ -2656,7 +2656,7 @@ original_totals AS (
         country_group,
         SUM(revenue_d7) AS total_original_revenue_d7,
         SUM(revenue_d120) AS total_original_revenue_d120
-    FROM lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+    FROM lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j
     GROUP BY
         app_package,
         install_day,
@@ -2674,7 +2674,7 @@ bayesian_results AS (
         bytedanceglobal_int_coeff,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250805_10', '20250805_20', '20250805_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
 ),
 fitted_paid_media AS (
     -- 对付费媒体应用拟合系数
@@ -3427,7 +3427,7 @@ SELECT
 	install_month,
 	kpi_target,
 	'af_cohort_fix' AS tag
-FROM lw_20250703_ios_cohort_kpi_target_month_view_by_j
+FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 UNION ALL
 SELECT
 	app_package,
@@ -3436,7 +3436,7 @@ SELECT
 	ad_type,
 	install_month,
 	kpi_target,
-	'20250805_10' AS tag
+	'20250806_10' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 
 UNION ALL
@@ -3447,7 +3447,7 @@ SELECT
 	ad_type,
 	install_month,
 	kpi_target,
-	'20250805_20' AS tag
+	'20250806_20' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 
 UNION ALL
@@ -3458,7 +3458,7 @@ SELECT
 	ad_type,
 	install_month,
 	kpi_target,
-	'20250805_30' AS tag
+	'20250806_30' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 
 UNION ALL
@@ -4011,27 +4011,27 @@ SELECT
         THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.bytedanceglobal_int_coeff, 4)
@@ -4045,27 +4045,27 @@ SELECT
         THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.bytedanceglobal_int_coeff, 4)
@@ -4079,27 +4079,27 @@ SELECT
         THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250805_10', '20250805_20', '20250805_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.bytedanceglobal_int_coeff, 4)
@@ -4660,7 +4660,7 @@ SELECT
     ) AS organic_revenue_d120,
     SUM(revenue_d120) AS revenue_d120
 FROM
-    lw_20250805_af_cohort_cost_revenue_app_country_group_media_day_view_by_j
+    lw_20250806_af_cohort_cost_revenue_app_country_group_media_day_view_by_j
 GROUP BY
     install_month,
     country_group
@@ -4692,7 +4692,7 @@ SELECT
     ) AS organic_revenue_d120,
     SUM(revenue_d120) AS revenue_d120
 FROM
-    lw_20250805_af_cohort_cost_revenue_day_fix_table_by_j
+    lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j
 GROUP BY
     install_month,
     country_group
@@ -4723,7 +4723,7 @@ SELECT
     ) AS organic_revenue_d120,
     SUM(revenue_d120) AS revenue_d120
 FROM
-    lw_20250805_af_cohort_cost_revenue_day_fit_table_by_j
+    lw_20250806_af_cohort_cost_revenue_day_fit_table_by_j
 GROUP BY
     install_month,
     country_group,
@@ -4827,7 +4827,7 @@ bayesian_coeffs AS (
         organic_revenue,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250805_10', '20250805_20', '20250805_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
 ),
 other_paid_totals AS (
     -- 计算除了googleadwords_int之外的付费媒体的总花费和收入
@@ -4919,7 +4919,7 @@ ORDER BY
 # 第一步，获取每个媒体的7日和120日收入，其中google的收入需要按照上面逻辑进行修正，其他的不变
 def createAfCohorotIos20250805DataStep1MonthView():
     sql = """
-CREATE OR REPLACE VIEW lw_20250805_af_cohort_ios_data_step1_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250806_af_cohort_ios_data_step1_month_view_by_j AS
 WITH all_revenue AS (
     -- 获取所有媒体的总收入（包括自然量）
     SELECT
@@ -5040,7 +5040,7 @@ ORDER BY
 # 第二步，获取贝叶斯系数，并将系数应用到各媒体的收入上
 def createAfCohorotIos20250805DataStep2MonthView():
     sql = """
-CREATE OR REPLACE VIEW lw_20250805_af_cohort_ios_data_step2_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250806_af_cohort_ios_data_step2_month_view_by_j AS
 WITH step1_data AS (
     -- 获取第一步的数据
     SELECT
@@ -5050,7 +5050,7 @@ WITH step1_data AS (
         cost,
         adjusted_revenue_d7,
         adjusted_revenue_d120
-    FROM lw_20250805_af_cohort_ios_data_step1_month_view_by_j
+    FROM lw_20250806_af_cohort_ios_data_step1_month_view_by_j
 ),
 bayesian_coeffs AS (
     -- 获取贝叶斯系数，支持多个tag
@@ -5064,7 +5064,7 @@ bayesian_coeffs AS (
         organic_revenue,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250805_10', '20250805_20', '20250805_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
 ),
 adjusted_with_coeffs AS (
     -- 将贝叶斯系数应用到各媒体的收入上
@@ -5144,7 +5144,7 @@ ORDER BY
 # 第三步，计算自然量收入
 def createAfCohorotIos20250805DataStep3MonthView():
     sql = """
-CREATE OR REPLACE VIEW lw_20250805_af_cohort_ios_data_step3_month_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250806_af_cohort_ios_data_step3_month_view_by_j AS
 WITH all_revenue AS (
     -- 获取所有媒体的总收入（包括自然量）
     SELECT
@@ -5169,7 +5169,7 @@ step2_data AS (
         country_group,
         tag,
         SUM(final_adjusted_revenue_d120) AS total_adjusted_paid_revenue_d120
-    FROM lw_20250805_af_cohort_ios_data_step2_month_view_by_j
+    FROM lw_20250806_af_cohort_ios_data_step2_month_view_by_j
     GROUP BY
         install_month,
         country_group,
@@ -6408,41 +6408,41 @@ def createViewsAndTables():
 	# createMonthView()
 	# createAdtypeView()
 
-	# # AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createAfAppCountryCostRevenueMonthyView()
-	# createAfAppCostRevenueMonthyView()
-	# createAfCostRevenueMonthyTable()
+	# AF 花费、收入数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCostRevenueMonthyView()
+	createAfAppCountryCostRevenueMonthyView()
+	createAfAppCostRevenueMonthyView()
+	createAfCostRevenueMonthyTable()
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppMediaCountryAdtypeCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入数据，包括普通、添加adtype 2种
-	# createGPIRAppMediaCountryCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
-	# createGPIRCostRevenueMonthyTable()
+	# GPIR 花费、收入数据，包括普通、添加adtype 2种
+	createGPIRAppMediaCountryCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCostRevenueMonthyView()
+	createGPIRCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
-	# createGPIRCohortCostRevenueMonthyTable()
+	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIRAppMediaCountryAdtypeCohorCostRevenuetMonthyView()
+	createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
-	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIROnlyprofitAppMediaCountryAdTypeCohortCostRevenueMonthyView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
 	# # AF大R削弱 花费、收入数据，包括普通、添加adtype 2种
 	# createAfAppMediaCountryNerfBigRCostRevenueMonthyView(percentile=0.999)
@@ -6450,46 +6450,46 @@ def createViewsAndTables():
 	# createAfNerfBigRCostRevenueMonthyTable()
 
 
-	# createForUaCostRevenueMonthyView()
-	# createAppLovinRatioView()
-	# createForUaCostRevenueMonthyTable()
+	createForUaCostRevenueMonthyView()
+	createAppLovinRatioView()
+	createForUaCostRevenueMonthyTable()
 
-	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	
 
-	# # 拟合iOS结果相关
-	# createIosAfCostRevenueDayView()
-	# createIosAfCostRevenueDayFixTable()
-	# createIosAfCostRevenueMonthyFixView()
-	# createIosAfCostRevenueDayFitTable()
+	# 拟合iOS结果相关
+	createIosAfCostRevenueDayView()
+	createIosAfCostRevenueDayFixTable()
+	createIosAfCostRevenueMonthyFixView()
+	createIosAfCostRevenueDayFitTable()
 
-	# createIosTagCostRevenueMonthyView()
+	createIosTagCostRevenueMonthyView()
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyView()
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 
 
 	
 
 
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createIosCohortKpiTargetView()
-	# createIosCohortKpiTargetView2()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createIosCohortKpiTargetView()
+	createIosCohortKpiTargetView2()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
-	# # 计算收入增长率
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
-	# createPredictRevenueRiseRatioAndkpiTargetView()
+	# 计算收入增长率
+	createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiWithDiscountView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiWithDiscountView()
+	createKpiTable()
 
 	# 推算动态KPI
 	createKpi2View()
@@ -6497,22 +6497,22 @@ def createViewsAndTables():
 	createKpi2FixTable()
 
 	# 自然量收入占比
-	# createAfAndroidOrganicMonthView()
-	# createAfCohortAndroidOrganicMonthView()
-	# createAfOnlyprofitCohortAndroidOrganicMonthView()
-	# createGpirAndroidOrganic2MonthView()
-	# createGpirCohortAndroidOrganic2MonthView()
-	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	# createForUaAndroidOrganic2MonthView()
+	createAfAndroidOrganicMonthView()
+	createAfCohortAndroidOrganicMonthView()
+	createAfOnlyprofitCohortAndroidOrganicMonthView()
+	createGpirAndroidOrganic2MonthView()
+	createGpirCohortAndroidOrganic2MonthView()
+	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	createForUaAndroidOrganic2MonthView()
 
-	# createAfCohorotIosOrganicMonthView()
-	# createAfCohorotIosOrganicFixMonthView()
-	# createAfCohorotIosOrganicFitMonthView()
+	createAfCohorotIosOrganicMonthView()
+	createAfCohorotIosOrganicFixMonthView()
+	createAfCohorotIosOrganicFitMonthView()
 
-	# createOrganicMonthTable()
+	createOrganicMonthTable()
 	
-	# # 只用自然量收入占比计算含自然量回本目标
-	# createKpiTargetWithOrganicView()
+	# 只用自然量收入占比计算含自然量回本目标
+	createKpiTargetWithOrganicView()
 
 	# # 自然量debug
 	# createAfAndroidOrganicMonthViewForDebug()
@@ -6529,18 +6529,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# # 回本周期计算
-	# createPayback1View()
-	# createPayback1ViewFix()
-	# createPayback2View()
-	# createPayback2ViewFix()
-	# createPaybackTable()
+	# 回本周期计算
+	createPayback1View()
+	createPayback1ViewFix()
+	createPayback2View()
+	createPayback2ViewFix()
+	createPaybackTable()
 
-	# createPayback1OrganicView()
-	# createPayback1OrganicViewFix()
-	# createPayback2OrganicView()
-	# createPayback2OrganicViewFix()
-	# createPaybackOrganicTable()
+	createPayback1OrganicView()
+	createPayback1OrganicViewFix()
+	createPayback2OrganicView()
+	createPayback2OrganicViewFix()
+	createPaybackOrganicTable()
 
 	pass
 
