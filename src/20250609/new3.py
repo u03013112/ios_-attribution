@@ -2183,7 +2183,7 @@ WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
 SELECT 
 	* ,
-	'20250806_30' AS tag
+	'20250808_20' AS tag
 FROM lw_20250703_ios_af_cohort_cost_revenue_app_country_group_media_month_view_by_j
 WHERE app_package IN ('id6448786147','id6736925794')
 UNION ALL
@@ -2673,7 +2673,7 @@ bayesian_results AS (
         bytedanceglobal_int_coeff,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250808_20')
 ),
 fitted_paid_media AS (
     -- 对付费媒体应用拟合系数
@@ -3515,7 +3515,7 @@ SELECT
 	ad_type,
 	install_month,
 	kpi_target,
-	'20250806_30' AS tag
+	'20250808_20' AS tag
 FROM lw_20250703_ios_cohort_kpi_target_month_view2_by_j
 
 UNION ALL
@@ -4068,27 +4068,27 @@ SELECT
         THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi1 / b.bytedanceglobal_int_coeff, 4)
@@ -4102,27 +4102,27 @@ SELECT
         THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi3 / b.bytedanceglobal_int_coeff, 4)
@@ -4136,27 +4136,27 @@ SELECT
         THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
         -- 20250804新增：iOS媒体系数折扣
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d7' 
              AND b.applovin_int_d7_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.applovin_int_d7_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'applovin_int_d28' 
              AND b.applovin_int_d28_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.applovin_int_d28_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'Facebook Ads' 
              AND b.facebook_ads_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.facebook_ads_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'moloco_int' 
              AND b.moloco_int_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.moloco_int_coeff, 4)
         WHEN k.app_package = 'id6448786147' 
-             AND k.tag IN ('20250806_10', '20250806_20', '20250806_30')
+             AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
              AND k.mediasource = 'bytedanceglobal_int' 
              AND b.bytedanceglobal_int_coeff IS NOT NULL
         THEN ROUND(k.kpi7 / b.bytedanceglobal_int_coeff, 4)
@@ -4884,7 +4884,7 @@ bayesian_coeffs AS (
         organic_revenue,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250808_20')
 ),
 other_paid_totals AS (
     -- 计算除了googleadwords_int之外的付费媒体的总花费和收入
@@ -5121,7 +5121,7 @@ bayesian_coeffs AS (
         organic_revenue,
         tag
     FROM lw_20250703_ios_bayesian_result_by_j
-    WHERE tag IN ('20250806_10', '20250806_20', '20250806_30')
+    WHERE tag IN ('20250806_10', '20250806_20', '20250808_20')
 ),
 adjusted_with_coeffs AS (
     -- 将贝叶斯系数应用到各媒体的收入上
@@ -6588,18 +6588,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# 回本周期计算
-	createPayback1View()
-	createPayback1ViewFix()
-	createPayback2View()
-	createPayback2ViewFix()
-	createPaybackTable()
+	# # 回本周期计算
+	# createPayback1View()
+	# createPayback1ViewFix()
+	# createPayback2View()
+	# createPayback2ViewFix()
+	# createPaybackTable()
 
-	createPayback1OrganicView()
-	createPayback1OrganicViewFix()
-	createPayback2OrganicView()
-	createPayback2OrganicViewFix()
-	createPaybackOrganicTable()
+	# createPayback1OrganicView()
+	# createPayback1OrganicViewFix()
+	# createPayback2OrganicView()
+	# createPayback2OrganicViewFix()
+	# createPaybackOrganicTable()
 
 	pass
 
