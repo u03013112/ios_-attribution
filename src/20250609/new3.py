@@ -2296,7 +2296,7 @@ def createIosAfCostRevenueDayView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250806_af_cohort_cost_revenue_app_country_group_media_day_view_by_j AS
 SELECT
-	app_package,
+	'id6448786147' as app_package,
 	roi.install_day,
 	COALESCE(cg.country_group, 'other') AS country_group,
 	CASE 
@@ -2323,7 +2323,6 @@ WHERE
 	AND roi.facebook_segment IN ('country', 'N/A')
 	AND app_package IN ('id6448786147', 'id6736925794')
 GROUP BY
-	app_package,
 	roi.install_day,
 	COALESCE(cg.country_group, 'other'),
 	CASE 
@@ -2799,6 +2798,64 @@ ORDER BY
     execSql2(sql)
     return
 
+
+# 将fit数据汇总，计算分国家的7日总收入
+# 与原始数据的分国家7日总收入进行join
+# 合成一个误差监测view
+def createIosAfCostRevenueDayFitCheckTable():
+    sql = """
+DROP TABLE IF EXISTS lw_20250806_af_cohort_cost_revenue_day_fit_table_check_by_j;
+CREATE TABLE lw_20250806_af_cohort_cost_revenue_day_fit_table_check_by_j AS
+WITH original_data AS (
+    -- 获取原始数据的分国家7日总收入
+    SELECT
+        app_package,
+        install_day,
+        country_group,
+        SUM(revenue_d7) AS original_revenue_d7
+    FROM lw_20250806_af_cohort_cost_revenue_day_fix_table_by_j
+    GROUP BY
+        app_package,
+        install_day,
+        country_group
+),
+fitted_data AS (
+    -- 获取拟合数据的分国家7日总收入
+    SELECT
+        app_package,
+        install_day,
+        country_group,
+        tag,
+        SUM(revenue_d7) AS fitted_revenue_d7
+    FROM lw_20250806_af_cohort_cost_revenue_day_fit_table_by_j
+    GROUP BY
+        app_package,
+        install_day,
+        country_group,
+        tag
+)
+-- 合并原始数据和拟合数据
+SELECT
+    fd.app_package,
+    fd.install_day,
+    fd.country_group,
+    fd.tag,
+    od.original_revenue_d7,
+    fd.fitted_revenue_d7
+FROM fitted_data fd
+LEFT JOIN original_data od ON fd.app_package = od.app_package
+                           AND fd.install_day = od.install_day
+                           AND fd.country_group = od.country_group
+ORDER BY
+    fd.tag,
+    fd.app_package,
+    fd.install_day,
+    fd.country_group
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
 
 #####################################################
 # 计算kpi_target
@@ -6462,6 +6519,8 @@ def createViewsAndTables():
 	createIosAfCostRevenueDayFixTable()
 	createIosAfCostRevenueMonthyFixView()
 	createIosAfCostRevenueDayFitTable()
+
+	createIosAfCostRevenueDayFitCheckTable()
 
 	createIosTagCostRevenueMonthyView()
 
