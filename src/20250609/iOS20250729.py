@@ -194,6 +194,11 @@ def getData(startDayStr, endDayStr):
     mergedDf = pd.merge(totalDf, afDf, on=['install_day', 'country_group'], how='outer')
 
     skaRevenueDf = getSkaRevenueData(startDayStr, endDayStr)
+    # 进行修正，媒体改名，将媒体名称与af数据保持一致
+    # tiktokglobal_int -> bytedanceglobal_int
+    skaRevenueDf['mediasource'] = skaRevenueDf['mediasource'].replace({
+        'tiktokglobal_int': 'bytedanceglobal_int'
+    })
     skaRevenueDf2 = getSkaRevenueData2(skaRevenueDf,mediaList)
     mergedDf = pd.merge(mergedDf, skaRevenueDf2, on=['install_day', 'country_group'], how='outer')
     
