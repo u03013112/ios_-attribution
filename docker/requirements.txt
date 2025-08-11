@@ -7,3 +7,4 @@ gspread
 sklearn
 seaborn
 statsmodels
+databricks-sql-connector
