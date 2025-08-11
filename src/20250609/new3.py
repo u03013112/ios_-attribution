@@ -6449,7 +6449,96 @@ GROUP BY
 	return df
 
 
+##########
+# 创建AF媒体花费占比月表，为了给分国家添加媒体花费占比列
 
+def createAfMediaCostRatioMonthTable():
+    sql = """
+DROP TABLE IF EXISTS lw_20250703_af_media_cost_ratio_month_table_by_j;
+CREATE TABLE lw_20250703_af_media_cost_ratio_month_table_by_j AS
+WITH base_data AS (
+    SELECT
+        case
+			when app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp') then 'com.fun.lastwar.gp'
+			when app_package in ('id6448786147','id6736925794') then 'id6448786147'
+			else app_package
+		end AS app_package,
+        SUBSTR(roi.install_day, 1, 6) AS install_month,
+        COALESCE(cg.country_group, 'other') AS country_group,
+        CASE 
+            WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+            WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+            ELSE mediasource
+        END as mediasource,
+        SUM(cost_value_usd) AS cost
+    FROM
+        dws_overseas_public_roi roi
+        LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+        LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+    WHERE
+        roi.app = '502'
+        AND m.month_diff > 0
+        AND roi.facebook_segment IN ('country', 'N/A')
+    GROUP BY
+        app_package,
+        SUBSTR(roi.install_day, 1, 6),
+        COALESCE(cg.country_group, 'other'),
+        CASE 
+            WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+            WHEN mediasource = 'applovin_int' AND UPPER(campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+            ELSE mediasource
+        END
+),
+total_cost AS (
+    SELECT
+        app_package,
+        install_month,
+        country_group,
+        SUM(cost) AS total_cost
+    FROM base_data
+    WHERE mediasource != 'Organic'
+    GROUP BY
+        app_package,
+        install_month,
+        country_group
+)
+SELECT
+    bd.app_package,
+    bd.install_month,
+    bd.country_group,
+    tc.total_cost,
+    -- Facebook Ads花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'Facebook Ads' THEN bd.cost END) / tc.total_cost, 0) AS facebook_ads_cost_ratio,
+    -- applovin_int_d7花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'applovin_int_d7' THEN bd.cost END) / tc.total_cost, 0) AS applovin_int_d7_cost_ratio,
+    -- applovin_int_d28花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'applovin_int_d28' THEN bd.cost END) / tc.total_cost, 0) AS applovin_int_d28_cost_ratio,
+    -- googleadwords_int花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'googleadwords_int' THEN bd.cost END) / tc.total_cost, 0) AS googleadwords_int_cost_ratio,
+    -- bytedanceglobal_int花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'bytedanceglobal_int' THEN bd.cost END) / tc.total_cost, 0) AS bytedanceglobal_int_cost_ratio,
+    -- moloco_int花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource = 'moloco_int' THEN bd.cost END) / tc.total_cost, 0) AS moloco_int_cost_ratio,
+    -- 其他媒体花费占比
+    COALESCE(SUM(CASE WHEN bd.mediasource NOT IN ('Facebook Ads','applovin_int_d7','applovin_int_d28','googleadwords_int','bytedanceglobal_int','moloco_int','Organic') THEN bd.cost END) / tc.total_cost, 0) AS other_media_cost_ratio
+FROM base_data bd
+LEFT JOIN total_cost tc ON bd.app_package = tc.app_package
+                        AND bd.install_month = tc.install_month
+                        AND bd.country_group = tc.country_group
+WHERE bd.mediasource != 'Organic'
+GROUP BY
+    bd.app_package,
+    bd.install_month,
+    bd.country_group,
+    tc.total_cost
+ORDER BY
+    bd.app_package,
+    bd.install_month,
+    bd.country_group;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
 
 
 
