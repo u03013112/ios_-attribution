@@ -5,6 +5,7 @@ sys.path.append('/src')
 
 from src.config import databricksServer_hostname, databricksHttp_path, databricksAccess_token
 
+# 针对select查询，返回一个DataFrame
 def execSql(sql_query):
 	connection = sql.connect(
 		server_hostname = databricksServer_hostname,
@@ -16,6 +17,24 @@ def execSql(sql_query):
 
 	return df
 
+# 针对类似建立视图或者插入数据的操作，返回None
+def execSql2(sql_query):
+	connection = sql.connect(
+		server_hostname = databricksServer_hostname,
+		http_path = databricksHttp_path,
+		access_token = databricksAccess_token
+	)
+	cursor = connection.cursor()
+
+	use_database_query = "USE marketing.attribution;"
+	cursor.execute(use_database_query)
+
+	cursor.execute(sql_query)
+	connection.commit()
+	cursor.close()
+	connection.close()
+
+	return None
 
 if __name__ == "__main__":
 	# Example usage
