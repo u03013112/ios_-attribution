@@ -6679,18 +6679,18 @@ def createViewsAndTables():
 	# 大R削弱debug
 	# createAfAppNerfBigRDebugTable(percentile=0.999)
 
-	# # 回本周期计算
-	# createPayback1View()
-	# createPayback1ViewFix()
-	# createPayback2View()
-	# createPayback2ViewFix()
-	# createPaybackTable()
+	# 回本周期计算
+	createPayback1View()
+	createPayback1ViewFix()
+	createPayback2View()
+	createPayback2ViewFix()
+	createPaybackTable()
 
-	# createPayback1OrganicView()
-	# createPayback1OrganicViewFix()
-	# createPayback2OrganicView()
-	# createPayback2OrganicViewFix()
-	# createPaybackOrganicTable()
+	createPayback1OrganicView()
+	createPayback1OrganicViewFix()
+	createPayback2OrganicView()
+	createPayback2OrganicViewFix()
+	createPaybackOrganicTable()
 
 	pass
 
