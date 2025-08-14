@@ -2114,6 +2114,454 @@ FROM lw_20250703_for_ua_kpi_target_month_view_by_j
 	execSql2(sql2)
 	return
 
+#####################################################
+# 计算收入增长率
+
+def createRevenueRiseRatioView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_month_view_by_j AS
+WITH ratios AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		CASE
+			WHEN revenue_d1 = 0 THEN 0
+			ELSE revenue_d3 / revenue_d1
+		END AS r3_r1,
+		CASE
+			WHEN revenue_d3 = 0 THEN 0
+			ELSE revenue_d7 / revenue_d3
+		END AS r7_r3,
+		CASE
+			WHEN revenue_d7 = 0 THEN 0
+			ELSE revenue_d14 / revenue_d7
+		END AS r14_r7,
+		CASE
+			WHEN revenue_d14 = 0 THEN 0
+			ELSE revenue_d30 / revenue_d14
+		END AS r30_r14,
+		CASE
+			WHEN revenue_d7 = 0 THEN 0
+			ELSE revenue_d30 / revenue_d7
+		END AS r30_r7,
+		CASE
+			WHEN revenue_d30 = 0 THEN 0
+			ELSE revenue_d60 / revenue_d30
+		END AS r60_r30,
+		CASE
+			WHEN revenue_d60 = 0 THEN 0
+			ELSE revenue_d90 / revenue_d60
+		END AS r90_r60,
+		CASE
+			WHEN revenue_d90 = 0 THEN 0
+			ELSE revenue_d120 / revenue_d90
+		END AS r120_r90,
+		CASE
+			WHEN revenue_d120 = 0 THEN 0
+			ELSE revenue_d150 / revenue_d120
+		END AS r150_r120
+	FROM
+		lw_20250703_cost_revenue_app_month_table_by_j
+),
+ratios_with_rownum AS (
+	SELECT
+		*,
+		ROW_NUMBER() OVER (
+			PARTITION BY app_package,
+			country_group,
+			mediasource,
+			ad_type,
+			tag
+			ORDER BY
+				install_month
+		) AS row_num
+	FROM
+		ratios
+),
+last3month_ratios AS (
+	SELECT
+		cur.app_package,
+		cur.install_month,
+		cur.country_group,
+		cur.mediasource,
+		cur.ad_type,
+		cur.tag,
+		cur.r3_r1,
+		cur.r7_r3,
+		cur.r14_r7,
+		cur.r30_r14,
+		cur.r30_r7,
+		cur.r60_r30,
+		cur.r90_r60,
+		cur.r120_r90,
+		cur.r150_r120,
+		-- 计算平均值时排除0值
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r3_r1 <> 0 THEN prev.r3_r1
+				END
+			),
+			0
+		) AS last3month_r3_r1,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r7_r3 <> 0 THEN prev.r7_r3
+				END
+			),
+			0
+		) AS last3month_r7_r3,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r14_r7 <> 0 THEN prev.r14_r7
+				END
+			),
+			0
+		) AS last3month_r14_r7,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r30_r14 <> 0 THEN prev.r30_r14
+				END
+			),
+			0
+		) AS last3month_r30_r14,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r30_r7 <> 0 THEN prev.r30_r7
+				END
+			),
+			0
+		) AS last3month_r30_r7,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r60_r30 <> 0 THEN prev.r60_r30
+				END
+			),
+			0
+		) AS last3month_r60_r30,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r90_r60 <> 0 THEN prev.r90_r60
+				END
+			),
+			0
+		) AS last3month_r90_r60,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r120_r90 <> 0 THEN prev.r120_r90
+				END
+			),
+			0
+		) AS last3month_r120_r90,
+		COALESCE(
+			AVG(
+				CASE
+					WHEN prev.r150_r120 <> 0 THEN prev.r150_r120
+				END
+			),
+			0
+		) AS last3month_r150_r120
+	FROM
+		ratios_with_rownum cur
+		LEFT JOIN ratios_with_rownum prev ON 
+		cur.app_package = prev.app_package
+		AND cur.country_group = prev.country_group
+		AND cur.mediasource = prev.mediasource
+		AND cur.ad_type = prev.ad_type
+		AND cur.tag = prev.tag
+		AND prev.row_num BETWEEN cur.row_num - 3
+		AND cur.row_num - 1
+	GROUP BY
+		cur.app_package,
+		cur.install_month,
+		cur.country_group,
+		cur.mediasource,
+		cur.ad_type,
+		cur.tag,
+		cur.r3_r1,
+		cur.r7_r3,
+		cur.r14_r7,
+		cur.r30_r14,
+		cur.r30_r7,
+		cur.r60_r30,
+		cur.r90_r60,
+		cur.r120_r90,
+		cur.r150_r120
+)
+SELECT
+	app_package,
+	install_month,
+	country_group,
+	mediasource,
+	ad_type,
+	tag,
+	r3_r1,
+	r7_r3,
+	r14_r7,
+	r30_r14,
+	r30_r7,
+	r60_r30,
+	r90_r60,
+	r120_r90,
+	r150_r120,
+	last3month_r3_r1,
+	last3month_r7_r3,
+	last3month_r14_r7,
+	last3month_r30_r14,
+	last3month_r30_r7,
+	last3month_r60_r30,
+	last3month_r90_r60,
+	last3month_r120_r90,
+	last3month_r150_r120
+FROM
+	last3month_ratios
+ORDER BY
+	tag,
+	app_package,
+	country_group,
+	mediasource,
+	ad_type,
+	install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 由于满日数据问题，当月数据不完整，需要使用之前数据完成预测。
+def createPredictRevenueRiseRatioView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j AS
+WITH base AS (
+	SELECT
+		app_package,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		install_month,
+		r3_r1,
+		r7_r3,
+		r14_r7,
+		r30_r14,
+		r30_r7,
+		r60_r30,
+		r90_r60,
+		r120_r90,
+		r150_r120,
+		last3month_r3_r1,
+		last3month_r7_r3,
+		last3month_r14_r7,
+		last3month_r30_r14,
+		last3month_r30_r7,
+		last3month_r60_r30,
+		last3month_r90_r60,
+		last3month_r120_r90,
+		last3month_r150_r120,
+		ROW_NUMBER() OVER (
+			PARTITION BY 
+			app_package,
+			country_group,
+			mediasource,
+			ad_type,
+			tag
+			ORDER BY
+				install_month
+		) AS row_num
+	FROM
+		lw_20250703_af_revenue_rise_ratio_month_view_by_j
+)
+SELECT
+	cur.app_package,
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.tag,
+	cur.install_month,
+	cur.r3_r1,
+	cur.r7_r3,
+	cur.r14_r7,
+	cur.r30_r14,
+	cur.r30_r7,
+	cur.r60_r30,
+	cur.r90_r60,
+	cur.r120_r90,
+	cur.r150_r120,
+	cur.last3month_r3_r1,
+	cur.last3month_r7_r3,
+	cur.last3month_r14_r7,
+	cur.last3month_r30_r14,
+	cur.last3month_r30_r7,
+	cur.last3month_r60_r30,
+	cur.last3month_r90_r60,
+	cur.last3month_r120_r90,
+	cur.last3month_r150_r120,
+	-- 本行的预测值
+	cur.last3month_r3_r1 AS predict_r3_r1,
+	cur.last3month_r7_r3 AS predict_r7_r3,
+	cur.last3month_r30_r7 AS predict_r30_r7,
+	cur.last3month_r14_r7 AS predict_r14_r7,
+	cur.last3month_r30_r14 AS predict_r30_r14,
+	-- 上一行的预测值
+	COALESCE(prev1.last3month_r60_r30, 0) AS predict_r60_r30,
+	-- 上两行的预测值
+	COALESCE(prev2.last3month_r90_r60, 0) AS predict_r90_r60,
+	-- 上三行的预测值
+	COALESCE(prev3.last3month_r120_r90, 0) AS predict_r120_r90,
+	-- 上四行的预测值
+	COALESCE(prev4.last3month_r150_r120, 0) AS predict_r150_r120
+FROM
+	base cur
+	LEFT JOIN base prev1 ON 
+	cur.app_package = prev1.app_package
+	AND cur.country_group = prev1.country_group
+	AND cur.mediasource = prev1.mediasource
+	AND cur.ad_type = prev1.ad_type
+	AND cur.tag = prev1.tag
+	AND cur.row_num = prev1.row_num + 1
+	LEFT JOIN base prev2 ON 
+	cur.app_package = prev2.app_package
+	AND cur.country_group = prev2.country_group
+	AND cur.mediasource = prev2.mediasource
+	AND cur.ad_type = prev2.ad_type
+	AND cur.tag = prev2.tag
+	AND cur.row_num = prev2.row_num + 2
+	LEFT JOIN base prev3 ON 
+	cur.app_package = prev3.app_package
+	AND cur.country_group = prev3.country_group
+	AND cur.mediasource = prev3.mediasource
+	AND cur.ad_type = prev3.ad_type
+	AND cur.tag = prev3.tag
+	AND cur.row_num = prev3.row_num + 3
+	LEFT JOIN base prev4 ON
+	cur.app_package = prev4.app_package
+	AND cur.country_group = prev4.country_group
+	AND cur.mediasource = prev4.mediasource
+	AND cur.ad_type = prev4.ad_type
+	AND cur.tag = prev4.tag
+	AND cur.row_num = prev4.row_num + 4
+ORDER BY
+	cur.tag,
+	cur.app_package,
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.install_month;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createPredictRevenueRiseRatioTable():
+	sql1 = """
+DROP TABLE IF EXISTS lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j;
+	"""
+	print(f"Executing SQL: {sql1}")
+	execSql2(sql1)
+	sql2 = """
+CREATE TABLE lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j AS
+SELECT 
+	rr.app_package,
+	rr.country_group,
+	rr.mediasource,
+	rr.ad_type,
+	rr.tag,
+	rr.install_month,
+	rr.r3_r1,
+	rr.r7_r3,
+	rr.r14_r7,
+	case when m.month_diff >= 1 then rr.r30_r14 
+	else NULL end
+	as r30_r14,
+	case when m.month_diff >= 1 then rr.r30_r7
+	else NULL end
+	as r30_r7,
+	case when m.month_diff >= 2 then rr.r60_r30
+	else NULL end
+	as r60_r30,
+	case when m.month_diff >= 3 then rr.r90_r60
+	else NULL end
+	as r90_r60,
+	case when m.month_diff >= 4 then rr.r120_r90
+	else NULL end
+	as r120_r90,
+	case when m.month_diff >= 5 then rr.r150_r120
+	else NULL end
+	as r150_r120,
+	rr.last3month_r3_r1,
+	rr.last3month_r7_r3,
+	rr.last3month_r14_r7,
+	rr.last3month_r30_r14,
+	rr.last3month_r30_r7,
+	rr.last3month_r60_r30,
+	rr.last3month_r90_r60,
+	rr.last3month_r120_r90,
+	rr.last3month_r150_r120,
+	rr.predict_r3_r1,
+	rr.predict_r7_r3,
+	rr.predict_r30_r7,
+	rr.predict_r14_r7,
+	rr.predict_r30_r14,
+	rr.predict_r60_r30,
+	rr.predict_r90_r60,
+	rr.predict_r120_r90,
+	rr.predict_r150_r120
+FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+LEFT JOIN month_view_by_j m ON rr.install_month = m.install_month
+;
+	"""
+	print(f"Executing SQL: {sql2}")
+	execSql2(sql2)
+	return
+
+
+# 合并lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j和lw_20250703_kpi_target_month_table_by_j
+def createPredictRevenueRiseRatioAndkpiTargetView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j AS
+SELECT
+	rr.*,
+	COALESCE(
+        kt.kpi_target, 
+        -- 如果动态KPI不存在，使用原来的写死逻辑
+        CASE
+            WHEN rr.tag LIKE '%onlyprofit%' THEN 1.00
+            ELSE 
+                CASE
+                    WHEN rr.country_group = 'US' THEN 1.45
+                    WHEN rr.country_group = 'KR' THEN 1.58
+                    WHEN rr.country_group = 'JP' THEN 1.66
+                    WHEN rr.country_group = 'GCC' THEN 1.45
+                    WHEN rr.country_group = 'T1' THEN 1.65
+                    WHEN rr.country_group = 'other' THEN 1.65
+                    ELSE 1.43
+                END
+        END
+    ) AS kpi_target
+FROM lw_20250703_af_revenue_rise_ratio_predict_month_view_by_j rr
+LEFT JOIN lw_20250703_kpi_target_month_table_by_j kt ON
+	rr.app_package = kt.app_package
+	AND rr.country_group = kt.country_group
+	AND rr.mediasource = kt.mediasource
+	AND rr.ad_type = kt.ad_type
+	AND rr.install_month = kt.install_month
+	AND rr.tag = kt.tag
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 
 def createViewsAndTables():
@@ -2170,7 +2618,16 @@ def createViewsAndTables():
 	# createForUaKpiTargetView()
 	# createKpiTargetTable()
 
-	
+	# # 计算收入增长率
+	# createRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioView()
+	# createPredictRevenueRiseRatioTable()
+	# createPredictRevenueRiseRatioAndkpiTargetView()
+
+	# 推算KPI
+	createKpiView()
+	createKpiWithDiscountView()
+	createKpiTable()
 
 
 
