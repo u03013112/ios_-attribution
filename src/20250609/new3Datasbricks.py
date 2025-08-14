@@ -2781,6 +2781,293 @@ SELECT * FROM lw_20250703_af_kpi_month_with_discount_view_by_j;
 	execSql2(sql2)
 	return
 
+####################################################
+# 推算动态KPI
+
+# 动态KPI，是根据30日、60日、90日的ROI来计算的
+def createKpi2View():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_kpi2_month_view_by_j AS 
+WITH roi_base AS (
+	SELECT
+		app_package,
+		install_month,
+		country_group,
+		mediasource,
+		ad_type,
+		tag,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120
+	FROM
+		marketing.attribution.lw_20250703_cost_revenue_app_month_table_by_j
+),
+predict_base AS (
+	SELECT
+		*
+	FROM marketing.attribution.lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+)
+SELECT
+	r.app_package,
+	r.install_month,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.tag,
+	p.kpi_target,
+	-- kpi_7
+	CASE
+		WHEN r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi1_7,
+	CASE
+		WHEN r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi3_7,
+	CASE
+		WHEN r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (
+					r.roi7 * p.predict_r30_r7 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi7_7,
+	-- kpi_30
+	CASE
+		WHEN r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi1_30,
+	CASE
+		WHEN r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi3_30,
+	CASE
+		WHEN r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (
+					r.roi30 * p.predict_r60_r30 * p.predict_r90_r60 * p.predict_r120_r90
+				)
+			),
+			4
+		)
+	END AS kpi7_30,
+	-- kpi_60
+	CASE
+		WHEN r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi1_60,
+	CASE
+		WHEN r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi3_60,
+	CASE
+		WHEN r.roi60 * p.predict_r90_r60 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (
+				p.kpi_target / (r.roi60 * p.predict_r90_r60 * p.predict_r120_r90)
+			),
+			4
+		)
+	END AS kpi7_60,
+	-- kpi_90
+	CASE
+		WHEN r.roi90 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi1 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi1_90,
+	CASE
+		WHEN r.roi90 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi3 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi3_90,
+	CASE
+		WHEN r.roi90 * p.predict_r120_r90 = 0 THEN NULL
+		ELSE ROUND(
+			r.roi7 * (p.kpi_target / (r.roi90 * p.predict_r120_r90)),
+			4
+		)
+	END AS kpi7_90,
+	-- 【新增】kpi_120（直接用120日ROI与kpi_target做比较）
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi1 * (p.kpi_target / r.roi120), 4)
+	END AS kpi1_120,
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi3 * (p.kpi_target / r.roi120), 4)
+	END AS kpi3_120,
+	CASE
+		WHEN r.roi120 = 0 THEN NULL
+		ELSE ROUND(r.roi7 * (p.kpi_target / r.roi120), 4)
+	END AS kpi7_120
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON 
+	r.app_package = p.app_package
+	AND r.install_month = p.install_month
+	AND r.country_group = p.country_group
+	AND r.mediasource = p.mediasource
+	AND r.ad_type = p.ad_type
+	AND r.tag = p.tag
+ORDER BY
+	r.tag,
+	r.app_package,
+	r.country_group,
+	r.mediasource,
+	r.ad_type,
+	r.install_month,
+	p.kpi_target
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 动态KPI，修正，将不完整数据的月份过滤掉
+# 这里的逻辑是基于 lw_kpi_country_group_month_view_by_j 视图进行修正
+def createKpi2ViewFix():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_kpi2_fix_month_view_by_j AS
+SELECT
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type,
+	a.tag,
+	CASE
+		WHEN b.month_diff >= 5 THEN a.kpi1_120
+		WHEN b.month_diff = 4 THEN a.kpi1_90
+		WHEN b.month_diff = 3 THEN a.kpi1_60
+		WHEN b.month_diff = 2 THEN a.kpi1_30
+		WHEN b.month_diff = 1 THEN a.kpi1_7
+		ELSE NULL
+	END AS d_kpi1,
+	CASE
+		WHEN b.month_diff >= 5 THEN a.kpi3_120
+		WHEN b.month_diff = 4 THEN a.kpi3_90
+		WHEN b.month_diff = 3 THEN a.kpi3_60
+		WHEN b.month_diff = 2 THEN a.kpi3_30
+		WHEN b.month_diff = 1 THEN a.kpi3_7
+		ELSE NULL
+	END AS d_kpi3,
+	CASE
+		WHEN b.month_diff >= 5 THEN a.kpi7_120
+		WHEN b.month_diff = 4 THEN a.kpi7_90
+		WHEN b.month_diff = 3 THEN a.kpi7_60
+		WHEN b.month_diff = 2 THEN a.kpi7_30
+		WHEN b.month_diff = 1 THEN a.kpi7_7
+		ELSE NULL
+	END AS d_kpi7
+FROM
+	lw_20250703_af_kpi2_month_view_by_j a
+	INNER JOIN month_view_by_j b ON a.install_month = b.install_month
+ORDER BY
+	a.tag,
+	a.app_package,
+	a.install_month,
+	a.country_group,
+	a.mediasource,
+	a.ad_type;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+def createKpi2FixTable():
+	sql1 = """
+DROP TABLE IF EXISTS lw_20250703_af_kpi2_fix_month_table_by_j;
+	"""
+	print(f"Executing SQL: {sql1}")
+	execSql2(sql1)
+	sql2 = """
+CREATE TABLE lw_20250703_af_kpi2_fix_month_table_by_j AS
+SELECT * FROM lw_20250703_af_kpi2_fix_month_view_by_j;
+	"""
+	print(f"Executing SQL: {sql2}")
+	execSql2(sql2)
+	return
+
 
 
 def createViewsAndTables():
@@ -2843,10 +3130,15 @@ def createViewsAndTables():
 	# createPredictRevenueRiseRatioTable()
 	# createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# 推算KPI
-	createKpiView()
-	createKpiWithDiscountView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiWithDiscountView()
+	# createKpiTable()
+
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
 
 
