@@ -3979,6 +3979,8 @@ LEFT JOIN lw_20250703_kpi_target_month_table_by_j kt ON
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 	return
+
+
 #####################################################
 # 推算KPI
 
