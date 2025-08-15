@@ -222,6 +222,112 @@ FROM
 	execSql2(sql)
 	return
 
+# 真实回本周期，是根据90日、120日、150日的ROI来计算的
+def createRealPaybackView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250815_country_milestone_profit_real_payback_view_by_j AS
+WITH roi_base AS (
+	SELECT
+		app_package,
+		startday,
+		endday,
+		SUBSTR(startday, 1, 6) as install_month,
+		country_group,
+		cost,
+		revenue_d1,
+		revenue_d3,
+		revenue_d7,
+		revenue_d30,
+		revenue_d60,
+		revenue_d90,
+		revenue_d120,
+		revenue_d150,
+		-- 计算ROI
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d1 / cost
+		END AS roi1,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d3 / cost
+		END AS roi3,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d7 / cost
+		END AS roi7,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d30 / cost
+		END AS roi30,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d60 / cost
+		END AS roi60,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d90 / cost
+		END AS roi90,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d120 / cost
+		END AS roi120,
+		CASE
+			WHEN cost = 0 THEN 0
+			ELSE revenue_d150 / cost
+		END AS roi150
+	FROM
+		lw_20250815_country_milestone_profit_cost_revenue_view_by_j
+),
+predict_base AS (
+	SELECT
+		*
+	FROM
+		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+	WHERE
+		tag = 'af_onlyprofit_only_country_cohort'
+)
+SELECT
+	r.app_package,
+	r.startday,
+	r.endday,
+	r.install_month,
+	r.country_group,
+	p.kpi_target,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		ELSE NULL
+	END AS payback_60,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		ELSE NULL
+	END AS payback_90,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		ELSE NULL
+	END AS payback_120,
+	CASE
+		WHEN roi60 >= kpi_target THEN 2.0
+		WHEN roi90 >= kpi_target THEN 2 + (kpi_target - roi60) /(roi90 - roi60)
+		WHEN roi120 >= kpi_target THEN 3 +(kpi_target - roi90) /(roi120 - roi90)
+		WHEN roi150 >= kpi_target THEN 4 +(kpi_target - roi120) /(roi150 - roi120)
+		ELSE 5.0
+	END AS payback_150
+FROM
+	roi_base r
+	LEFT JOIN predict_base p ON r.app_package = p.app_package
+	AND r.install_month = p.install_month
+	AND r.country_group = p.country_group
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
+
 def createPaybackTable():
 	sql1 = """
 DROP TABLE IF EXISTS lw_20250815_country_milestone_profit_payback_table_by_j;
@@ -231,19 +337,30 @@ DROP TABLE IF EXISTS lw_20250815_country_milestone_profit_payback_table_by_j;
 	sql2 = """
 CREATE TABLE lw_20250815_country_milestone_profit_payback_table_by_j (
 select
-	app_package,
-	country_group,
-	startday,
+	pred.app_package,
+	pred.country_group,
+	pred.startday,
 	case
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 150 then payback_150
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 120 then payback_120_p_150
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 90 then payback_90_p_150
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 60 then payback_60_p_150
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 30 then payback_30_p_150
-		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 7 then payback_7_p_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 150 then pred.payback_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 120 then pred.payback_120_p_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 90 then pred.payback_90_p_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 60 then pred.payback_60_p_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 30 then pred.payback_30_p_150
+		when datediff(current_date(), to_date(pred.endday, 'yyyyMMdd')) > 7 then pred.payback_7_p_150
 		else null
-	end as payback_month
-from data_science.default.lw_20250815_country_milestone_profit_payback_view_by_j
+	end as payback_month,
+	case
+		when datediff(current_date(), to_date(real.endday, 'yyyyMMdd')) > 150 then real.payback_150
+		when datediff(current_date(), to_date(real.endday, 'yyyyMMdd')) > 120 then real.payback_120
+		when datediff(current_date(), to_date(real.endday, 'yyyyMMdd')) > 90 then real.payback_90
+		when datediff(current_date(), to_date(real.endday, 'yyyyMMdd')) > 60 then real.payback_60
+		else null
+	end as real_payback_month
+from data_science.default.lw_20250815_country_milestone_profit_payback_view_by_j pred
+left join data_science.default.lw_20250815_country_milestone_profit_real_payback_view_by_j real
+on pred.app_package = real.app_package
+	and pred.country_group = real.country_group
+	and pred.startday = real.startday
 )
 ;
 	"""
@@ -256,6 +373,7 @@ from data_science.default.lw_20250815_country_milestone_profit_payback_view_by_j
 def main():
 	# createCostAndRevenueView()
 	# createPaybackView()
+	# createRealPaybackView()
 	createPaybackTable()
 
 if __name__ == "__main__":
