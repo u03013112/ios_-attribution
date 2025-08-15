@@ -71,7 +71,7 @@ GROUP BY
 	print(f"Executing SQL: {sql}")
 	execSql2(sql)
 
-def createPayback2View():
+def createPaybackView():
 	sql = """
 CREATE OR REPLACE VIEW lw_20250815_country_milestone_profit_payback_view_by_j AS
 WITH roi_base AS (
@@ -131,6 +131,8 @@ predict_base AS (
 		*
 	FROM
 		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+	WHERE
+		tag = 'af_onlyprofit_only_country_cohort'
 ),
 predict AS (
 	SELECT
@@ -160,12 +162,10 @@ predict AS (
 		r.roi120 * p.predict_r150_r120 as roi_120_predict_150
 	FROM
 		roi_base r
-		LEFT JOIN predict_base p ON r.app_package = p.app_package
+		LEFT JOIN predict_base p ON 
+		r.app_package = p.app_package
 		AND r.install_month = p.install_month
 		AND r.country_group = p.country_group
-		AND r.mediasource = p.mediasource
-		AND r.ad_type = p.ad_type
-		AND r.tag = p.tag
 )
 SELECT
 	app_package,
@@ -222,3 +222,41 @@ FROM
 	execSql2(sql)
 	return
 
+def createPaybackTable():
+	sql1 = """
+DROP TABLE IF EXISTS lw_20250815_country_milestone_profit_payback_table_by_j;
+	"""
+	print(f"Executing SQL: {sql1}")
+	execSql2(sql1)
+	sql2 = """
+CREATE TABLE lw_20250815_country_milestone_profit_payback_table_by_j (
+select
+	app_package,
+	country_group,
+	startday,
+	case
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 150 then payback_150
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 120 then payback_120_p_150
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 90 then payback_90_p_150
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 60 then payback_60_p_150
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 30 then payback_30_p_150
+		when datediff(current_date(), to_date(endday, 'yyyyMMdd')) > 7 then payback_7_p_150
+		else null
+	end as payback_month
+from data_science.default.lw_20250815_country_milestone_profit_payback_view_by_j
+)
+;
+	"""
+	print(f"Executing SQL: {sql2}")
+	execSql2(sql2)
+	return
+
+
+
+def main():
+	# createCostAndRevenueView()
+	# createPaybackView()
+	createPaybackTable()
+
+if __name__ == "__main__":
+	main()
