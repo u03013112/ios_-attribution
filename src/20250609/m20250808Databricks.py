@@ -31,14 +31,14 @@ PARTITIONED BY (tag)
 def m20250808():
 	sql1 = """
 -- 删除已存在的分区数据（如果存在）
-DELETE FROM marketing.attribution.lw_20250703_ios_bayesian_result_by_j WHERE tag = '20250808_20';	
+DELETE FROM lw_20250703_ios_bayesian_result_by_j WHERE tag = '20250808_20';	
 	"""
 	print(f"Executing SQL: {sql1}")
 	execSql2(sql1)
 
 	sql2 = """
 -- 插入数据到新分区
-INSERT INTO marketing.attribution.lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250808_20')
+INSERT INTO lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250808_20')
 VALUES
 	('GCC', 823.5, 1.0, 1.0, 1.122, 1.106, 1.25),
 	('JP', 1405.0, 1.0, 1.0, 1.146, 1.202, 0.939),
@@ -57,14 +57,14 @@ VALUES
 def m20250806():
 	sql1 = """
 -- 删除已存在的分区数据（如果存在）
-DELETE FROM marketing.attribution.lw_20250703_ios_bayesian_result_by_j WHERE tag in ('20250806_10','20250806_20');	
+DELETE FROM lw_20250703_ios_bayesian_result_by_j WHERE tag in ('20250806_10','20250806_20');	
 	"""
 	print(f"Executing SQL: {sql1}")
 	execSql2(sql1)
 
 	sql2 = """
 -- 插入数据到新分区
-INSERT INTO marketing.attribution.lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250806_10')
+INSERT INTO lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250806_10')
 VALUES
 	('GCC', 823.5, 1.0, 1.0, 1.122, 1.106, 1.25),
 	('JP', 1405.0, 1.0, 1.0, 1.146, 1.202, 0.939),
@@ -79,7 +79,7 @@ VALUES
 
 	sql3 = """
 -- 插入数据到新分区
-INSERT INTO marketing.attribution.lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250806_20')
+INSERT INTO lw_20250703_ios_bayesian_result_by_j PARTITION (tag='20250806_20')
 VALUES
 	('GCC', 823.5, 1.0, 1.0, 1.122, 1.106, 1.25),
 	('JP', 1405.0, 1.0, 1.0, 1.146, 1.202, 0.939),
@@ -96,7 +96,7 @@ VALUES
 
 
 if __name__ == '__main__':
-	# createTable()
+	createTable()
 	m20250806()
-	# m20250808()
+	m20250808()
 		

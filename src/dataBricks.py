@@ -26,7 +26,7 @@ def execSql2(sql_query):
 	)
 	cursor = connection.cursor()
 
-	use_database_query = "USE marketing.attribution;"
+	use_database_query = "USE data_science.default;"
 	cursor.execute(use_database_query)
 
 	cursor.execute(sql_query)

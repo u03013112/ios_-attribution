@@ -55,7 +55,7 @@ FROM
 		SELECT
 			DISTINCT SUBSTR(install_day, 1, 6) AS install_month
 		FROM
-			dws_overseas_public_roi
+			marketing.attribution.dws_overseas_public_roi
 		WHERE
 			app = '502'
 	) t
@@ -91,7 +91,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -135,7 +135,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -180,7 +180,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -236,7 +236,7 @@ FROM
 			SUM(revenue_cohort_d120) AS revenue_d120,
 			SUM(revenue_cohort_d150) AS revenue_d150
 		FROM
-			dws_overseas_public_roi
+			marketing.attribution.dws_overseas_public_roi
 		WHERE
 			app = '502'
 			AND facebook_segment IN ('country', 'N/A')
@@ -305,7 +305,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 from
-	dws_overseas_gpir_roi roi
+	marketing.attribution.dws_overseas_gpir_roi roi
 	left join lw_country_group_table_by_j_20250703 cg on roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 where
@@ -369,7 +369,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_roi_profit roi
+	marketing.attribution.dws_overseas_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -410,7 +410,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_roi_profit roi
+	marketing.attribution.dws_overseas_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -446,7 +446,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_roi_profit roi
+	marketing.attribution.dws_overseas_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -513,7 +513,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_gpir_roi_profit roi
+	marketing.attribution.dws_overseas_gpir_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -579,7 +579,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_gpir_roi roi
+	marketing.attribution.dws_overseas_gpir_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 WHERE
@@ -764,7 +764,7 @@ SELECT
 	SUM(revenue_cohort_d120) AS revenue_d120,
 	SUM(revenue_cohort_d150) AS revenue_d150
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.app = '502'
@@ -2834,12 +2834,12 @@ WITH roi_base AS (
 			ELSE revenue_d120 / cost
 		END AS roi120
 	FROM
-		marketing.attribution.lw_20250703_cost_revenue_app_month_table_by_j
+		lw_20250703_cost_revenue_app_month_table_by_j
 ),
 predict_base AS (
 	SELECT
 		*
-	FROM marketing.attribution.lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+	FROM lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
 )
 SELECT
 	r.app_package,
@@ -3088,7 +3088,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_d120) AS revenue_d120
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.app = '502'
@@ -3123,7 +3123,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_cohort_d120) AS revenue_d120
 FROM
-	dws_overseas_public_roi roi
+	marketing.attribution.dws_overseas_public_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.app = '502'
@@ -3157,7 +3157,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_cohort_d120) AS revenue_d120
 FROM
-	dws_overseas_roi_profit roi
+	marketing.attribution.dws_overseas_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
@@ -3189,7 +3189,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_d120) AS revenue_d120
 FROM
-	dws_overseas_gpir_roi roi
+	marketing.attribution.dws_overseas_gpir_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.facebook_segment IN ('country', 'N/A')
@@ -3222,7 +3222,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_cohort_d120) AS revenue_d120
 FROM
-	dws_overseas_gpir_roi roi
+	marketing.attribution.dws_overseas_gpir_roi roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.facebook_segment IN ('country', 'N/A')
@@ -3255,7 +3255,7 @@ SELECT
 	) AS organic_revenue_d120,
 	SUM(revenue_cohort_d120) AS revenue_d120
 FROM
-	dws_overseas_gpir_roi_profit roi
+	marketing.attribution.dws_overseas_gpir_roi_profit roi
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 WHERE
 	roi.app_package in ('com.fun.lastwar.gp', 'com.fun.lastwar.vn.gp')
@@ -4218,87 +4218,87 @@ def createViewsAndTables():
 
 	# 只保留cohort，忽略非cohort数据
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIRCohortCostRevenueMonthyTable()
+	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# createForUaCostRevenueMonthyView()
-	# createAppLovinRatioView()
-	# createForUaCostRevenueMonthyTable()
+	createForUaCostRevenueMonthyView()
+	createAppLovinRatioView()
+	createForUaCostRevenueMonthyTable()
 
-	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	
 
-	# # 拟合iOS结果相关
-	# createIosAfCostRevenueDayView()
-	# createIosAfCostRevenueDayFixTable()
-	# createIosAfCostRevenueMonthyFixView()
-	# createIosAfCostRevenueDayFitTable()
+	# 拟合iOS结果相关
+	createIosAfCostRevenueDayView()
+	createIosAfCostRevenueDayFixTable()
+	createIosAfCostRevenueMonthyFixView()
+	createIosAfCostRevenueDayFitTable()
 
-	# createIosAfCostRevenueDayFitCheckTable()
+	createIosAfCostRevenueDayFitCheckTable()
 
-	# createIosTagCostRevenueMonthyView()
+	createIosTagCostRevenueMonthyView()
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyView()
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createIosCohortKpiTargetView()
-	# createIosCohortKpiTargetView2()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createIosCohortKpiTargetView()
+	createIosCohortKpiTargetView2()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
 	# 计算收入增长率
-	# createRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioView()
-	# createPredictRevenueRiseRatioTable()
-	# createPredictRevenueRiseRatioAndkpiTargetView()
+	createRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioTable()
+	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiWithDiscountView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiWithDiscountView()
+	createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
-	# # 自然量收入占比
-	# createAfAndroidOrganicMonthView()
-	# createAfCohortAndroidOrganicMonthView()
-	# createAfOnlyprofitCohortAndroidOrganicMonthView()
-	# createGpirAndroidOrganic2MonthView()
-	# createGpirCohortAndroidOrganic2MonthView()
-	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	# createForUaAndroidOrganic2MonthView()
+	# 自然量收入占比
+	createAfAndroidOrganicMonthView()
+	createAfCohortAndroidOrganicMonthView()
+	createAfOnlyprofitCohortAndroidOrganicMonthView()
+	createGpirAndroidOrganic2MonthView()
+	createGpirCohortAndroidOrganic2MonthView()
+	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	createForUaAndroidOrganic2MonthView()
 
-	# createAfCohorotIosOrganicMonthView()
-	# createAfCohorotIosOrganicFixMonthView()
-	# createAfCohorotIosOrganicFitMonthView()
+	createAfCohorotIosOrganicMonthView()
+	createAfCohorotIosOrganicFixMonthView()
+	createAfCohorotIosOrganicFitMonthView()
 
-	# createOrganicMonthTable()
+	createOrganicMonthTable()
 	
-	# # 只用自然量收入占比计算含自然量回本目标
-	# createKpiTargetWithOrganicView()
+	# 只用自然量收入占比计算含自然量回本目标
+	createKpiTargetWithOrganicView()
 
 	# 回本周期计算
 	createPayback1View()
