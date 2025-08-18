@@ -10,6 +10,13 @@ from src.dataBricks import execSql, execSql2
 
 
 def createCountryGroupTable():
+	sql0 = """
+DROP TABLE IF EXISTS lw_country_group_table_by_j_20250703;
+	"""
+	print(f"Executing SQL: {sql0}")
+	execSql2(sql0)
+
+
 	sql1 = """
 -- 创建国家分组表 lw_country_group_table_by_j_20250703
 CREATE TABLE IF NOT EXISTS lw_country_group_table_by_j_20250703 (
@@ -26,7 +33,7 @@ VALUES
 ('AD','T1'),('AT','T1'),('AU','T1'),('BE','T1'),('CA','T1'),('CH','T1'),('DE','T1'),
 ('DK','T1'),('FI','T1'),('FR','T1'),('HK','T1'),('IE','T1'),('IS','T1'),('IT','T1'),
 ('LI','T1'),('LU','T1'),('MC','T1'),('NL','T1'),('NO','T1'),('NZ','T1'),('SE','T1'),
-('SG','T1'),('UK','T1'),('MO','T1'),('IL','T1'),('TW','T1'),
+('SG','T1'),('UK','T1'),('MO','T1'),('IL','T1'),('TW','T1'),('GB','T1'),
 ('US','US'),
 ('JP','JP'),
 ('KR','KR'),
@@ -4213,58 +4220,58 @@ FROM
 
 
 def createViewsAndTables():
-	# createCountryGroupTable()
+	createCountryGroupTable()
 	# createMonthView()
 
 	# 只保留cohort，忽略非cohort数据
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIRCohortCostRevenueMonthyTable()
+	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# createForUaCostRevenueMonthyView()
-	# createAppLovinRatioView()
-	# createForUaCostRevenueMonthyTable()
+	createForUaCostRevenueMonthyView()
+	createAppLovinRatioView()
+	createForUaCostRevenueMonthyTable()
 
-	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	
 
-	# # 拟合iOS结果相关
-	# createIosAfCostRevenueDayView()
-	# createIosAfCostRevenueDayFixTable()
-	# createIosAfCostRevenueMonthyFixView()
-	# createIosAfCostRevenueDayFitTable()
+	# 拟合iOS结果相关
+	createIosAfCostRevenueDayView()
+	createIosAfCostRevenueDayFixTable()
+	createIosAfCostRevenueMonthyFixView()
+	createIosAfCostRevenueDayFitTable()
 
-	# createIosAfCostRevenueDayFitCheckTable()
+	createIosAfCostRevenueDayFitCheckTable()
 
-	# createIosTagCostRevenueMonthyView()
+	createIosTagCostRevenueMonthyView()
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyView()
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createIosCohortKpiTargetView()
-	# createIosCohortKpiTargetView2()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createIosCohortKpiTargetView()
+	createIosCohortKpiTargetView2()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
 	# 计算收入增长率
 	createRevenueRiseRatioView()
@@ -4272,10 +4279,10 @@ def createViewsAndTables():
 	createPredictRevenueRiseRatioTable()
 	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiWithDiscountView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiWithDiscountView()
+	createKpiTable()
 
 	# # 推算动态KPI
 	# createKpi2View()

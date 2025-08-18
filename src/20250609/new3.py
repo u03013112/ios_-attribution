@@ -24,6 +24,8 @@ from src.maxCompute import execSql,execSql2,getO
 
 def createCountryGroupTable():
 	sql = """
+-- 删除已存在的 lw_country_group_table_by_j_20250703 表
+DROP TABLE IF EXISTS lw_country_group_table_by_j_20250703;
 -- 创建国家分组表 lw_country_group_table_by_j_20250703
 CREATE TABLE IF NOT EXISTS lw_country_group_table_by_j_20250703 (
 	country STRING,
@@ -36,7 +38,7 @@ VALUES
 ('AD','T1'),('AT','T1'),('AU','T1'),('BE','T1'),('CA','T1'),('CH','T1'),('DE','T1'),
 ('DK','T1'),('FI','T1'),('FR','T1'),('HK','T1'),('IE','T1'),('IS','T1'),('IT','T1'),
 ('LI','T1'),('LU','T1'),('MC','T1'),('NL','T1'),('NO','T1'),('NZ','T1'),('SE','T1'),
-('SG','T1'),('UK','T1'),('MO','T1'),('IL','T1'),('TW','T1'),
+('SG','T1'),('UK','T1'),('MO','T1'),('IL','T1'),('TW','T1'),('GB','T1'),
 ('US','US'),
 ('JP','JP'),
 ('KR','KR'),
@@ -6552,7 +6554,7 @@ ORDER BY
 
 # 有先后顺序，依赖关系
 def createViewsAndTables():
-	# createCountryGroupTable()
+	createCountryGroupTable()
 	# createMonthView()
 	# createAdtypeView()
 
