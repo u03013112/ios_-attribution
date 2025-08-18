@@ -50,9 +50,9 @@ SELECT
 	install_month,
 	(
 		CAST(
-			SUBSTR(TO_CHAR(getdate(), 'yyyymm'), 1, 4) AS BIGINT
+			SUBSTR(TO_CHAR(getdate(), 'yyyyMM'), 1, 4) AS BIGINT
 		) * 12 + CAST(
-			SUBSTR(TO_CHAR(getdate(), 'yyyymm'), 5, 2) AS BIGINT
+			SUBSTR(TO_CHAR(getdate(), 'yyyyMM'), 5, 2) AS BIGINT
 		)
 	) - (
 		CAST(SUBSTR(install_month, 1, 4) AS BIGINT) * 12 + CAST(SUBSTR(install_month, 5, 2) AS BIGINT)
@@ -4220,26 +4220,26 @@ FROM
 
 
 def createViewsAndTables():
-	createCountryGroupTable()
-	# createMonthView()
+	# createCountryGroupTable()
+	createMonthView()
 
 	# 只保留cohort，忽略非cohort数据
 
-	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	createAfAppMediaCountryCohortCostRevenueMonthyView()
-	createAfAppCountryCohortCostRevenueMonthyView()
-	createAfAppCohortCostRevenueMonthyView()
-	createAfCohortCostRevenueMonthyTable()
+	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	# createAfAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfAppCountryCohortCostRevenueMonthyView()
+	# createAfAppCohortCostRevenueMonthyView()
+	# createAfCohortCostRevenueMonthyTable()
 
-	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIRCohortCostRevenueMonthyTable()
+	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIRCohortCostRevenueMonthyTable()
 
-	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
 	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
@@ -4279,10 +4279,10 @@ def createViewsAndTables():
 	createPredictRevenueRiseRatioTable()
 	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# 推算KPI
-	createKpiView()
-	createKpiWithDiscountView()
-	createKpiTable()
+	# # 推算KPI
+	# createKpiView()
+	# createKpiWithDiscountView()
+	# createKpiTable()
 
 	# # 推算动态KPI
 	# createKpi2View()
