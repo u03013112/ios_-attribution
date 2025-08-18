@@ -130,7 +130,7 @@ predict_base AS (
 	SELECT
 		*
 	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+		lw_20250703_af_revenue_rise_ratio_predict2_month_view_by_j
 	WHERE
 		tag = 'af_onlyprofit_only_country_cohort'
 ),
@@ -141,7 +141,7 @@ predict AS (
 		r.endday,
 		r.install_month,
 		r.country_group,
-		p.kpi_target,
+		1 as kpi_target,
 		r.roi60,
 		r.roi90,
 		r.roi120,
@@ -282,7 +282,7 @@ predict_base AS (
 	SELECT
 		*
 	FROM
-		lw_20250703_af_revenue_rise_ratio_predict_kpi_target_month_view_by_j
+		lw_20250703_af_revenue_rise_ratio_predict2_month_view_by_j
 	WHERE
 		tag = 'af_onlyprofit_only_country_cohort'
 )
@@ -292,7 +292,7 @@ SELECT
 	r.endday,
 	r.install_month,
 	r.country_group,
-	p.kpi_target,
+	1 as kpi_target,
 	CASE
 		WHEN roi60 >= kpi_target THEN 2.0
 		ELSE NULL
