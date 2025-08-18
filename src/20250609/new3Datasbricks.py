@@ -2470,6 +2470,157 @@ ORDER BY
 	execSql2(sql)
 	return
 
+
+# createPredictRevenueRiseRatioView 的滚动版本，有更新的满日数据，就使用最新的增长率
+def createPredictRevenueRiseRatioView2():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_af_revenue_rise_ratio_predict2_month_view_by_j AS
+WITH base AS (
+	SELECT
+		a.app_package,
+		a.country_group,
+		a.mediasource,
+		a.ad_type,
+		a.tag,
+		a.install_month,
+		a.r3_r1,
+		a.r7_r3,
+		a.r14_r7,
+		a.r30_r14,
+		a.r30_r7,
+		a.r60_r30,
+		a.r90_r60,
+		a.r120_r90,
+		a.r150_r120,
+		a.last3month_r3_r1,
+		a.last3month_r7_r3,
+		a.last3month_r14_r7,
+		a.last3month_r30_r14,
+		a.last3month_r30_r7,
+		a.last3month_r60_r30,
+		a.last3month_r90_r60,
+		a.last3month_r120_r90,
+		a.last3month_r150_r120,
+		m.month_diff,
+		ROW_NUMBER() OVER (
+			PARTITION BY 
+			a.app_package,
+			a.country_group,
+			a.mediasource,
+			a.ad_type,
+			a.tag
+			ORDER BY
+				a.install_month
+		) AS row_num
+	FROM
+		lw_20250703_af_revenue_rise_ratio_month_view_by_j a
+		LEFT JOIN month_view_by_j m
+		ON a.install_month = m.install_month
+)
+SELECT
+	cur.app_package,
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.tag,
+	cur.install_month,
+	cur.month_diff,
+	cur.r3_r1,
+	cur.r7_r3,
+	cur.r14_r7,
+	cur.r30_r14,
+	cur.r30_r7,
+	cur.r60_r30,
+	cur.r90_r60,
+	cur.r120_r90,
+	cur.r150_r120,
+	cur.last3month_r3_r1,
+	cur.last3month_r7_r3,
+	cur.last3month_r14_r7,
+	cur.last3month_r30_r14,
+	cur.last3month_r30_r7,
+	cur.last3month_r60_r30,
+	cur.last3month_r90_r60,
+	cur.last3month_r120_r90,
+	cur.last3month_r150_r120,
+	-- 本行的预测值
+	cur.last3month_r3_r1 AS predict_r3_r1,
+	cur.last3month_r7_r3 AS predict_r7_r3,
+	cur.last3month_r30_r7 AS predict_r30_r7,
+	cur.last3month_r14_r7 AS predict_r14_r7,
+	cur.last3month_r30_r14 AS predict_r30_r14,
+	-- 上一行的预测值，month_diff >= 1 时用本行预测值，否则保持目前
+	CASE 
+		WHEN cur.month_diff >= 1 THEN cur.last3month_r60_r30
+		ELSE COALESCE(prev1.last3month_r60_r30, 0)
+	END AS predict_r60_r30,
+	-- 上两行的预测值，month_diff >= 2 时用本行预测值，month_diff >= 1 时用上一行的预测，否则保持目前
+	CASE
+		WHEN cur.month_diff >= 2 THEN cur.last3month_r90_r60
+		WHEN cur.month_diff >= 1 THEN COALESCE(prev1.last3month_r90_r60, 0)
+		ELSE COALESCE(prev2.last3month_r90_r60, 0)
+	END AS predict_r90_r60,
+	-- 上三行的预测值，month_diff >= 3 时用本行预测值，month_diff >= 2 时用上一行的预测，month_diff >= 1 时用上两行的预测，否则保持目前
+	CASE
+		WHEN cur.month_diff >= 3 THEN cur.last3month_r120_r90
+		WHEN cur.month_diff >= 2 THEN COALESCE(prev1.last3month_r120_r90, 0)
+		WHEN cur.month_diff >= 1 THEN COALESCE(prev2.last3month_r120_r90, 0)
+		ELSE COALESCE(prev3.last3month_r120_r90, 0)
+	END AS predict_r120_r90,
+	-- 上四行的预测值，month_diff >= 4 时用本行预测值，month_diff >= 3 时用上一行的预测，month_diff >= 2 时用上两行的预测，month_diff >= 1 时用上三行的预测，否则保持目前
+	CASE
+		WHEN cur.month_diff >= 4 THEN cur.last3month_r150_r120
+		WHEN cur.month_diff >= 3 THEN COALESCE(prev1.last3month_r150_r120, 0)
+		WHEN cur.month_diff >= 2 THEN COALESCE(prev2.last3month_r150_r120, 0)
+		WHEN cur.month_diff >= 1 THEN COALESCE(prev3.last3month_r150_r120, 0)
+		ELSE COALESCE(prev4.last3month_r150_r120, 0)
+	END AS predict_r150_r120
+FROM
+	base cur
+	LEFT JOIN base prev1 ON 
+	cur.app_package = prev1.app_package
+	AND cur.country_group = prev1.country_group
+	AND cur.mediasource = prev1.mediasource
+	AND cur.ad_type = prev1.ad_type
+	AND cur.tag = prev1.tag
+	AND cur.row_num = prev1.row_num + 1
+	LEFT JOIN base prev2 ON 
+	cur.app_package = prev2.app_package
+	AND cur.country_group = prev2.country_group
+	AND cur.mediasource = prev2.mediasource
+	AND cur.ad_type = prev2.ad_type
+	AND cur.tag = prev2.tag
+	AND cur.row_num = prev2.row_num + 2
+	LEFT JOIN base prev3 ON 
+	cur.app_package = prev3.app_package
+	AND cur.country_group = prev3.country_group
+	AND cur.mediasource = prev3.mediasource
+	AND cur.ad_type = prev3.ad_type
+	AND cur.tag = prev3.tag
+	AND cur.row_num = prev3.row_num + 3
+	LEFT JOIN base prev4 ON
+	cur.app_package = prev4.app_package
+	AND cur.country_group = prev4.country_group
+	AND cur.mediasource = prev4.mediasource
+	AND cur.ad_type = prev4.ad_type
+	AND cur.tag = prev4.tag
+	AND cur.row_num = prev4.row_num + 4
+WHERE
+	cur.month_diff > 0
+ORDER BY
+	cur.tag,
+	cur.app_package,
+	cur.country_group,
+	cur.mediasource,
+	cur.ad_type,
+	cur.install_month
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
 def createPredictRevenueRiseRatioTable():
 	sql1 = """
 DROP TABLE IF EXISTS lw_20250703_af_revenue_rise_ratio_predict_month_table_by_j;
@@ -4221,7 +4372,7 @@ FROM
 
 def createViewsAndTables():
 	# createCountryGroupTable()
-	createMonthView()
+	# createMonthView()
 
 	# 只保留cohort，忽略非cohort数据
 
@@ -4241,41 +4392,42 @@ def createViewsAndTables():
 	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
 	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	createForUaCostRevenueMonthyView()
-	createAppLovinRatioView()
-	createForUaCostRevenueMonthyTable()
+	# createForUaCostRevenueMonthyView()
+	# createAppLovinRatioView()
+	# createForUaCostRevenueMonthyTable()
 
-	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	
 
-	# 拟合iOS结果相关
-	createIosAfCostRevenueDayView()
-	createIosAfCostRevenueDayFixTable()
-	createIosAfCostRevenueMonthyFixView()
-	createIosAfCostRevenueDayFitTable()
+	# # 拟合iOS结果相关
+	# createIosAfCostRevenueDayView()
+	# createIosAfCostRevenueDayFixTable()
+	# createIosAfCostRevenueMonthyFixView()
+	# createIosAfCostRevenueDayFitTable()
 
-	createIosAfCostRevenueDayFitCheckTable()
+	# createIosAfCostRevenueDayFitCheckTable()
 
-	createIosTagCostRevenueMonthyView()
+	# createIosTagCostRevenueMonthyView()
 
-	# 所有的花费、收入数据汇总
-	createCostRevenueMonthyView()
-	createCostRevenueMonthyTable()
+	# # 所有的花费、收入数据汇总
+	# createCostRevenueMonthyView()
+	# createCostRevenueMonthyTable()
 
-	# 计算kpi_target
-	createGpirCohortKpiTargetView()
-	createIosCohortKpiTargetView()
-	createIosCohortKpiTargetView2()
-	createForUaKpiTargetView()
-	createKpiTargetTable()
+	# # 计算kpi_target
+	# createGpirCohortKpiTargetView()
+	# createIosCohortKpiTargetView()
+	# createIosCohortKpiTargetView2()
+	# createForUaKpiTargetView()
+	# createKpiTargetTable()
 
 	# 计算收入增长率
 	createRevenueRiseRatioView()
 	createPredictRevenueRiseRatioView()
+	createPredictRevenueRiseRatioView2()
 	createPredictRevenueRiseRatioTable()
 	createPredictRevenueRiseRatioAndkpiTargetView()
 

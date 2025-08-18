@@ -371,9 +371,9 @@ on pred.app_package = real.app_package
 
 
 def main():
-	# createCostAndRevenueView()
-	# createPaybackView()
-	# createRealPaybackView()
+	createCostAndRevenueView()
+	createPaybackView()
+	createRealPaybackView()
 	createPaybackTable()
 
 if __name__ == "__main__":
