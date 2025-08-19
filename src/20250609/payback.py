@@ -462,31 +462,48 @@ FROM lw_20250815_ios_profit_cost_revenue_view_by_j
 # 收入是分媒体的
 def createCostAndRevenueView2():
 	sql = """
-CREATE OR REPLACE VIEW lw_20250815_country_milestone_profit_cost_revenue_view2_by_j AS
-WITH milestone AS (
+CREATE
+OR REPLACE VIEW lw_20250815_country_milestone_profit_cost_revenue_view2_by_j AS WITH milestone AS (
 	SELECT
 		startday,
-		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd')) AS endday
-	FROM marketing.attribution.cdm_ext_milestone_config
-	WHERE app = 502
+		COALESCE(
+			endday,
+			date_format(date_sub(current_date(), 8), 'yyyyMMdd')
+		) AS endday
+	FROM
+		marketing.attribution.cdm_ext_milestone_config
+	WHERE
+		app = 502
+	GROUP BY
+		startday,
+		COALESCE(
+			endday,
+			date_format(date_sub(current_date(), 8), 'yyyyMMdd')
+		)
 ),
 cost AS (
 	SELECT
 		app_package,
 		country_group,
-		install_day,
+		startday,
+		endday,
 		sum(cost) as cost
-	FROM lw_20250815_aos_ios_profit_cost_revenue_view_by_j
+	FROM
+		lw_20250815_aos_ios_profit_cost_revenue_view_by_j t
+		JOIN milestone m ON t.install_day >= m.startday
+		AND t.install_day <= m.endday
 	GROUP BY
 		app_package,
 		country_group,
-		install_day
+		startday,
+		endday
 ),
 revenue as (
 	SELECT
 		app_package,
 		country_group,
-		install_day,
+		startday,
+		endday,
 		mediasource,
 		sum(revenue_d1) as revenue_d1,
 		sum(revenue_d3) as revenue_d3,
@@ -497,42 +514,24 @@ revenue as (
 		sum(revenue_d90) as revenue_d90,
 		sum(revenue_d120) as revenue_d120,
 		sum(revenue_d150) as revenue_d150
-	FROM lw_20250815_aos_ios_profit_cost_revenue_view_by_j
+	FROM
+		lw_20250815_aos_ios_profit_cost_revenue_view_by_j t
+		JOIN milestone m ON t.install_day >= m.startday
+		AND t.install_day <= m.endday
 	GROUP BY
 		app_package,
 		country_group,
-		install_day,
+		startday,
+		endday,
 		mediasource
-),
-roi AS (
-	SELECT
-		c.app_package,
-		c.country_group,
-		c.install_day,
-		mediasource,
-		cost,
-		revenue_d1,
-		revenue_d3,
-		revenue_d7,
-		revenue_d14,
-		revenue_d30,
-		revenue_d60,
-		revenue_d90,
-		revenue_d120,
-		revenue_d150
-	FROM
-		cost c
-	LEFT JOIN revenue r ON c.app_package = r.app_package
-		AND c.country_group = r.country_group
-		AND c.install_day = r.install_day
 )
 SELECT
-	r.app_package,
-	r.country_group,
+	c.app_package,
+	c.country_group,
 	r.mediasource,
-	m.startday,
-	m.endday,
-	SUM(r.cost) AS cost,
+	c.startday,
+	c.endday,
+	MAX(c.cost) AS cost,
 	SUM(r.revenue_d1) AS revenue_d1,
 	SUM(r.revenue_d3) AS revenue_d3,
 	SUM(r.revenue_d7) AS revenue_d7,
@@ -542,15 +541,18 @@ SELECT
 	SUM(r.revenue_d90) AS revenue_d90,
 	SUM(r.revenue_d120) AS revenue_d120,
 	SUM(r.revenue_d150) AS revenue_d150
-FROM roi r
-JOIN milestone m
-	ON r.install_day >= m.startday AND r.install_day <= m.endday
+FROM
+	cost c
+	LEFT JOIN revenue r ON c.app_package = r.app_package
+	AND c.country_group = r.country_group
+	AND c.startday = r.startday
+	AND c.endday = r.endday
 GROUP BY
-	r.app_package,
-	r.country_group,
+	c.app_package,
+	c.country_group,
 	r.mediasource,
-	m.startday,
-	m.endday
+	c.startday,
+	c.endday
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -808,8 +810,8 @@ def main():
 	# createAosCostAndRevenueView()
 	# createIosCostAndRevenueView()
 	# createAosAndIosCostAndRevenueView()
-	# createCostAndRevenueView2()
-	# createPaybackView2()
+	createCostAndRevenueView2()
+	createPaybackView2()
 
 	createPaybackTable()
 
