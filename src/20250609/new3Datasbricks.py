@@ -536,6 +536,136 @@ GROUP BY
 	execSql2(sql)
 	return
 
+
+# 20250819 新增，为了计算回本月份
+# 在GPIR 纯利Cohort的基础上
+# 1、将applovin分为D7和D28两个媒体
+# 2、只关心几个主要媒体，其他小媒体和自然量，统一为'other'
+# 暂时关心媒体：googleadwords_int,applovin_int,Facebook Ads,bytedanceglobal_int,snapchat_int,moloco_int
+def createGPIROnlyprofitCohortCostRevenueMonthyForPaybackView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_gpir_onlyprofit_cohort_cost_revenue_month_forpayback_view_by_j AS
+SELECT
+	case
+		when roi.app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp') then 'com.fun.lastwar.gp'
+	end AS app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		WHEN mediasource IN ('googleadwords_int', 'Facebook Ads', 'bytedanceglobal_int', 'snapchat_int', 'moloco_int') THEN mediasource
+		ELSE 'other'
+	END as mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
+FROM
+	marketing.attribution.dws_overseas_gpir_roi_profit roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+	LEFT JOIN (
+		SELECT campaign_id, MAX(campaign_name) AS campaign_name
+		FROM prodb.public.applovin_data_v3
+		GROUP BY campaign_id
+	) pub ON 
+    roi.campaign_id = pub.campaign_id
+WHERE
+	m.month_diff > 0
+	and roi.app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp')
+GROUP BY
+	case
+		when roi.app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp') then 'com.fun.lastwar.gp'
+	end,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		WHEN mediasource IN ('googleadwords_int', 'Facebook Ads', 'bytedanceglobal_int', 'snapchat_int', 'moloco_int') THEN mediasource
+		ELSE 'other'
+	END,
+	ad_type
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+# 20250819 新增，为了计算回本月份
+# 针对iOS 纯利Cohort的基础上
+# 1、将applovin分为D7和D28两个媒体
+# 2、只关心几个主要媒体，其他小媒体和自然量，统一为'other'
+# 暂时关心媒体：Facebook Ads,applovin_int,bytedanceglobal_int,moloco_int
+def createIosOnlyprofitCohortCostRevenueMonthyForPaybackView():
+	sql = """
+CREATE OR REPLACE VIEW lw_20250703_ios_onlyprofit_cohort_cost_revenue_month_forpayback_view_by_j AS
+SELECT
+	case
+		when roi.app_package in ('id6448786147', 'id6736925794') then 'id6448786147'
+	end AS app_package,
+	SUBSTR(roi.install_day, 1, 6) AS install_month,
+	COALESCE(cg.country_group, 'other') AS country_group,
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		WHEN mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
+		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int') THEN mediasource
+		ELSE 'other'
+	END as mediasource,
+	'ALL' AS ad_type,
+	SUM(cost_value_usd) AS cost,
+	SUM(revenue_h24) AS revenue_d1,
+	SUM(revenue_h72) AS revenue_d3,
+	SUM(revenue_h168) AS revenue_d7,
+	SUM(revenue_cohort_d14) AS revenue_d14,
+	SUM(revenue_cohort_d30) AS revenue_d30,
+	SUM(revenue_cohort_d60) AS revenue_d60,
+	SUM(revenue_cohort_d90) AS revenue_d90,
+	SUM(revenue_cohort_d120) AS revenue_d120,
+	SUM(revenue_cohort_d150) AS revenue_d150
+FROM
+	marketing.attribution.dws_overseas_roi_profit roi
+	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
+	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
+	LEFT JOIN (
+		SELECT campaign_id, MAX(campaign_name) AS campaign_name
+		FROM prodb.public.applovin_data_v3
+		GROUP BY campaign_id
+	) pub ON 
+    roi.campaign_id = pub.campaign_id
+WHERE
+	m.month_diff > 0
+	and roi.app_package in ('id6448786147', 'id6736925794')
+GROUP BY
+	case
+		when roi.app_package in ('id6448786147', 'id6736925794') then 'id6448786147'
+	end,
+	SUBSTR(roi.install_day, 1, 6),
+	COALESCE(cg.country_group, 'other'),
+	CASE 
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		WHEN mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
+		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int') THEN mediasource
+		ELSE 'other'
+	END,
+	ad_type
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
+
+
 # GPIR纯利表 汇总
 def createGPIROnlyProfitCohortCostRevenueMonthyTable():
 	sql1 = """
@@ -550,6 +680,16 @@ SELECT
 	*,
 	'gpir_onlyprofit_cohort' AS tag
 FROM lw_20250703_gpir_onlyprofit_cost_revenue_app_country_group_media_month_view_by_j
+UNION ALL
+SELECT
+	*,
+	'onlyprofit_forpayback_cohort' AS tag
+FROM lw_20250703_gpir_onlyprofit_cohort_cost_revenue_month_forpayback_view_by_j
+UNION ALL
+SELECT
+	*,
+	'onlyprofit_forpayback_cohort' AS tag
+FROM lw_20250703_ios_onlyprofit_cohort_cost_revenue_month_forpayback_view_by_j
 ;
 	"""
 	print(f"Executing SQL: {sql2}")
@@ -4392,9 +4532,12 @@ def createViewsAndTables():
 	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
 	# createAfOnlyProfitCohortCostRevenueMonthyTable()
 
-	# # GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIROnlyProfitCohortCostRevenueMonthyTable()
+	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	# 为了计算回本，额外添加两个平台的纯利数据
+	createGPIROnlyprofitCohortCostRevenueMonthyForPaybackView()
+	createIosOnlyprofitCohortCostRevenueMonthyForPaybackView()
+	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
 	# createForUaCostRevenueMonthyView()
 	# createAppLovinRatioView()
@@ -4413,16 +4556,16 @@ def createViewsAndTables():
 
 	# createIosTagCostRevenueMonthyView()
 
-	# # 所有的花费、收入数据汇总
-	# createCostRevenueMonthyView()
-	# createCostRevenueMonthyTable()
+	# 所有的花费、收入数据汇总
+	createCostRevenueMonthyView()
+	createCostRevenueMonthyTable()
 
-	# # 计算kpi_target
-	# createGpirCohortKpiTargetView()
-	# createIosCohortKpiTargetView()
-	# createIosCohortKpiTargetView2()
-	# createForUaKpiTargetView()
-	# createKpiTargetTable()
+	# 计算kpi_target
+	createGpirCohortKpiTargetView()
+	createIosCohortKpiTargetView()
+	createIosCohortKpiTargetView2()
+	createForUaKpiTargetView()
+	createKpiTargetTable()
 
 	# 计算收入增长率
 	createRevenueRiseRatioView()
@@ -4431,10 +4574,10 @@ def createViewsAndTables():
 	createPredictRevenueRiseRatioTable()
 	createPredictRevenueRiseRatioAndkpiTargetView()
 
-	# # 推算KPI
-	# createKpiView()
-	# createKpiWithDiscountView()
-	# createKpiTable()
+	# 推算KPI
+	createKpiView()
+	createKpiWithDiscountView()
+	createKpiTable()
 
 	# # 推算动态KPI
 	# createKpi2View()
