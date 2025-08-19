@@ -20,6 +20,11 @@ WITH milestone AS (
 		startday,
 		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd')) AS endday
 	FROM marketing.attribution.cdm_ext_milestone_config
+	WHERE
+		app = 502
+	GROUP BY
+		startday,
+		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd'))
 ),
 roi AS (
 	SELECT
