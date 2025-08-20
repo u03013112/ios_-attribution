@@ -1,6 +1,7 @@
 # 数据获得，暂定获取20250101至今数据
 # 暂时只获取安卓GPIR数据
 
+from doctest import debug
 import os
 import datetime
 import numpy as np
@@ -165,15 +166,171 @@ def getAosGpirData3dGroup(levels,startDay = '20250101',endDay = '20250810'):
         # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
         # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
         # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
-
+        
+        levels_min = [0] + levels
+        levels_max = levels + [9999999.9]
+        
+        # 构建CASE WHEN语句来分组
+        case_when_min = []
+        case_when_max = []
+        
+        for i in range(len(levels_min)):
+            min_val = levels_min[i]
+            max_val = levels_max[i]
+            case_when_min.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {min_val}")
+            case_when_max.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {max_val}")
+        
+        case_when_min_str = "\n            ".join(case_when_min)
+        case_when_max_str = "\n            ".join(case_when_max)
 
         sql = f"""
+SELECT
+    'com.fun.lastwar.gp' as app_package,
+    install_day,
+    country_group,
+    mediasource,
+    campaign_id,
+    CASE
+        {case_when_min_str}
+        ELSE 0
+    END as revenue_d3_min,
+    CASE
+        {case_when_max_str}
+        ELSE 9999999.9
+    END as revenue_d3_max,
+    COUNT(uid) as users_count,
+    SUM(revenue_d1) as total_revenue_d1,
+    SUM(revenue_d3) as total_revenue_d3,
+    SUM(revenue_d7) as total_revenue_d7
+FROM
+    lw_20250820_aos_gpir_uid_revenue_view_by_j
+WHERE
+    install_day BETWEEN '{startDay}' AND '{endDay}'
+    AND revenue_d3 > 0
+GROUP BY
+    install_day,
+    country_group,
+    mediasource,
+    campaign_id,
+    CASE
+        {case_when_min_str}
+        ELSE 0
+    END,
+    CASE
+        {case_when_max_str}
+        ELSE 9999999.9
+    END
+ORDER BY
+    install_day,
+    country_group,
+    mediasource,
+    campaign_id,
+    revenue_d3_min
         """
         print(f"Executing SQL: {sql}")
         df = execSql(sql)
         df.to_csv(filename, index=False)
         print(f"Data saved to {filename}")
     return df
+
+
+# 合并到分国家，为了对总数，简单确认数据正确
+def forDebug(df):
+    retDf = df.copy()
+    retDf = retDf.groupby(['app_package', 'install_day', 'country_group']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    return retDf
+
+# 所有分档合并
+# 返回3组值
+# 第一组分国家
+# 第二组，分国家+分媒体
+# 第三组，分媒体+分campaign
+def getRawData(df):
+    df0 = df.copy()
+    df0 = df0.groupby(['app_package', 'install_day', 'country_group']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    df1 = df.copy()
+    df1 = df1.groupby(['app_package', 'install_day', 'country_group', 'mediasource']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    df2 = df.copy()
+    df2 = df2.groupby(['app_package', 'install_day', 'mediasource', 'campaign_id']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    return df0, df1, df2
+
+# 按照分档数据进行分组，比rawData多了一个分档
+def getGroupData(df):
+    df0 = df.copy()
+    df0 = df0.groupby(['app_package', 'install_day', 'country_group', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    df1 = df.copy()
+    df1 = df1.groupby(['app_package', 'install_day', 'country_group', 'mediasource', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    df2 = df.copy()
+    df2 = df2.groupby(['app_package', 'install_day', 'mediasource', 'campaign_id', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    return df0, df1, df2
+
+
+# 削弱大R的影响，获取NerfR数据
+# 目前的levels中最大档位为2000.0
+# 将revenue_d3_min = 2000.0 的 数据去掉
+def getNerfRData(df):
+    # # for debug
+    # tmpDf = df.copy()
+    # tmpDf = tmpDf[tmpDf['revenue_d3_min'] >= 2000.0]
+    # tmpDf = tmpDf.groupby(['app_package']).agg({
+    #     'users_count': 'sum',
+    #     'total_revenue_d1': 'sum',
+    #     'total_revenue_d3': 'sum',
+    #     'total_revenue_d7': 'sum'
+    # }).reset_index()
+    # tmpDf['avg_revenue_d1'] = tmpDf['total_revenue_d1'] / tmpDf['users_count']
+    # tmpDf['avg_revenue_d3'] = tmpDf['total_revenue_d3'] / tmpDf['users_count']
+    # tmpDf['avg_revenue_d7'] = tmpDf['total_revenue_d7'] / tmpDf['users_count']
+    # print("NerfR DataFrame:")
+    # print(tmpDf.head())
+
+    # 初步得到结论，超过2000的大R，平均1日收入1300,3日收入3400,7日收入6300
+    # 所以进行一定削弱，将1日统一削弱至500，3日削弱至2000，7日削弱至4000
+    # 即将 revenue_d3_min = 2000.0 的total_revenue_d1 = 500* users_count,
+    # total_revenue_d3 = 2000 * users_count, total_revenue_d7 = 4000 * users_count
+    # 其他行不变，同样是计算df0，df1，df2
+    df0 = df.copy()
+    
 
 
 def main():
@@ -184,14 +341,43 @@ def main():
     startDay = '20250101'
     endDay = '20250810'
     df = getAosGpir3dRevenueGroupData(startDay, endDay)
-    print(df.head())
+    # print(df.head())
 
     levels = makeLevels(df, N=8)
+    # 为了可以削弱大R，额外添加一个较大的分界金额
+    levels.append(2000.0)
     print("分组的分界金额：", levels)
 
     # 获取其他数据
-    # df2 = getAosGpirData3dGroup(levels,startDay, endDay)
-    # print(df2.head())
+    df2 = getAosGpirData3dGroup(levels,startDay, endDay)
+    print(df2.head())
+
+    # debugDf = forDebug(df2)
+    # print("Debug DataFrame:")
+    # print(debugDf[debugDf['install_day'] == 20250801])
+    # print(debugDf[debugDf['install_day'] == 20250801]['total_revenue_d1'].sum())
+    # print(debugDf[debugDf['install_day'] == 20250801]['total_revenue_d3'].sum())
+    # print(debugDf[debugDf['install_day'] == 20250801]['total_revenue_d7'].sum())
+
+    # # 获取原始数据
+    # rawDf0, rawDf1, rawDf2 = getRawData(df2)
+    # print("Raw DataFrame 0:")
+    # print(rawDf0.head())
+    # print("Raw DataFrame 1:")
+    # print(rawDf1.head())
+    # print("Raw DataFrame 2:")
+    # print(rawDf2.head())
+
+    # # 获取分档数据
+    # groupDf0, groupDf1, groupDf2 = getGroupData(df2)
+    # print("Grouped DataFrame 0:")
+    # print(groupDf0.head())
+    # print("Grouped DataFrame 1:")
+    # print(groupDf1.head())
+    # print("Grouped DataFrame 2:")
+    # print(groupDf2.head())
+
+    getNerfRData(df2)
 
 
 if __name__ == '__main__':
