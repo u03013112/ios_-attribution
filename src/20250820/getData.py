@@ -107,6 +107,8 @@ GROUP BY
         df = execSql(sql)
         df.to_csv(filename, index=False)
         print(f"Data saved to {filename}")
+
+    df = df.sort_values(by='revenue_d3', ascending=False).reset_index(drop=True)
     return df
 
 # 对3日付费用户数据进行分组，获取分组的分界金额，方便后续对用户数据的汇总。
