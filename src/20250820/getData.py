@@ -112,15 +112,61 @@ GROUP BY
     return df
 
 # 对3日付费用户数据进行分组，获取分组的分界金额，方便后续对用户数据的汇总。
+def makeLevels(userDf, N=8):
+    userDf = userDf.copy()
+
+    userDf['sumUsd'] = userDf['revenue_d3'] * userDf['pay_users']
+    
+    filtered_df = userDf[(userDf['revenue_d3'] > 0) & (userDf['sumUsd'] > 0)]
+
+    df = filtered_df.sort_values(['revenue_d3'])
+
+    # 初始化一个长度为N-1的数组（`levels`），用于存储每个分组的最大收入值
+    levels = [0] * (N - 1)
+
+    # 计算所有这些用户的总收入
+    total_usd = df['sumUsd'].sum()
+
+    # 计算每组的目标收入（总收入除以分组数量）
+    target_usd = total_usd / (N)
+    df['sum'] = df['sumUsd'].cumsum()
+    
+    for i in range(1,N):
+        target = target_usd*(i)
+        # 找到第一个大于target的行
+        rows = df[df['sum']>=target]
+        if len(rows) > 0:
+            row = rows.iloc[0]
+            levels[i-1] = row['revenue_d3']
+
+    # levels 排重
+    levels = list(set(levels))
+    # levels 中如果有0，去掉0
+    if 0 in levels:
+        levels.remove(0)
+    # levels 排序
+    levels.sort()
+
+    return levels
 
 
-
-def getAosGpirData(startDay = '20250101',endDay = '20250810'):
+# 按照制定levels分组，并汇总收入数据
+# 其他维度不变，将逐个uid的收入汇总，
+# 最终列：
+# app_package, install_day, country_group, mediasource, campaign_id,
+# revenue_d3_min, revenue_d3_max, users_count, total_revenue
+def getAosGpirData3dGroup(levels,startDay = '20250101',endDay = '20250810'):
     filename = f'/src/data/20250820_aosGpirData_{startDay}_{endDay}.csv'
     if os.path.exists(filename):
         print(f"File {filename} already exists, loading from file.")
         df = pd.read_csv(filename)
     else:
+        # 将levels拆开，左开右闭
+        # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+        # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+        # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
+        
+
         sql = f"""
         """
         print(f"Executing SQL: {sql}")
@@ -139,6 +185,9 @@ def main():
     endDay = '20250810'
     df = getAosGpir3dRevenueGroupData(startDay, endDay)
     print(df.head())
+
+    levels = makeLevels(df, N=8)
+    print("分组的分界金额：", levels)
 
     # 获取其他数据
     # df2 = getAosGpirData(startDay, endDay)
