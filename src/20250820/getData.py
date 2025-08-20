@@ -165,7 +165,7 @@ def getAosGpirData3dGroup(levels,startDay = '20250101',endDay = '20250810'):
         # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
         # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
         # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
-        
+
 
         sql = f"""
         """
@@ -190,7 +190,7 @@ def main():
     print("分组的分界金额：", levels)
 
     # 获取其他数据
-    # df2 = getAosGpirData(startDay, endDay)
+    # df2 = getAosGpirData3dGroup(levels,startDay, endDay)
     # print(df2.head())
 
 
