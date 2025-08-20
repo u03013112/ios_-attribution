@@ -250,7 +250,15 @@ def forDebug(df):
 # 第一组分国家
 # 第二组，分国家+分媒体
 # 第三组，分媒体+分campaign
-def getRawData(df):
+def getRawData(df = None):
+    if df is None:
+        # 如果没有传入df，则从文件中读取
+        filename = '/src/data/20250820_getData_df2.csv'
+        if os.path.exists(filename):
+            print(f"File {filename} already exists, loading from file.")
+            df = pd.read_csv(filename)
+        else:
+            raise FileNotFoundError(f"File {filename} does not exist. Please run getAosGpirData3dGroup first.")
     df0 = df.copy()
     df0 = df0.groupby(['app_package', 'install_day', 'country_group']).agg({
         'users_count': 'sum',
@@ -278,7 +286,15 @@ def getRawData(df):
     return df0, df1, df2
 
 # 按照分档数据进行分组，比rawData多了一个分档
-def getGroupData(df):
+def getGroupData(df = None):
+    if df is None:
+        # 如果没有传入df，则从文件中读取
+        filename = '/src/data/20250820_getData_df2.csv'
+        if os.path.exists(filename):
+            print(f"File {filename} already exists, loading from file.")
+            df = pd.read_csv(filename)
+        else:
+            raise FileNotFoundError(f"File {filename} does not exist. Please run getAosGpirData3dGroup first.")
     df0 = df.copy()
     df0 = df0.groupby(['app_package', 'install_day', 'country_group', 'revenue_d3_min', 'revenue_d3_max']).agg({
         'users_count': 'sum',
@@ -308,7 +324,16 @@ def getGroupData(df):
 # 削弱大R的影响，获取NerfR数据
 # 目前的levels中最大档位为2000.0
 # 将revenue_d3_min = 2000.0 的 数据去掉
-def getNerfRData(df):
+def getNerfRData(df = None):
+    if df is None:
+        # 如果没有传入df，则从文件中读取
+        filename = '/src/data/20250820_getData_df2.csv'
+        if os.path.exists(filename):
+            print(f"File {filename} already exists, loading from file.")
+            df = pd.read_csv(filename)
+        else:
+            raise FileNotFoundError(f"File {filename} does not exist. Please run getAosGpirData3dGroup first.")
+        
     # # for debug
     # tmpDf = df.copy()
     # tmpDf = tmpDf[tmpDf['revenue_d3_min'] >= 2000.0]
@@ -373,7 +398,15 @@ def getNerfRData(df):
 # 分档位+ nerfR 数据
 # getGroupData和getNerfRData的结合
 # 先将数据进行削弱大R操作，然后分档
-def getNerfRGroupData(df):
+def getNerfRGroupData(df = None):
+    if df is None:
+        # 如果没有传入df，则从文件中读取
+        filename = '/src/data/20250820_getData_df2.csv'
+        if os.path.exists(filename):
+            print(f"File {filename} already exists, loading from file.")
+            df = pd.read_csv(filename)
+        else:
+            raise FileNotFoundError(f"File {filename} does not exist. Please run getAosGpirData3dGroup first.")
     # 复制原始数据
     nerfDf = df.copy()
     
@@ -429,6 +462,7 @@ def main():
     # 获取其他数据
     df2 = getAosGpirData3dGroup(levels,startDay, endDay)
     print(df2.head())
+    df2.to_csv(f'/src/data/20250820_getData_df2.csv', index=False)
 
     # debugDf = forDebug(df2)
     # print("Debug DataFrame:")
