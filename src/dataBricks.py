@@ -12,6 +12,11 @@ def execSql(sql_query):
 		http_path = databricksHttp_path,
 		access_token = databricksAccess_token
 	)
+	cursor = connection.cursor()
+	use_database_query = "USE data_science.default;"
+	cursor.execute(use_database_query)
+	cursor.close()  # 关闭 cursor，释放资源
+
 	df = pd.read_sql(sql_query, connection)
 	connection.close()
 
