@@ -329,8 +329,45 @@ def getNerfRData(df):
     # 即将 revenue_d3_min = 2000.0 的total_revenue_d1 = 500* users_count,
     # total_revenue_d3 = 2000 * users_count, total_revenue_d7 = 4000 * users_count
     # 其他行不变，同样是计算df0，df1，df2
-    df0 = df.copy()
     
+    # 复制原始数据
+    nerfDf = df.copy()
+    
+    # 对大R用户进行削弱处理
+    # 找到 revenue_d3_min >= 2000.0 的行，调整其收入
+    mask = nerfDf['revenue_d3_min'] >= 2000.0
+    nerfDf.loc[mask, 'total_revenue_d1'] = nerfDf.loc[mask, 'users_count'] * 500
+    nerfDf.loc[mask, 'total_revenue_d3'] = nerfDf.loc[mask, 'users_count'] * 2000
+    nerfDf.loc[mask, 'total_revenue_d7'] = nerfDf.loc[mask, 'users_count'] * 4000
+    
+    # 按照分国家分组
+    df0 = nerfDf.copy()
+    df0 = df0.groupby(['app_package', 'install_day', 'country_group']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    # 按照分国家+分媒体分组
+    df1 = nerfDf.copy()
+    df1 = df1.groupby(['app_package', 'install_day', 'country_group', 'mediasource']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    # 按照分媒体+分campaign分组
+    df2 = nerfDf.copy()
+    df2 = df2.groupby(['app_package', 'install_day', 'mediasource', 'campaign_id']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    return df0, df1, df2
 
 
 def main():
@@ -377,7 +414,14 @@ def main():
     # print("Grouped DataFrame 2:")
     # print(groupDf2.head())
 
-    getNerfRData(df2)
+    # 获取NerfR数据
+    nerfDf0, nerfDf1, nerfDf2 = getNerfRData(df2)
+    print("NerfR DataFrame 0 (按国家分组):")
+    print(nerfDf0.head())
+    print("NerfR DataFrame 1 (按国家+媒体分组):")
+    print(nerfDf1.head())
+    print("NerfR DataFrame 2 (按媒体+campaign分组):")
+    print(nerfDf2.head())
 
 
 if __name__ == '__main__':
