@@ -370,6 +370,47 @@ def getNerfRData(df):
     return df0, df1, df2
 
 
+# 分档位+ nerfR 数据
+# getGroupData和getNerfRData的结合
+# 先将数据进行削弱大R操作，然后分档
+def getNerfRGroupData(df):
+    # 复制原始数据
+    nerfDf = df.copy()
+    
+    # 对大R用户进行削弱处理
+    # 找到 revenue_d3_min >= 2000.0 的行，调整其收入
+    mask = nerfDf['revenue_d3_min'] >= 2000.0
+    nerfDf.loc[mask, 'total_revenue_d1'] = nerfDf.loc[mask, 'users_count'] * 500
+    nerfDf.loc[mask, 'total_revenue_d3'] = nerfDf.loc[mask, 'users_count'] * 2000
+    nerfDf.loc[mask, 'total_revenue_d7'] = nerfDf.loc[mask, 'users_count'] * 4000
+    
+    # 按照分档数据进行分组，保持分档信息
+    df0 = nerfDf.copy()
+    df0 = df0.groupby(['app_package', 'install_day', 'country_group', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+
+    df1 = nerfDf.copy()
+    df1 = df1.groupby(['app_package', 'install_day', 'country_group', 'mediasource', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    df2 = nerfDf.copy()
+    df2 = df2.groupby(['app_package', 'install_day', 'mediasource', 'campaign_id', 'revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    return df0, df1, df2
+
 def main():
     # # 创建视图
     # createAosGpirUidRevenueView()
@@ -396,23 +437,23 @@ def main():
     # print(debugDf[debugDf['install_day'] == 20250801]['total_revenue_d3'].sum())
     # print(debugDf[debugDf['install_day'] == 20250801]['total_revenue_d7'].sum())
 
-    # # 获取原始数据
-    # rawDf0, rawDf1, rawDf2 = getRawData(df2)
-    # print("Raw DataFrame 0:")
-    # print(rawDf0.head())
-    # print("Raw DataFrame 1:")
-    # print(rawDf1.head())
-    # print("Raw DataFrame 2:")
-    # print(rawDf2.head())
+    # 获取原始数据
+    rawDf0, rawDf1, rawDf2 = getRawData(df2)
+    print("Raw DataFrame 0:")
+    print(rawDf0.head())
+    print("Raw DataFrame 1:")
+    print(rawDf1.head())
+    print("Raw DataFrame 2:")
+    print(rawDf2.head())
 
-    # # 获取分档数据
-    # groupDf0, groupDf1, groupDf2 = getGroupData(df2)
-    # print("Grouped DataFrame 0:")
-    # print(groupDf0.head())
-    # print("Grouped DataFrame 1:")
-    # print(groupDf1.head())
-    # print("Grouped DataFrame 2:")
-    # print(groupDf2.head())
+    # 获取分档数据
+    groupDf0, groupDf1, groupDf2 = getGroupData(df2)
+    print("Grouped DataFrame 0:")
+    print(groupDf0.head())
+    print("Grouped DataFrame 1:")
+    print(groupDf1.head())
+    print("Grouped DataFrame 2:")
+    print(groupDf2.head())
 
     # 获取NerfR数据
     nerfDf0, nerfDf1, nerfDf2 = getNerfRData(df2)
@@ -422,6 +463,15 @@ def main():
     print(nerfDf1.head())
     print("NerfR DataFrame 2 (按媒体+campaign分组):")
     print(nerfDf2.head())
+
+    # 获取NerfR分档数据
+    nerfGroupDf0, nerfGroupDf1, nerfGroupDf2 = getNerfRGroupData(df2)
+    print("NerfR Group DataFrame 0 (按国家+分档分组):")
+    print(nerfGroupDf0.head())
+    print("NerfR Group DataFrame 1 (按国家+媒体+分档分组):")
+    print(nerfGroupDf1.head())
+    print("NerfR Group DataFrame 2 (按媒体+campaign+分档分组):")
+    print(nerfGroupDf2.head())
 
 
 if __name__ == '__main__':
