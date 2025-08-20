@@ -53,6 +53,52 @@ def analyze_data():
 
     # 分国家+分媒体相关性分析
     # 比上面多加一列media
+    correlation_results_media = []
+    
+    for country in rawDf1['country_group'].unique():
+        for media in rawDf1[rawDf1['country_group'] == country]['mediasource'].unique():
+            country_media_data = rawDf1[(rawDf1['country_group'] == country) & (rawDf1['mediasource'] == media)]
+            
+            # 确保有足够的数据点进行相关性计算
+            if len(country_media_data) > 1:
+                # 计算3日收入和7日收入的相关系数
+                corr = country_media_data['total_revenue_d3'].corr(country_media_data['total_revenue_d7'])
+                
+                # 如果相关系数为NaN（比如所有值都相同），设为0
+                if pd.isna(corr):
+                    corr = 0.0
+                    
+                correlation_results_media.append({
+                    'country_group': country,
+                    'mediasource': media,
+                    'corr_between_r3_r7': corr
+                })
+            else:
+                # 数据点不足，设相关系数为0
+                correlation_results_media.append({
+                    'country_group': country,
+                    'mediasource': media,
+                    'corr_between_r3_r7': 0.0
+                })
+    
+    # 转换为DataFrame
+    result_media_df = pd.DataFrame(correlation_results_media)
+    
+    # 按相关系数降序排列
+    result_media_df = result_media_df.sort_values('corr_between_r3_r7', ascending=False).reset_index(drop=True)
+    
+    # 保存CSV文件
+    filename_media = f'/src/data/20250820_raw_corr1.csv'
+    result_media_df.to_csv(filename_media, index=False)
+    print(f"分国家+分媒体相关性分析结果已保存到: {filename_media}")
+    
+    # 打印结果
+    print("分国家+分媒体3日收入与7日收入相关性分析:")
+    print(result_media_df.head(10))  # 只显示前10行
+
+    # 分媒体+分campaign相关性分析，不再需要分国家
+    # 因为campaign可能有很多，所以不止要有media和campaign_id，还需要有users_count，让我可以快速的知道相关性低的campaign是不是都是用户少的
+    
     
     return result_df
 

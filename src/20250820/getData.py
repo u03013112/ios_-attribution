@@ -1,7 +1,7 @@
 # 数据获得，暂定获取20250101至今数据
 # 暂时只获取安卓GPIR数据
 
-from doctest import debug
+
 import os
 import datetime
 import numpy as np
@@ -267,6 +267,14 @@ def getRawData(df = None):
         'total_revenue_d7': 'sum'
     }).reset_index()
     
+    # 媒体太多了，做一个基础过滤，累计付费人数少于100的媒体不要
+    mediaDf = df.groupby(['mediasource']).agg({
+        'users_count': 'sum'
+    }).reset_index()
+    mediaDf = mediaDf[mediaDf['users_count'] >= 100]
+    medias = mediaDf['mediasource'].unique()    
+    df = df[df['mediasource'].isin(medias)]
+
     df1 = df.copy()
     df1 = df1.groupby(['app_package', 'install_day', 'country_group', 'mediasource']).agg({
         'users_count': 'sum',
