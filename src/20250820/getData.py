@@ -271,7 +271,7 @@ def getRawData(df = None):
     mediaDf = df.groupby(['mediasource']).agg({
         'users_count': 'sum'
     }).reset_index()
-    mediaDf = mediaDf[mediaDf['users_count'] >= 100]
+    mediaDf = mediaDf[mediaDf['users_count'] >= 500]
     medias = mediaDf['mediasource'].unique()    
     df = df[df['mediasource'].isin(medias)]
 
