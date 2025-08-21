@@ -173,8 +173,13 @@ def predictAndCalculateError(df, r7r3_df):
     return result_df
 
 
+# 预测数据，并计算误差
+# 分组版本，与predictAndCalculateError的区别是，计算预测值的部分完全一致
+# 计算误差前，要将分组信息合并掉，即revenue_d3_min，revenue_d3_max两列去掉后重新汇总，再计算误差
+def predictAndCalculateErrorGroup(df, r7r3_df):
+    pass
 
-def main():
+def mainRaw():
     rawDf0, rawDf1, rawDf2 = getRawData()
     
     # 测试r7r3函数
@@ -274,5 +279,41 @@ def main():
     print("errorAvg2已保存到: /src/data/20250820_errorAvg2.csv")
 
 
+def mainGroup():
+    groupDf0,groupDf1,groupDf2 = getGroupData()
+
+    print("测试groupDf0的r7r3比值:")
+    result0 = r7r3(groupDf0)
+    print(result0)
+    print()
+    
+    print("测试groupDf1的r7r3比值:")
+    result1 = r7r3(groupDf1)
+    print(result1.head(10))
+    print()
+    
+    print("测试groupDf2的r7r3比值:")
+    result2 = r7r3(groupDf2)
+    print(result2.head(10))
+    print()
+    
+    # 测试r7r3Avg函数
+    print("测试r7r3Avg函数:")
+    print("groupDf0的r7r3Avg比值:")
+    resultAvg0 = r7r3Avg(groupDf0)
+    print(resultAvg0)
+    print()
+    
+    print("groupDf1的r7r3Avg比值:")
+    resultAvg1 = r7r3Avg(groupDf1)
+    print(resultAvg1.head(10))
+    print()
+    
+    print("groupDf2的r7r3Avg比值:")
+    resultAvg2 = r7r3Avg(groupDf2)
+    print(resultAvg2.head(10))
+    print()
+
+
 if __name__ == "__main__":
-    main()
+    mainRaw()
