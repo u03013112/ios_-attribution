@@ -290,6 +290,14 @@ def getRawData(df = None):
         'total_revenue_d3': 'sum',
         'total_revenue_d7': 'sum'
     }).reset_index()
+    # 将campaign_id 行数少于 28 的行删除
+    # 统计每个campaign_id的行数
+    campaign_counts = df2.groupby(['mediasource', 'campaign_id']).size().reset_index(name='row_count')
+    # 筛选出行数大于等于28的campaign
+    valid_campaigns = campaign_counts[campaign_counts['row_count'] >= 28][['mediasource', 'campaign_id']]
+    # 将df2与valid_campaigns进行内连接，保留行数足够的campaign
+    df2 = df2.merge(valid_campaigns, on=['mediasource', 'campaign_id'], how='inner')
+
 
     return df0, df1, df2
 

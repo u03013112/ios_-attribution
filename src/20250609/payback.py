@@ -804,7 +804,40 @@ on pred.app_package = pred2.app_package
 	execSql2(sql2)
 	return
 
-
+# 创建倍率表，20250820张翔需求
+# 希望获得每个里程碑对应的分国家+分媒体 的付费增长率
+def createRateTable():
+	sql = """
+CREATE OR REPLACE TABLE lw_20250820_milestone_revenue_growthrate_table_by_j AS
+WITH milestone AS (
+	SELECT
+		startday,
+		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd')) AS endday,
+		substr(startday, 1, 6) AS startmonth
+	FROM marketing.attribution.cdm_ext_milestone_config
+	WHERE
+		app = 502
+	GROUP BY
+		startday,
+		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd'))
+)
+SELECT
+	t.app_package,
+	t.country_group,
+	t.mediasource,
+	m.startday,
+	t.last3month_r3_r1,
+	t.last3month_r7_r3
+FROM milestone m
+JOIN `data_science`.`default`.`lw_20250703_af_revenue_rise_ratio_predict2_month_view_by_j` t
+	ON m.startmonth = t.install_month
+WHERE
+		t.tag = 'onlyprofit_forpayback_cohort'
+;
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return
 
 def main():
 	# createCostAndRevenueView()
@@ -815,10 +848,11 @@ def main():
 	# createAosCostAndRevenueView()
 	# createIosCostAndRevenueView()
 	# createAosAndIosCostAndRevenueView()
-	createCostAndRevenueView2()
-	createPaybackView2()
+	# createCostAndRevenueView2()
+	# createPaybackView2()
 
-	createPaybackTable()
+	# createPaybackTable()
+	createRateTable()
 
 if __name__ == "__main__":
 	main()
