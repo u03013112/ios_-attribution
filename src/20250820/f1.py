@@ -59,13 +59,52 @@ def r7r3(df):
     return final_result
 
 # 预测数据，并计算误差
-def predictAndCalculateError(df,r7r3_df):
+def predictAndCalculateError(df, r7r3_df):
     # 将r7r3_df 中，除了r7r3列之外的列，作为df的索引
     # 用索引将 df 和 r7r3_df 进行合并
     # df中的total_revenue_d3 * 对应的r7r3值，作为预测的total_revenue_d7
     # 计算误差 = (total_revenue_d7 - 预测的total_revenue_d7) / total_revenue_d7
     # 最后按照索引分组，计算每组的平均误差（MAPE）
-    pass
+    
+    # 确定索引列（r7r3_df中除了r7r3列之外的所有列）
+    index_cols = [col for col in r7r3_df.columns if col != 'r7r3']
+    
+    # 将df和r7r3_df进行合并
+    merged_df = df.merge(r7r3_df, on=index_cols, how='left')
+    
+    # 计算预测的total_revenue_d7
+    merged_df['predicted_revenue_d7'] = merged_df['total_revenue_d3'] * merged_df['r7r3']
+    
+    # 计算误差（MAPE）
+    # 避免除零错误，当total_revenue_d7为0时，设置误差为0
+    merged_df['error'] = np.where(
+        merged_df['total_revenue_d7'] > 0,
+        np.abs(merged_df['total_revenue_d7'] - merged_df['predicted_revenue_d7']) / merged_df['total_revenue_d7'],
+        0
+    )
+    
+    # 按照索引列分组，计算每组的平均误差（MAPE）
+    grouped_results = []
+    
+    for group_values, group_data in merged_df.groupby(index_cols):
+        # 计算该组的平均绝对百分比误差
+        mape = group_data['error'].mean()
+        
+        # 构建结果行
+        result_row = {}
+        if len(index_cols) == 1:
+            result_row[index_cols[0]] = group_values
+        else:
+            for i, col in enumerate(index_cols):
+                result_row[col] = group_values[i]
+        result_row['mape'] = mape
+        
+        grouped_results.append(result_row)
+    
+    # 转换为DataFrame
+    result_df = pd.DataFrame(grouped_results)
+    
+    return result_df
 
 
 
@@ -86,6 +125,23 @@ def main():
     print("测试rawDf2的r7r3比值:")
     result2 = r7r3(rawDf2)
     print(result2.head(10))
+    print()
+    
+    # 测试predictAndCalculateError函数
+    print("测试predictAndCalculateError函数:")
+    print("rawDf0预测误差:")
+    error0 = predictAndCalculateError(rawDf0, result0)
+    print(error0)
+    print()
+    
+    print("rawDf1预测误差:")
+    error1 = predictAndCalculateError(rawDf1, result1)
+    print(error1.head(10))
+    print()
+    
+    print("rawDf2预测误差:")
+    error2 = predictAndCalculateError(rawDf2, result2)
+    print(error2.head(10))
 
 
 if __name__ == "__main__":
