@@ -177,7 +177,88 @@ def predictAndCalculateError(df, r7r3_df):
 # 分组版本，与predictAndCalculateError的区别是，计算预测值的部分完全一致
 # 计算误差前，要将分组信息合并掉，即revenue_d3_min，revenue_d3_max两列去掉后重新汇总，再计算误差
 def predictAndCalculateErrorGroup(df, r7r3_df):
-    pass
+    # 确定索引列（r7r3_df中除了r7r3列之外的所有列）
+    index_cols = [col for col in r7r3_df.columns if col != 'r7r3']
+    
+    # 将df和r7r3_df进行合并
+    merged_df = df.merge(r7r3_df, on=index_cols, how='left')
+    
+    # 计算预测的total_revenue_d7
+    merged_df['predicted_revenue_d7'] = merged_df['total_revenue_d3'] * merged_df['r7r3']
+    
+    # 将install_day转换为日期格式，并计算周
+    merged_df['install_date'] = pd.to_datetime(merged_df['install_day'], format='%Y%m%d')
+    merged_df['week'] = merged_df['install_date'].dt.isocalendar().week
+    merged_df['year'] = merged_df['install_date'].dt.year
+    merged_df['year_week'] = merged_df['year'].astype(str) + '_W' + merged_df['week'].astype(str).str.zfill(2)
+    
+    # 关键区别：去掉分组信息（revenue_d3_min, revenue_d3_max）后重新汇总
+    # 确定需要去掉的分组列
+    group_cols_to_remove = ['revenue_d3_min', 'revenue_d3_max']
+    
+    # 确定重新汇总的分组列（去掉分组信息列）
+    regroup_cols = [col for col in index_cols if col not in group_cols_to_remove]
+    
+    # 按照新的分组列重新汇总数据
+    regrouped_df = merged_df.groupby(regroup_cols + ['install_day']).agg({
+        'total_revenue_d7': 'sum',
+        'predicted_revenue_d7': 'sum'
+    }).reset_index()
+    
+    # 计算误差（MAPE）
+    # 避免除零错误，当total_revenue_d7为0时，设置误差为0
+    regrouped_df['error'] = np.where(
+        regrouped_df['total_revenue_d7'] > 0,
+        np.abs(regrouped_df['total_revenue_d7'] - regrouped_df['predicted_revenue_d7']) / regrouped_df['total_revenue_d7'],
+        0
+    )
+    
+    # 将install_day转换为日期格式，并计算周（重新汇总后需要重新计算）
+    regrouped_df['install_date'] = pd.to_datetime(regrouped_df['install_day'], format='%Y%m%d')
+    regrouped_df['week'] = regrouped_df['install_date'].dt.isocalendar().week
+    regrouped_df['year'] = regrouped_df['install_date'].dt.year
+    regrouped_df['year_week'] = regrouped_df['year'].astype(str) + '_W' + regrouped_df['week'].astype(str).str.zfill(2)
+    
+    # 按照重新分组的列分组，计算每组的平均误差（MAPE）
+    grouped_results = []
+    
+    for group_values, group_data in regrouped_df.groupby(regroup_cols):
+        # 计算该组的平均绝对百分比误差
+        mape = group_data['error'].mean()
+        
+        # 按周汇总数据，计算按周的误差
+        weekly_cols = regroup_cols + ['year_week']
+        weekly_data = group_data.groupby(['year_week']).agg({
+            'total_revenue_d7': 'sum',
+            'predicted_revenue_d7': 'sum'
+        }).reset_index()
+        
+        # 计算按周汇总后的误差
+        weekly_data['weekly_error'] = np.where(
+            weekly_data['total_revenue_d7'] > 0,
+            np.abs(weekly_data['total_revenue_d7'] - weekly_data['predicted_revenue_d7']) / weekly_data['total_revenue_d7'],
+            0
+        )
+        
+        # 计算按周汇总的平均误差
+        weekly_mape = weekly_data['weekly_error'].mean()
+        
+        # 构建结果行
+        result_row = {}
+        if len(regroup_cols) == 1:
+            result_row[regroup_cols[0]] = group_values
+        else:
+            for i, col in enumerate(regroup_cols):
+                result_row[col] = group_values[i]
+        result_row['mape'] = mape
+        result_row['weekly_mape'] = weekly_mape
+        
+        grouped_results.append(result_row)
+    
+    # 转换为DataFrame
+    result_df = pd.DataFrame(grouped_results)
+    
+    return result_df
 
 def mainRaw():
     rawDf0, rawDf1, rawDf2 = getRawData()
@@ -313,7 +394,71 @@ def mainGroup():
     resultAvg2 = r7r3Avg(groupDf2)
     print(resultAvg2.head(10))
     print()
+    
+    # 测试predictAndCalculateErrorGroup函数 - 使用r7r3结果
+    print("测试predictAndCalculateErrorGroup函数 - 使用r7r3结果:")
+    print("groupDf0预测误差(Group):")
+    errorGroup0 = predictAndCalculateErrorGroup(groupDf0, result0)
+    print(errorGroup0)
+    print()
+    
+    print("groupDf1预测误差(Group):")
+    errorGroup1 = predictAndCalculateErrorGroup(groupDf1, result1)
+    print(errorGroup1.head(10))
+    print()
+    
+    print("groupDf2预测误差(Group):")
+    errorGroup2 = predictAndCalculateErrorGroup(groupDf2, result2)
+    print(errorGroup2.head(10))
+    print()
+    
+    # 测试predictAndCalculateErrorGroup函数 - 使用r7r3Avg结果
+    print("测试predictAndCalculateErrorGroup函数 - 使用r7r3Avg结果:")
+    print("groupDf0预测误差(GroupAvg):")
+    errorGroupAvg0 = predictAndCalculateErrorGroup(groupDf0, resultAvg0)
+    print(errorGroupAvg0)
+    print()
+    
+    print("groupDf1预测误差(GroupAvg):")
+    errorGroupAvg1 = predictAndCalculateErrorGroup(groupDf1, resultAvg1)
+    print(errorGroupAvg1.head(10))
+    print()
+    
+    print("groupDf2预测误差(GroupAvg):")
+    errorGroupAvg2 = predictAndCalculateErrorGroup(groupDf2, resultAvg2)
+    print(errorGroupAvg2.head(10))
+    print()
+    
+    # 保存Group误差结果到CSV
+    print("保存Group误差结果到CSV文件:")
+    
+    # r7r3方法的Group误差结果
+    errorGroup0_sorted = errorGroup0.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroup0_sorted.to_csv('/src/data/20250820_errorGroup0.csv', index=False)
+    print("errorGroup0已保存到: /src/data/20250820_errorGroup0.csv")
+    
+    errorGroup1_sorted = errorGroup1.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroup1_sorted.to_csv('/src/data/20250820_errorGroup1.csv', index=False)
+    print("errorGroup1已保存到: /src/data/20250820_errorGroup1.csv")
+    
+    errorGroup2_sorted = errorGroup2.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroup2_sorted.to_csv('/src/data/20250820_errorGroup2.csv', index=False)
+    print("errorGroup2已保存到: /src/data/20250820_errorGroup2.csv")
+    
+    # r7r3Avg方法的Group误差结果
+    errorGroupAvg0_sorted = errorGroupAvg0.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroupAvg0_sorted.to_csv('/src/data/20250820_errorGroupAvg0.csv', index=False)
+    print("errorGroupAvg0已保存到: /src/data/20250820_errorGroupAvg0.csv")
+    
+    errorGroupAvg1_sorted = errorGroupAvg1.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroupAvg1_sorted.to_csv('/src/data/20250820_errorGroupAvg1.csv', index=False)
+    print("errorGroupAvg1已保存到: /src/data/20250820_errorGroupAvg1.csv")
+    
+    errorGroupAvg2_sorted = errorGroupAvg2.sort_values('weekly_mape', ascending=False).reset_index(drop=True)
+    errorGroupAvg2_sorted.to_csv('/src/data/20250820_errorGroupAvg2.csv', index=False)
+    print("errorGroupAvg2已保存到: /src/data/20250820_errorGroupAvg2.csv")
 
 
 if __name__ == "__main__":
-    mainRaw()
+    # mainRaw()
+    mainGroup()
