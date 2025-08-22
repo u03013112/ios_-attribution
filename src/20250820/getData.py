@@ -477,8 +477,6 @@ def main():
     levels = makeLevels(df, N=8)
     # 为了可以削弱大R，额外添加一个较大的分界金额
     levels.append(2000.0)
-    print("分组的分界金额：", levels)
-    return
 
     # 获取其他数据
     df2 = getAosGpirData3dGroup(levels,startDay, endDay)
