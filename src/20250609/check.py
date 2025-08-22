@@ -13,7 +13,7 @@ from src.dataBricks import execSql, execSql2
 
 def createMilestonePredRevenueGrowthrateView():
 	sql = """
-CREATE OR REPLACE TEMP VIEW lw_20250822_milestone_pred_revenue_growthrate_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250822_milestone_pred_revenue_growthrate_view_by_j AS
 WITH milestone AS (
 	SELECT
 		startday,
@@ -284,7 +284,7 @@ group by
 
 def createMilestoneRealRevenueGrowthrateView():
 	sql = """
-CREATE OR REPLACE TEMP VIEW lw_20250822_milestone_real_revenue_growthrate_view_by_j AS
+CREATE OR REPLACE VIEW lw_20250822_milestone_real_revenue_growthrate_view_by_j AS
 WITH milestone AS (
 	SELECT
 		startday,
@@ -317,15 +317,22 @@ ON (j.monday <= m.endday AND j.sunday >= m.startday)
 	execSql2(sql)
 	return
 
+def createMilestoneCheckView():
+	sql = """
+CREATE OR REPLACE TEMP VIEW lw_20250822_milestone_check_view_by_j AS
 
+	"""
+	print(f"Executing SQL: {sql}")
+	execSql2(sql)
+	return	
 
 
 def main():
-	# createMilestonePredRevenueGrowthrateView()
-	# createAosOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createIosOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createOnlyprofitCohortCostRevenueWeeklyForCheckView()
+	createMilestonePredRevenueGrowthrateView()
+	createAosOnlyprofitCohortCostRevenueDailyForCheckView()
+	createIosOnlyprofitCohortCostRevenueDailyForCheckView()
+	createOnlyprofitCohortCostRevenueDailyForCheckView()
+	createOnlyprofitCohortCostRevenueWeeklyForCheckView()
 	createMilestoneRealRevenueGrowthrateView()
 
 if __name__ == "__main__":
