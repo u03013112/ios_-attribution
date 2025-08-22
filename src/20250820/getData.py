@@ -310,7 +310,9 @@ def getGroupData(df = None):
         filename = '/src/data/20250820_getData_df2.csv'
         if os.path.exists(filename):
             print(f"File {filename} already exists, loading from file.")
-            df = pd.read_csv(filename)
+            df = pd.read_csv(filename,dtype= {
+                'install_day': str
+            })
         else:
             raise FileNotFoundError(f"File {filename} does not exist. Please run getAosGpirData3dGroup first.")
     df0 = df.copy()

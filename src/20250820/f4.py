@@ -1,8 +1,9 @@
-# comprehensive_regression.py
-# 多种回归方法综合对比分析
+# hierarchical_regression.py
+# 基于用户分组的多种回归方法综合对比分析
+import os
 import pandas as pd
 import numpy as np
-from getData import getRawData
+from getData import getGroupData
 from sklearn.linear_model import QuantileRegressor, HuberRegressor, RANSACRegressor, LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error
 import warnings
@@ -32,7 +33,7 @@ class RegressionMethod:
 
 class SimpleRatioMethod(RegressionMethod):
     """
-    简单比值平均方法
+    简单比值平均方法 - 按分组拟合
     """
     def __init__(self):
         super().__init__("simple_ratio", "简单比值平均")
@@ -46,12 +47,12 @@ class SimpleRatioMethod(RegressionMethod):
             if col in result_df.columns:
                 result_df = result_df.drop(columns=[col])
         
-        # 确定groupby的依据列
+        # 确定groupby的依据列（包含分组信息）
         revenue_cols = ['total_revenue_d3', 'total_revenue_d7']
         exclude_cols = revenue_cols + ['install_day']
         groupby_cols = [col for col in result_df.columns if col not in exclude_cols]
         
-        # 按照新的分组列重新汇总数据
+        # 按照分组列重新汇总数据（包括revenue_d3_min, revenue_d3_max）
         grouped_data = result_df.groupby(groupby_cols).agg({
             'total_revenue_d3': 'sum',
             'total_revenue_d7': 'sum'
@@ -87,7 +88,7 @@ class SimpleRatioMethod(RegressionMethod):
 
 class QuantileRegressionMethod(RegressionMethod):
     """
-    分位数回归方法
+    分位数回归方法 - 按分组拟合
     """
     def __init__(self, quantile=0.5):
         super().__init__(f"quantile_{int(quantile*100)}", f"分位数回归(Q{int(quantile*100)})")
@@ -102,7 +103,7 @@ class QuantileRegressionMethod(RegressionMethod):
             if col in result_df.columns:
                 result_df = result_df.drop(columns=[col])
         
-        # 确定groupby的依据列
+        # 确定groupby的依据列（包含分组信息）
         revenue_cols = ['total_revenue_d3', 'total_revenue_d7']
         exclude_cols = revenue_cols + ['install_day']
         groupby_cols = [col for col in result_df.columns if col not in exclude_cols]
@@ -166,7 +167,7 @@ class QuantileRegressionMethod(RegressionMethod):
 
 class RobustRegressionMethod(RegressionMethod):
     """
-    鲁棒回归方法
+    鲁棒回归方法 - 按分组拟合
     """
     def __init__(self, method_type='huber'):
         self.method_type = method_type
@@ -181,7 +182,7 @@ class RobustRegressionMethod(RegressionMethod):
             if col in result_df.columns:
                 result_df = result_df.drop(columns=[col])
         
-        # 确定groupby的依据列
+        # 确定groupby的依据列（包含分组信息）
         revenue_cols = ['total_revenue_d3', 'total_revenue_d7']
         exclude_cols = revenue_cols + ['install_day']
         groupby_cols = [col for col in result_df.columns if col not in exclude_cols]
@@ -256,7 +257,7 @@ class RobustRegressionMethod(RegressionMethod):
 
 class WeightedRegressionMethod(RegressionMethod):
     """
-    加权回归方法
+    加权回归方法 - 按分组拟合
     """
     def __init__(self):
         super().__init__("weighted", "加权回归")
@@ -270,7 +271,7 @@ class WeightedRegressionMethod(RegressionMethod):
             if col in result_df.columns:
                 result_df = result_df.drop(columns=[col])
         
-        # 确定groupby的依据列
+        # 确定groupby的依据列（包含分组信息）
         revenue_cols = ['total_revenue_d3', 'total_revenue_d7']
         exclude_cols = revenue_cols + ['install_day', 'users_count']
         groupby_cols = [col for col in result_df.columns if col not in exclude_cols]
@@ -357,9 +358,11 @@ def split_train_test(df, split_date='20250615'):
     
     return train_df, test_df
 
-def calculate_prediction_errors(test_df, predictions):
+def calculate_prediction_errors_with_aggregation(test_df, predictions):
     """
-    计算预测误差
+    计算预测误差 - 先汇总分组再计算误差
+    
+    关键：将分组数据汇总后再计算误差，保持与原来相同的结果格式
     """
     # 将install_day转换为日期格式，并计算周
     predictions['install_date'] = pd.to_datetime(predictions['install_day'], format='%Y%m%d')
@@ -367,27 +370,42 @@ def calculate_prediction_errors(test_df, predictions):
     predictions['year'] = predictions['install_date'].dt.year
     predictions['year_week'] = predictions['year'].astype(str) + '_W' + predictions['week'].astype(str).str.zfill(2)
     
-    # 计算误差（MAPE）
-    predictions['error'] = np.where(
-        predictions['total_revenue_d7'] > 0,
-        np.abs(predictions['total_revenue_d7'] - predictions['predicted_revenue_d7']) / predictions['total_revenue_d7'],
-        0
-    )
-    
-    # 确定分组列
+    # ⭐ 关键步骤：确定最终分组列（排除收入分档列）
     revenue_cols = ['total_revenue_d3', 'total_revenue_d7', 'predicted_revenue_d7']
-    exclude_cols = revenue_cols + ['install_day', 'install_date', 'week', 'year', 'year_week', 'error']
+    exclude_cols = revenue_cols + ['install_day', 'install_date', 'week', 'year', 'year_week', 
+                                  'revenue_d3_min', 'revenue_d3_max']  # ⭐ 排除分组列
+    exclude_cols += ['slope', 'intercept']
     if 'users_count' in predictions.columns:
         exclude_cols.append('users_count')
     if 'total_revenue_d1' in predictions.columns:
         exclude_cols.append('total_revenue_d1')
     
-    groupby_cols = [col for col in predictions.columns if col not in exclude_cols]
+    # 最终分组列（与原来的rawDf相同：国家、媒体、campaign等）
+    final_groupby_cols = [col for col in predictions.columns if col not in exclude_cols]
     
-    # 按照索引列分组，计算每组的平均误差
+    print(f"最终分组列（与原来相同）: {final_groupby_cols}")
+    print(f"排除的列: {exclude_cols}")
+    
+    # ⭐ 第一步：按天和最终维度汇总（合并所有收入分档）
+    daily_aggregated = predictions.groupby(final_groupby_cols + ['install_day', 'year_week']).agg({
+        'total_revenue_d3': 'sum',      # 合并所有收入档位的R3
+        'total_revenue_d7': 'sum',      # 合并所有收入档位的R7
+        'predicted_revenue_d7': 'sum'   # 合并所有收入档位的预测R7
+    }).reset_index()
+    
+    print(f"汇总后数据量: {len(daily_aggregated)} (原始分组数据: {len(predictions)})")
+    
+    # 计算每日误差（MAPE）
+    daily_aggregated['error'] = np.where(
+        daily_aggregated['total_revenue_d7'] > 0,
+        np.abs(daily_aggregated['total_revenue_d7'] - daily_aggregated['predicted_revenue_d7']) / daily_aggregated['total_revenue_d7'],
+        0
+    )
+    
+    # ⭐ 第二步：按最终维度分组，计算每组的平均误差（与原来格式完全一样）
     grouped_results = []
     
-    for group_values, group_data in predictions.groupby(groupby_cols):
+    for group_values, group_data in daily_aggregated.groupby(final_groupby_cols):
         # 计算该组的平均绝对百分比误差
         mape = group_data['error'].mean()
         
@@ -407,12 +425,12 @@ def calculate_prediction_errors(test_df, predictions):
         # 计算按周汇总的平均误差
         weekly_mape = weekly_data['weekly_error'].mean()
         
-        # 构建结果行
+        # ⭐ 构建结果行（与原来格式完全一样）
         result_row = {}
-        if len(groupby_cols) == 1:
-            result_row[groupby_cols[0]] = group_values
+        if len(final_groupby_cols) == 1:
+            result_row[final_groupby_cols[0]] = group_values
         else:
-            for i, col in enumerate(groupby_cols):
+            for i, col in enumerate(final_groupby_cols):
                 result_row[col] = group_values[i]
         
         result_row['daily_mape'] = mape
@@ -425,18 +443,18 @@ def calculate_prediction_errors(test_df, predictions):
     
     return pd.DataFrame(grouped_results)
 
-def comprehensive_regression_analysis():
+def hierarchical_regression_analysis():
     """
-    综合回归分析主函数
+    基于分组数据的综合回归分析主函数
     """
-    print("=== 综合回归方法对比分析 ===")
+    print("=== 基于用户分组的综合回归方法对比分析 ===")
     
-    # 获取数据
-    rawDf0, rawDf1, rawDf2 = getRawData()
+    # 获取分组数据
+    groupDf0, groupDf1, groupDf2 = getGroupData()
     datasets = [
-        ('rawDf0', rawDf0),
-        ('rawDf1', rawDf1), 
-        ('rawDf2', rawDf2)
+        ('groupDf0', groupDf0),
+        ('groupDf1', groupDf1), 
+        ('groupDf2', groupDf2)
     ]
     
     # 定义回归方法
@@ -455,6 +473,14 @@ def comprehensive_regression_analysis():
         print(f"\n=== 分析 {dataset_name} ===")
         print(f"原始数据形状: {df.shape}")
         
+        # 检查是否包含分组列
+        if 'revenue_d3_min' not in df.columns or 'revenue_d3_max' not in df.columns:
+            print(f"警告: {dataset_name} 缺少分组列 revenue_d3_min 或 revenue_d3_max，跳过分析")
+            continue
+        
+        print(f"分组信息: revenue_d3_min 范围 {df['revenue_d3_min'].min()}-{df['revenue_d3_min'].max()}")
+        print(f"分组信息: revenue_d3_max 范围 {df['revenue_d3_max'].min()}-{df['revenue_d3_max'].max()}")
+        
         # 1. 切分训练集和测试集
         train_df, test_df = split_train_test(df, split_date='20250615')
         
@@ -471,20 +497,20 @@ def comprehensive_regression_analysis():
             print(f"\n--- 测试方法: {method.name} ({method.description}) ---")
             
             try:
-                # 训练模型
+                # 训练模型（按分组拟合）
                 model_params = method.fit(train_df)
                 
                 if len(model_params) == 0:
                     print(f"警告: {method.name} 训练失败，跳过")
                     continue
                 
-                print(f"训练完成，得到 {len(model_params)} 个组合的参数")
+                print(f"训练完成，得到 {len(model_params)} 个分组组合的参数")
                 
                 # 在测试集上预测
                 predictions = method.predict(test_df, model_params)
                 
-                # 计算误差
-                error_results = calculate_prediction_errors(test_df, predictions)
+                # 计算误差（汇总分组后计算）
+                error_results = calculate_prediction_errors_with_aggregation(test_df, predictions)
                 
                 if len(error_results) == 0:
                     print(f"警告: {method.name} 预测失败，跳过")
@@ -498,7 +524,7 @@ def comprehensive_regression_analysis():
                 avg_daily_mape = error_results['daily_mape'].mean()
                 avg_weekly_mape = error_results['weekly_mape'].mean()
                 median_weekly_mape = error_results['weekly_mape'].median()
-                good_groups = len(error_results[error_results['weekly_mape'] <= 0.3])
+                good_groups = len(error_results[error_results['weekly_mape'] <= 0.2])
                 total_groups = len(error_results)
                 
                 print(f"结果: 平均日误差={avg_daily_mape:.3f}, 平均周误差={avg_weekly_mape:.3f}")
@@ -538,20 +564,21 @@ def comprehensive_regression_analysis():
             method_summary_df = method_summary_df.sort_values('avg_weekly_mape').reset_index(drop=True)
             
             # 6. 为每个组合找到最佳方法
-            # 确定分组列
+            # 确定分组列（不包含分组信息）
             group_cols = [col for col in combined_results.columns 
                          if col not in ['daily_mape', 'weekly_mape', 'sample_count', 
                                        'total_revenue_d7', 'predicted_revenue_d7', 
-                                       'method', 'method_description','slope','intercept']]
+                                       'method', 'method_description']]
             
+            print('>>分组列:', group_cols)
             best_method_per_group = []
             
             # 按组合分组，找到每个组合的最佳方法
             for group_values, group_data in combined_results.groupby(group_cols):
                 best_row = group_data.loc[group_data['weekly_mape'].idxmin()].copy()
                 
-                # 添加是否需要分层建模的标识
-                best_row['needs_hierarchical'] = best_row['weekly_mape'] > 0.2
+                # 添加是否需要进一步建模的标识
+                best_row['needs_further_modeling'] = best_row['weekly_mape'] > 0.2
                 best_row['is_good_performance'] = best_row['weekly_mape'] <= 0.1
                 best_row['is_acceptable_performance'] = best_row['weekly_mape'] <= 0.2
                 
@@ -563,16 +590,17 @@ def comprehensive_regression_analysis():
             print(f"\n=== 保存 {dataset_name} 结果 ===")
             
             # 保存详细结果
-            combined_results.to_csv(f'/src/data/comprehensive_results_{dataset_name}.csv', index=False)
-            print(f"详细结果已保存: comprehensive_results_{dataset_name}.csv")
+            combined_results.sort_values(by = group_cols, inplace=True)
+            combined_results.to_csv(f'/src/data/hierarchical_results_{dataset_name}.csv', index=False)
+            print(f"详细结果已保存: hierarchical_results_{dataset_name}.csv")
             
             # 保存方法对比汇总
-            method_summary_df.to_csv(f'/src/data/method_summary_{dataset_name}.csv', index=False)
-            print(f"方法对比汇总已保存: method_summary_{dataset_name}.csv")
+            method_summary_df.to_csv(f'/src/data/hierarchical_method_summary_{dataset_name}.csv', index=False)
+            print(f"方法对比汇总已保存: hierarchical_method_summary_{dataset_name}.csv")
             
             # 保存最佳方法分配
-            best_methods_df.to_csv(f'/src/data/best_methods_{dataset_name}.csv', index=False)
-            print(f"最佳方法分配已保存: best_methods_{dataset_name}.csv")
+            best_methods_df.to_csv(f'/src/data/hierarchical_best_methods_{dataset_name}.csv', index=False)
+            print(f"最佳方法分配已保存: hierarchical_best_methods_{dataset_name}.csv")
             
             # 8. 输出关键统计信息
             print(f"\n=== {dataset_name} 关键统计 ===")
@@ -583,20 +611,197 @@ def comprehensive_regression_analysis():
             total_combinations = len(best_methods_df)
             good_combinations = len(best_methods_df[best_methods_df['is_good_performance']])
             acceptable_combinations = len(best_methods_df[best_methods_df['is_acceptable_performance']])
-            need_hierarchical = len(best_methods_df[best_methods_df['needs_hierarchical']])
+            need_further = len(best_methods_df[best_methods_df['needs_further_modeling']])
             
             print(f"总组合数: {total_combinations}")
             print(f"表现良好 (≤10%误差): {good_combinations} ({good_combinations/total_combinations*100:.1f}%)")
             print(f"表现可接受 (≤20%误差): {acceptable_combinations} ({acceptable_combinations/total_combinations*100:.1f}%)")
-            print(f"需要分层建模 (>20%误差): {need_hierarchical} ({need_hierarchical/total_combinations*100:.1f}%)")
+            print(f"需要进一步建模 (>20%误差): {need_further} ({need_further/total_combinations*100:.1f}%)")
             
             print(f"\n最佳方法分布:")
             method_distribution = best_methods_df['method'].value_counts()
             for method, count in method_distribution.items():
                 print(f"{method}: {count} 个组合 ({count/total_combinations*100:.1f}%)")
+            
+            # 9. 分组效果分析
+            print(f"\n=== 分组建模效果分析 ===")
+            
+            # 分析不同收入档位的表现
+            if 'revenue_d3_min' in df.columns and 'revenue_d3_max' in df.columns:
+                # 创建收入档位标识
+                df_with_bins = df.copy()
+                df_with_bins['revenue_bin'] = df_with_bins['revenue_d3_min'].astype(str) + '-' + df_with_bins['revenue_d3_max'].astype(str)
+                
+                # 统计各档位的数据量
+                bin_stats = df_with_bins.groupby('revenue_bin').agg({
+                    'total_revenue_d3': ['count', 'sum'],
+                    'total_revenue_d7': 'sum'
+                }).round(2)
+                
+                print("各收入档位统计:")
+                print(bin_stats.head(10))
+                
+                # 分析各档位的预测效果（如果有足够数据）
+                if len(best_methods_df) > 0:
+                    # 这里可以添加更详细的分档效果分析
+                    print(f"分组建模完成，共处理 {len(df_with_bins['revenue_bin'].unique())} 个收入档位")
         
         else:
             print(f"警告: {dataset_name} 没有成功的方法结果")
 
+def compare_with_aggregated_results():
+    """
+    比较分组建模与汇总建模的效果差异
+    """
+    print("\n=== 分组建模 vs 汇总建模效果对比 ===")
+    
+    # 这个函数可以用来对比两种方法的效果
+    # 需要同时运行 comprehensive_regression.py 和 hierarchical_regression.py
+    # 然后比较结果文件
+    
+    datasets = ['groupDf0', 'groupDf1', 'groupDf2']
+    
+    for dataset_name in datasets:
+        try:
+            # 读取分组建模结果
+            hierarchical_file = f'/src/data/hierarchical_method_summary_{dataset_name}.csv'
+            hierarchical_results = pd.read_csv(hierarchical_file)
+            
+            # 读取汇总建模结果（如果存在）
+            aggregated_file = f'/src/data/method_summary_{dataset_name.replace("group", "raw")}.csv'
+            if os.path.exists(aggregated_file):
+                aggregated_results = pd.read_csv(aggregated_file)
+                
+                print(f"\n{dataset_name} 效果对比:")
+                print("分组建模最佳方法:")
+                best_hierarchical = hierarchical_results.loc[0]
+                print(f"  方法: {best_hierarchical['method']}, 周误差: {best_hierarchical['avg_weekly_mape']:.3f}")
+                
+                print("汇总建模最佳方法:")
+                best_aggregated = aggregated_results.loc[0]
+                print(f"  方法: {best_aggregated['method']}, 周误差: {best_aggregated['avg_weekly_mape']:.3f}")
+                
+                improvement = (best_aggregated['avg_weekly_mape'] - best_hierarchical['avg_weekly_mape']) / best_aggregated['avg_weekly_mape'] * 100
+                print(f"改进幅度: {improvement:.1f}%")
+            
+        except Exception as e:
+            print(f"对比 {dataset_name} 时出错: {e}")
+
+def analyze_revenue_bin_performance():
+    """
+    分析不同收入档位的建模效果
+    """
+    print("\n=== 收入档位建模效果分析 ===")
+    
+    try:
+        # 获取分组数据进行分析
+        groupDf0, groupDf1, groupDf2 = getGroupData()
+        datasets = [('groupDf0', groupDf0), ('groupDf1', groupDf1), ('groupDf2', groupDf2)]
+        
+        for dataset_name, df in datasets:
+            if 'revenue_d3_min' in df.columns and 'revenue_d3_max' in df.columns:
+                print(f"\n{dataset_name} 收入档位分析:")
+                
+                # 创建收入档位
+                df['revenue_bin'] = df['revenue_d3_min'].astype(str) + '-' + df['revenue_d3_max'].astype(str)
+                
+                # 统计各档位
+                bin_analysis = df.groupby('revenue_bin').agg({
+                    'total_revenue_d3': ['count', 'sum', 'mean'],
+                    'total_revenue_d7': ['sum', 'mean'],
+                    'install_day': 'nunique'  # 天数
+                }).round(2)
+                
+                bin_analysis.columns = ['观测次数', 'R3总和', 'R3均值', 'R7总和', 'R7均值', '天数']
+                
+                # 计算R7/R3比值
+                bin_analysis['R7/R3比值'] = (bin_analysis['R7总和'] / bin_analysis['R3总和']).round(3)
+                
+                # 按R3总和排序，显示重要档位
+                bin_analysis_sorted = bin_analysis.sort_values('R3总和', ascending=False)
+                
+                print("重要收入档位 (按R3总和排序):")
+                print(bin_analysis_sorted.head(10))
+                
+                print(f"\n档位统计: 共 {len(bin_analysis)} 个档位")
+                print(f"数据覆盖: {bin_analysis['天数'].sum()} 个档位-天组合")
+                
+    except Exception as e:
+        print(f"收入档位分析出错: {e}")
+
+def generate_summary_report():
+    """
+    生成分组建模总结报告
+    """
+    print("\n=== 分组建模总结报告 ===")
+    
+    datasets = ['groupDf0', 'groupDf1', 'groupDf2']
+    
+    summary_data = []
+    
+    for dataset_name in datasets:
+        try:
+            # 读取最佳方法结果
+            best_methods_file = f'/src/data/hierarchical_best_methods_{dataset_name}.csv'
+            if os.path.exists(best_methods_file):
+                best_methods = pd.read_csv(best_methods_file)
+                
+                # 统计关键指标
+                total_combinations = len(best_methods)
+                good_performance = len(best_methods[best_methods['is_good_performance']])
+                acceptable_performance = len(best_methods[best_methods['is_acceptable_performance']])
+                need_further = len(best_methods[best_methods['needs_further_modeling']])
+                
+                avg_weekly_mape = best_methods['weekly_mape'].mean()
+                median_weekly_mape = best_methods['weekly_mape'].median()
+                
+                # 最常用的方法
+                most_common_method = best_methods['method'].mode().iloc[0] if len(best_methods) > 0 else 'N/A'
+                
+                summary_data.append({
+                    'dataset': dataset_name,
+                    'total_combinations': total_combinations,
+                    'good_performance_pct': good_performance / total_combinations * 100 if total_combinations > 0 else 0,
+                    'acceptable_performance_pct': acceptable_performance / total_combinations * 100 if total_combinations > 0 else 0,
+                    'need_further_pct': need_further / total_combinations * 100 if total_combinations > 0 else 0,
+                    'avg_weekly_mape': avg_weekly_mape,
+                    'median_weekly_mape': median_weekly_mape,
+                    'most_common_method': most_common_method
+                })
+                
+        except Exception as e:
+            print(f"处理 {dataset_name} 总结时出错: {e}")
+    
+    if summary_data:
+        summary_df = pd.DataFrame(summary_data)
+        
+        print("\n分组建模效果总结:")
+        print(summary_df.round(2))
+        
+        # 保存总结报告
+        summary_df.to_csv('/src/data/hierarchical_modeling_summary.csv', index=False)
+        print("\n总结报告已保存: hierarchical_modeling_summary.csv")
+        
+        # 输出关键结论
+        print("\n=== 关键结论 ===")
+        for _, row in summary_df.iterrows():
+            print(f"\n{row['dataset']}:")
+            print(f"  - 总组合数: {row['total_combinations']}")
+            print(f"  - 表现良好比例: {row['good_performance_pct']:.1f}%")
+            print(f"  - 可接受比例: {row['acceptable_performance_pct']:.1f}%")
+            print(f"  - 需进一步建模: {row['need_further_pct']:.1f}%")
+            print(f"  - 平均周误差: {row['avg_weekly_mape']:.3f}")
+            print(f"  - 最常用方法: {row['most_common_method']}")
+
 if __name__ == "__main__":
-    comprehensive_regression_analysis()
+    # 执行主要分析
+    hierarchical_regression_analysis()
+    
+    # 执行补充分析
+    analyze_revenue_bin_performance()
+    
+    # 生成总结报告
+    generate_summary_report()
+    
+    # 如果需要对比汇总建模效果，取消下面的注释
+    # compare_with_aggregated_results()

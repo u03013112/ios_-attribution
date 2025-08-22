@@ -618,7 +618,7 @@ SELECT
 		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
 		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
 		WHEN mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
-		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int') THEN mediasource
+		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int','snapchat_int','twitter') THEN mediasource
 		ELSE 'other'
 	END as mediasource,
 	'ALL' AS ad_type,
@@ -655,7 +655,7 @@ GROUP BY
 		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
 		WHEN mediasource = 'applovin_int' AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
 		WHEN mediasource = 'tiktokglobal_int' THEN 'bytedanceglobal_int'
-		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int') THEN mediasource
+		WHEN mediasource IN ('Facebook Ads', 'bytedanceglobal_int','moloco_int','snapchat_int','twitter') THEN mediasource
 		ELSE 'other'
 	END,
 	ad_type
