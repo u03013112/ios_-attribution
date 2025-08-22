@@ -84,6 +84,50 @@ order by
     return
 
 
+# 只细分到mediasource，并且将applovin拆分，小媒体忽略
+def createAosGpirUidRevenueView2():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250820_aos_gpir_uid_revenue_view2_by_j AS
+select
+	uid,
+	install_day,
+	country,
+	country_group,
+	CASE
+		WHEN mediasource = 'applovin_int'
+		AND UPPER(pub.campaign_name) LIKE '%D7%' THEN 'applovin_int_d7'
+		WHEN mediasource = 'applovin_int'
+		AND UPPER(pub.campaign_name) LIKE '%D28%' THEN 'applovin_int_d28'
+		WHEN mediasource IN (
+			'googleadwords_int',
+			'Facebook Ads',
+			'bytedanceglobal_int',
+			'snapchat_int',
+			'moloco_int'
+		) THEN mediasource
+		ELSE 'other'
+	END as mediasource,
+	t.revenue_d1,
+	t.revenue_d3,
+	t.revenue_d7
+from
+	lw_20250820_aos_gpir_uid_revenue_view_by_j t
+	LEFT JOIN (
+		SELECT
+			campaign_id,
+			MAX(campaign_name) AS campaign_name
+		FROM
+			prodb.public.applovin_data_v3
+		GROUP BY
+			campaign_id
+	) pub ON t.campaign_id = pub.campaign_id
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 # 为了后续给用户收入分档，将用户的收入进行汇总
 # 从startDay~endDay的时间段内，按照3日收入金额进行分组，添加一列pay_users记录相同付费金额用户数
 def getAosGpir3dRevenueGroupData(startDay='20250101', endDay='20250810'):
@@ -465,8 +509,8 @@ def getNerfRGroupData(df = None):
     return df0, df1, df2
 
 def main():
-    # # 创建视图
-    # createAosGpirUidRevenueView()
+    # 创建视图
+    createAosGpirUidRevenueView()
 
     # 获取3日收入分组数据
     startDay = '20250101'
