@@ -2,6 +2,7 @@
 # 暂时只获取安卓GPIR数据
 
 
+from fileinput import filename
 import os
 import datetime
 import numpy as np
@@ -117,7 +118,7 @@ from
 			campaign_id,
 			MAX(campaign_name) AS campaign_name
 		FROM
-			prodb.public.applovin_data_v3
+			prodb.public.applovin_campaign_info_new
 		GROUP BY
 			campaign_id
 	) pub ON t.campaign_id = pub.campaign_id
@@ -126,6 +127,45 @@ from
     print(f"Executing SQL: {sql}")
     execSql2(sql)
     return
+
+# gpir 分国家+媒体 3日、7日收入，不做分组
+def getAosGpirCountryMediaRawR3R7Data(startDay='20250101', endDay='20250810'):
+    filename = f'/src/data/20250820_aosGpirRawR3R7Data_{startDay}_{endDay}.csv'
+    if os.path.exists(filename):
+        print(f"File {filename} already exists, loading from file.")
+        df = pd.read_csv(filename, dtype={
+            'install_day': str
+        })
+    else:
+        sql = f"""
+SELECT
+    'com.fun.lastwar.gp' as app_package,
+    install_day,
+    country_group,
+    mediasource,
+    count(uid) as users_count,
+    SUM(revenue_d1) as total_revenue_d1,
+    SUM(revenue_d3) as total_revenue_d3,
+    SUM(revenue_d7) as total_revenue_d7
+FROM
+    lw_20250820_aos_gpir_uid_revenue_view2_by_j
+WHERE
+    install_day BETWEEN '{startDay}' AND '{endDay}'
+GROUP BY
+    install_day,
+    country_group,
+    mediasource
+ORDER BY
+    install_day,
+    country_group,
+    mediasource
+        """
+        print(f"Executing SQL: {sql}")
+        df = execSql(sql)
+        df.to_csv(filename, index=False)
+        print(f"Data saved to {filename}")
+    return df
+
 
 
 # 为了后续给用户收入分档，将用户的收入进行汇总
@@ -201,33 +241,28 @@ def makeLevels(userDf, N=8):
 # app_package, install_day, country_group, mediasource, campaign_id,
 # revenue_d3_min, revenue_d3_max, users_count, total_revenue
 def getAosGpirData3dGroup(levels,startDay = '20250101',endDay = '20250810'):
-    filename = f'/src/data/20250820_aosGpirData_{startDay}_{endDay}.csv'
-    if os.path.exists(filename):
-        print(f"File {filename} already exists, loading from file.")
-        df = pd.read_csv(filename)
-    else:
-        # 将levels拆开，左开右闭
-        # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
-        # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
-        # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
-        
-        levels_min = [0] + levels
-        levels_max = levels + [9999999.9]
-        
-        # 构建CASE WHEN语句来分组
-        case_when_min = []
-        case_when_max = []
-        
-        for i in range(len(levels_min)):
-            min_val = levels_min[i]
-            max_val = levels_max[i]
-            case_when_min.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {min_val}")
-            case_when_max.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {max_val}")
-        
-        case_when_min_str = "\n            ".join(case_when_min)
-        case_when_max_str = "\n            ".join(case_when_max)
+    # 将levels拆开，左开右闭
+    # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+    # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+    # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
+    
+    levels_min = [0] + levels
+    levels_max = levels + [9999999.9]
+    
+    # 构建CASE WHEN语句来分组
+    case_when_min = []
+    case_when_max = []
+    
+    for i in range(len(levels_min)):
+        min_val = levels_min[i]
+        max_val = levels_max[i]
+        case_when_min.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {min_val}")
+        case_when_max.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {max_val}")
+    
+    case_when_min_str = "\n            ".join(case_when_min)
+    case_when_max_str = "\n            ".join(case_when_max)
 
-        sql = f"""
+    sql = f"""
 SELECT
     'com.fun.lastwar.gp' as app_package,
     install_day,
@@ -271,11 +306,79 @@ ORDER BY
     campaign_id,
     revenue_d3_min
         """
-        print(f"Executing SQL: {sql}")
-        df = execSql(sql)
-        df.to_csv(filename, index=False)
-        print(f"Data saved to {filename}")
+    print(f"Executing SQL: {sql}")
+    df = execSql(sql)
     return df
+
+
+# 采用lw_20250820_aos_gpir_uid_revenue_view2_by_j，只到分媒体，没有campaign
+def getAosGpirData3dGroup2(levels,startDay = '20250101',endDay = '20250810'):
+    # 将levels拆开，左开右闭
+    # 比如我的levels = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+    # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
+    # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
+    
+    levels_min = [0] + levels
+    levels_max = levels + [9999999.9]
+    
+    # 构建CASE WHEN语句来分组
+    case_when_min = []
+    case_when_max = []
+    
+    for i in range(len(levels_min)):
+        min_val = levels_min[i]
+        max_val = levels_max[i]
+        case_when_min.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {min_val}")
+        case_when_max.append(f"WHEN revenue_d3 > {min_val} AND revenue_d3 <= {max_val} THEN {max_val}")
+    
+    case_when_min_str = "\n            ".join(case_when_min)
+    case_when_max_str = "\n            ".join(case_when_max)
+
+    sql = f"""
+SELECT
+    'com.fun.lastwar.gp' as app_package,
+    install_day,
+    country_group,
+    mediasource,
+    CASE
+        {case_when_min_str}
+        ELSE 0
+    END as revenue_d3_min,
+    CASE
+        {case_when_max_str}
+        ELSE 9999999.9
+    END as revenue_d3_max,
+    COUNT(uid) as users_count,
+    SUM(revenue_d1) as total_revenue_d1,
+    SUM(revenue_d3) as total_revenue_d3,
+    SUM(revenue_d7) as total_revenue_d7
+FROM
+    lw_20250820_aos_gpir_uid_revenue_view2_by_j
+WHERE
+    install_day BETWEEN '{startDay}' AND '{endDay}'
+    AND revenue_d3 > 0
+GROUP BY
+    install_day,
+    country_group,
+    mediasource,
+    CASE
+        {case_when_min_str}
+        ELSE 0
+    END,
+    CASE
+        {case_when_max_str}
+        ELSE 9999999.9
+    END
+ORDER BY
+    install_day,
+    country_group,
+    mediasource,
+    revenue_d3_min
+        """
+    print(f"Executing SQL: {sql}")
+    df = execSql(sql)
+    return df
+
 
 
 # 合并到分国家，为了对总数，简单确认数据正确
@@ -508,6 +611,27 @@ def getNerfRGroupData(df = None):
     
     return df0, df1, df2
 
+
+# 将3日收入分组，将这个过程封装一下，方便后使用
+def getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=8):
+    filename = f'/src/data/20250820_aosGpirCountryMediaGroupR3Data_{startDay}_{endDay}_N{N}.csv'
+    if os.path.exists(filename):
+        print(f"File {filename} already exists, loading from file.")
+        df2 = pd.read_csv(filename, dtype={
+            'install_day': str
+        })
+    else:
+        df = getAosGpir3dRevenueGroupData(startDay, endDay)
+        levels = makeLevels(df, N=N)
+        
+        # # 为了可以削弱大R，额外添加一个较大的分界金额
+        # levels.append(2000.0)
+
+        df2 = getAosGpirData3dGroup2(levels, startDay, endDay)
+        print(f"Data saved to {filename}")
+
+    return df2
+
 def main():
     # 创建视图
     createAosGpirUidRevenueView()
@@ -572,4 +696,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    # createAosGpirUidRevenueView2()
+    # print(getAosGpirCountryMediaRawR3R7Data(startDay='20250101', endDay='20250810'))
+    print(getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810', N=8))

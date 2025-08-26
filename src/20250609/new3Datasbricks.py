@@ -574,7 +574,7 @@ FROM
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 	LEFT JOIN (
 		SELECT campaign_id, MAX(campaign_name) AS campaign_name
-		FROM prodb.public.applovin_data_v3
+		FROM prodb.public.applovin_campaign_info_new
 		GROUP BY campaign_id
 	) pub ON 
     roi.campaign_id = pub.campaign_id
@@ -638,7 +638,7 @@ FROM
 	LEFT JOIN month_view_by_j m ON SUBSTR(roi.install_day, 1, 6) = m.install_month
 	LEFT JOIN (
 		SELECT campaign_id, MAX(campaign_name) AS campaign_name
-		FROM prodb.public.applovin_data_v3
+		FROM prodb.public.applovin_campaign_info_new
 		GROUP BY campaign_id
 	) pub ON 
     roi.campaign_id = pub.campaign_id

@@ -82,7 +82,7 @@ FROM
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN (
 		SELECT campaign_id, MAX(campaign_name) AS campaign_name
-		FROM prodb.public.applovin_data_v3
+		FROM prodb.public.applovin_campaign_info_new
 		GROUP BY campaign_id
 	) pub ON 
     roi.campaign_id = pub.campaign_id
@@ -139,7 +139,7 @@ FROM
 	LEFT JOIN lw_country_group_table_by_j_20250703 cg ON roi.country = cg.country
 	LEFT JOIN (
 		SELECT campaign_id, MAX(campaign_name) AS campaign_name
-		FROM prodb.public.applovin_data_v3
+		FROM prodb.public.applovin_campaign_info_new
 		GROUP BY campaign_id
 	) pub ON 
     roi.campaign_id = pub.campaign_id

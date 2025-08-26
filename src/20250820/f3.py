@@ -2,7 +2,7 @@
 # 多种回归方法综合对比分析
 import pandas as pd
 import numpy as np
-from getData import getRawData
+from getData import getRawData,getAosGpirCountryMediaRawR3R7Data
 from sklearn.linear_model import QuantileRegressor, HuberRegressor, RANSACRegressor, LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error
 import warnings
@@ -433,10 +433,12 @@ def comprehensive_regression_analysis():
     
     # 获取数据
     rawDf0, rawDf1, rawDf2 = getRawData()
+    rawDf = getAosGpirCountryMediaRawR3R7Data()
     datasets = [
-        ('rawDf0', rawDf0),
-        ('rawDf1', rawDf1), 
-        ('rawDf2', rawDf2)
+        # ('rawDf0', rawDf0),
+        # ('rawDf1', rawDf1), 
+        # ('rawDf2', rawDf2),
+        ('rawDf', rawDf)
     ]
     
     # 定义回归方法

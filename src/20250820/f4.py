@@ -3,7 +3,7 @@
 import os
 import pandas as pd
 import numpy as np
-from getData import getGroupData
+from getData import getGroupData,getAosGpirCountryMediaGroupR3Data
 from sklearn.linear_model import QuantileRegressor, HuberRegressor, RANSACRegressor, LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error
 import warnings
@@ -449,13 +449,28 @@ def hierarchical_regression_analysis():
     """
     print("=== 基于用户分组的综合回归方法对比分析 ===")
     
-    # 获取分组数据
-    groupDf0, groupDf1, groupDf2 = getGroupData()
+    # # 获取分组数据
+    # groupDf0, groupDf1, groupDf2 = getGroupData()
+    # datasets = [
+    #     ('groupDf0', groupDf0),
+    #     ('groupDf1', groupDf1), 
+    #     ('groupDf2', groupDf2)
+    # ]
+
+    groupDf2 = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=2)
+    groupDf4 = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=4)
+    groupDf8 = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=8)
+    groupDf16 = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=16)
+    groupDf32 = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=32)
+
     datasets = [
-        ('groupDf0', groupDf0),
-        ('groupDf1', groupDf1), 
-        ('groupDf2', groupDf2)
+        ('groupDf2', groupDf2),
+        ('groupDf4', groupDf4), 
+        ('groupDf8', groupDf8),
+        ('groupDf16', groupDf16),
+        ('groupDf32', groupDf32)
     ]
+
     
     # 定义回归方法
     methods = [
