@@ -745,78 +745,83 @@ def analyze_revenue_bin_performance():
         print(f"收入档位分析出错: {e}")
 
 def generate_summary_report():
-    """
-    生成分组建模总结报告
-    """
-    print("\n=== 分组建模总结报告 ===")
+    filenames = [
+        ('rawDf', '/src/data/best_methods_rawDf.csv'),
+        ('groupDf2', '/src/data/hierarchical_best_methods_groupDf2.csv'),
+        ('groupDf4', '/src/data/hierarchical_best_methods_groupDf4.csv'), 
+        ('groupDf8', '/src/data/hierarchical_best_methods_groupDf8.csv'),
+        ('groupDf16', '/src/data/hierarchical_best_methods_groupDf16.csv'),
+        ('groupDf32', '/src/data/hierarchical_best_methods_groupDf32.csv')
+    ]
+
+    print("=== 生成汇总报告 ===")
     
-    datasets = ['groupDf0', 'groupDf1', 'groupDf2']
+    # 存储所有数据框
+    dataframes = []
     
-    summary_data = []
+    # 读取每个文件
+    for name, filepath in filenames:
+        if os.path.exists(filepath):
+            print(f"读取文件: {filepath}")
+            df = pd.read_csv(filepath)
+            
+            # 检查必要的列是否存在
+            required_cols = ['app_package', 'country_group', 'mediasource', 'weekly_mape']
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            
+            if missing_cols:
+                print(f"警告: {name} 缺少列: {missing_cols}")
+                continue
+            
+            # 只保留需要的列
+            df_subset = df[required_cols].copy()
+            
+            # 重命名weekly_mape列，添加前缀
+            df_subset = df_subset.rename(columns={'weekly_mape': f'weekly_mape_{name}'})
+            
+            print(f"{name}: {len(df_subset)} 行数据")
+            
+            dataframes.append((name, df_subset))
+        else:
+            print(f"文件不存在: {filepath}")
     
-    for dataset_name in datasets:
-        try:
-            # 读取最佳方法结果
-            best_methods_file = f'/src/data/hierarchical_best_methods_{dataset_name}.csv'
-            if os.path.exists(best_methods_file):
-                best_methods = pd.read_csv(best_methods_file)
-                
-                # 统计关键指标
-                total_combinations = len(best_methods)
-                good_performance = len(best_methods[best_methods['is_good_performance']])
-                acceptable_performance = len(best_methods[best_methods['is_acceptable_performance']])
-                need_further = len(best_methods[best_methods['needs_further_modeling']])
-                
-                avg_weekly_mape = best_methods['weekly_mape'].mean()
-                median_weekly_mape = best_methods['weekly_mape'].median()
-                
-                # 最常用的方法
-                most_common_method = best_methods['method'].mode().iloc[0] if len(best_methods) > 0 else 'N/A'
-                
-                summary_data.append({
-                    'dataset': dataset_name,
-                    'total_combinations': total_combinations,
-                    'good_performance_pct': good_performance / total_combinations * 100 if total_combinations > 0 else 0,
-                    'acceptable_performance_pct': acceptable_performance / total_combinations * 100 if total_combinations > 0 else 0,
-                    'need_further_pct': need_further / total_combinations * 100 if total_combinations > 0 else 0,
-                    'avg_weekly_mape': avg_weekly_mape,
-                    'median_weekly_mape': median_weekly_mape,
-                    'most_common_method': most_common_method
-                })
-                
-        except Exception as e:
-            print(f"处理 {dataset_name} 总结时出错: {e}")
+    if not dataframes:
+        print("没有找到任何有效的数据文件")
+        return
     
-    if summary_data:
-        summary_df = pd.DataFrame(summary_data)
+    # 开始合并数据
+    print(f"\n开始合并 {len(dataframes)} 个数据集...")
+    
+    # 使用第一个数据框作为基础
+    base_name, merged_df = dataframes[0]
+    print(f"基础数据集: {base_name}")
+    
+    # 逐个合并其他数据框
+    for name, df in dataframes[1:]:
+        print(f"合并 {name}...")
         
-        print("\n分组建模效果总结:")
-        print(summary_df.round(2))
+        # 按照 app_package, country_group, mediasource 进行合并
+        merged_df = merged_df.merge(
+            df, 
+            on=['app_package', 'country_group', 'mediasource'], 
+            how='outer'
+        )
         
-        # 保存总结报告
-        summary_df.to_csv('/src/data/hierarchical_modeling_summary.csv', index=False)
-        print("\n总结报告已保存: hierarchical_modeling_summary.csv")
-        
-        # 输出关键结论
-        print("\n=== 关键结论 ===")
-        for _, row in summary_df.iterrows():
-            print(f"\n{row['dataset']}:")
-            print(f"  - 总组合数: {row['total_combinations']}")
-            print(f"  - 表现良好比例: {row['good_performance_pct']:.1f}%")
-            print(f"  - 可接受比例: {row['acceptable_performance_pct']:.1f}%")
-            print(f"  - 需进一步建模: {row['need_further_pct']:.1f}%")
-            print(f"  - 平均周误差: {row['avg_weekly_mape']:.3f}")
-            print(f"  - 最常用方法: {row['most_common_method']}")
+        print(f"合并后行数: {len(merged_df)}")
+    
+    merged_df.to_csv('/src/data/summary_report.csv', index=False)
+    print("\n汇总报告已保存: summary_report.csv")
+    
+    
+    
+    
 
 if __name__ == "__main__":
-    # 执行主要分析
-    hierarchical_regression_analysis()
+    # # 执行主要分析
+    # hierarchical_regression_analysis()
     
-    # 执行补充分析
-    analyze_revenue_bin_performance()
+    # # 执行补充分析
+    # analyze_revenue_bin_performance()
     
     # 生成总结报告
     generate_summary_report()
-    
-    # 如果需要对比汇总建模效果，取消下面的注释
-    # compare_with_aggregated_results()

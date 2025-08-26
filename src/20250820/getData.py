@@ -318,7 +318,7 @@ def getAosGpirData3dGroup2(levels,startDay = '20250101',endDay = '20250810'):
     # 那么levels_min = [0, 4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9]
     # levels_max = [4.1, 18.6, 43.9, 83.9, 155.9, 337.8, 736.9, 9999999.9]
     
-    levels_min = [0] + levels
+    levels_min = [-1] + levels
     levels_max = levels + [9999999.9]
     
     # 构建CASE WHEN语句来分组
@@ -356,7 +356,6 @@ FROM
     lw_20250820_aos_gpir_uid_revenue_view2_by_j
 WHERE
     install_day BETWEEN '{startDay}' AND '{endDay}'
-    AND revenue_d3 > 0
 GROUP BY
     install_day,
     country_group,
@@ -624,11 +623,15 @@ def getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810',N=8
         df = getAosGpir3dRevenueGroupData(startDay, endDay)
         levels = makeLevels(df, N=N)
         
+        # 在最前面插入一个0，将3日收入为0的用户单独分一档
+        levels = [0] + levels
+
         # # 为了可以削弱大R，额外添加一个较大的分界金额
         # levels.append(2000.0)
 
         df2 = getAosGpirData3dGroup2(levels, startDay, endDay)
         print(f"Data saved to {filename}")
+        df2.to_csv(filename, index=False)
 
     return df2
 
@@ -694,9 +697,123 @@ def main():
     print("NerfR Group DataFrame 2 (按媒体+campaign+分档分组):")
     print(nerfGroupDf2.head())
 
+def debug():
+    # getAosGpirCountryMediaRawR3R7Data 数据与 getAosGpirCountryMediaGroupR3Data 数据进行对比
+    # 前者是原始数据，后者是分组数据
+    # 分组数据加起来应该等于原始数据
+    # 简单抽检，US，20250101~20250131，applovin_int_d7
+    rawDf = getAosGpirCountryMediaRawR3R7Data(startDay='20250101', endDay='20250810')
+    groupDf = getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810', N=8)
+    
+    print("=== 数据对比验证 ===")
+    print(f"原始数据形状: {rawDf.shape}")
+    print(f"分组数据形状: {groupDf.shape}")
+    
+    # 对分组数据进行汇总，按照原始数据的维度进行聚合
+    groupDf_agg = groupDf.groupby(['app_package', 'install_day', 'country_group', 'mediasource']).agg({
+        'users_count': 'sum',
+        'total_revenue_d1': 'sum',
+        'total_revenue_d3': 'sum',
+        'total_revenue_d7': 'sum'
+    }).reset_index()
+    
+    print(f"分组数据汇总后形状: {groupDf_agg.shape}")
+    
+    # 合并两个数据框进行对比
+    comparison_df = rawDf.merge(
+        groupDf_agg, 
+        on=['app_package', 'install_day', 'country_group', 'mediasource'], 
+        how='outer', 
+        suffixes=('_raw', '_group')
+    )
+    
+    # 计算差异
+    comparison_df['users_diff'] = comparison_df['users_count_raw'].fillna(0) - comparison_df['users_count_group'].fillna(0)
+    comparison_df['revenue_d1_diff'] = comparison_df['total_revenue_d1_raw'].fillna(0) - comparison_df['total_revenue_d1_group'].fillna(0)
+    comparison_df['revenue_d3_diff'] = comparison_df['total_revenue_d3_raw'].fillna(0) - comparison_df['total_revenue_d3_group'].fillna(0)
+    comparison_df['revenue_d7_diff'] = comparison_df['total_revenue_d7_raw'].fillna(0) - comparison_df['total_revenue_d7_group'].fillna(0)
+    
+    # 检查是否有显著差异
+    significant_diff = comparison_df[
+        (abs(comparison_df['users_diff']) > 1) |
+        (abs(comparison_df['revenue_d1_diff']) > 0.01) |
+        (abs(comparison_df['revenue_d3_diff']) > 0.01) |
+        (abs(comparison_df['revenue_d7_diff']) > 0.01)
+    ]
+    
+    print(f"\n=== 总体统计对比 ===")
+    print("原始数据总计:")
+    print(f"  用户数: {rawDf['users_count'].sum():,}")
+    print(f"  D1收入: ${rawDf['total_revenue_d1'].sum():,.2f}")
+    print(f"  D3收入: ${rawDf['total_revenue_d3'].sum():,.2f}")
+    print(f"  D7收入: ${rawDf['total_revenue_d7'].sum():,.2f}")
+    
+    print("\n分组数据汇总总计:")
+    print(f"  用户数: {groupDf_agg['users_count'].sum():,}")
+    print(f"  D1收入: ${groupDf_agg['total_revenue_d1'].sum():,.2f}")
+    print(f"  D3收入: ${groupDf_agg['total_revenue_d3'].sum():,.2f}")
+    print(f"  D7收入: ${groupDf_agg['total_revenue_d7'].sum():,.2f}")
+    
+    print(f"\n=== 差异检查 ===")
+    print(f"有显著差异的记录数: {len(significant_diff)}")
+    
+    if len(significant_diff) > 0:
+        print("\n前10个有差异的记录:")
+        print(significant_diff[['install_day', 'country_group', 'mediasource', 
+                               'users_diff', 'revenue_d1_diff', 'revenue_d3_diff', 'revenue_d7_diff']].head(10))
+    else:
+        print("✅ 所有数据匹配，分组数据汇总后与原始数据一致")
+    
+    # 特定案例检查：US，applovin_int_d7
+    print(f"\n=== 特定案例检查: US + applovin_int_d7 ===")
+    us_applovin_raw = rawDf[
+        (rawDf['country_group'] == 'US') & 
+        (rawDf['mediasource'] == 'applovin_int_d7')
+    ]
+    
+    us_applovin_group = groupDf_agg[
+        (groupDf_agg['country_group'] == 'US') & 
+        (groupDf_agg['mediasource'] == 'applovin_int_d7')
+    ]
+    
+    if len(us_applovin_raw) > 0 and len(us_applovin_group) > 0:
+        print("原始数据 (US + applovin_int_d7):")
+        print(f"  记录数: {len(us_applovin_raw)}")
+        print(f"  用户数: {us_applovin_raw['users_count'].sum():,}")
+        print(f"  D3收入: ${us_applovin_raw['total_revenue_d3'].sum():,.2f}")
+        print(f"  D7收入: ${us_applovin_raw['total_revenue_d7'].sum():,.2f}")
+        
+        print("\n分组数据汇总 (US + applovin_int_d7):")
+        print(f"  记录数: {len(us_applovin_group)}")
+        print(f"  用户数: {us_applovin_group['users_count'].sum():,}")
+        print(f"  D3收入: ${us_applovin_group['total_revenue_d3'].sum():,.2f}")
+        print(f"  D7收入: ${us_applovin_group['total_revenue_d7'].sum():,.2f}")
+    else:
+        print("未找到 US + applovin_int_d7 的数据")
+    
+    # 检查分组数据的分档分布
+    print(f"\n=== 分档分布检查 ===")
+    revenue_groups = groupDf.groupby(['revenue_d3_min', 'revenue_d3_max']).agg({
+        'users_count': 'sum',
+        'total_revenue_d3': 'sum'
+    }).reset_index().sort_values('revenue_d3_min')
+    
+    print("各分档用户数和收入分布:")
+    for _, row in revenue_groups.iterrows():
+        avg_revenue = row['total_revenue_d3'] / row['users_count'] if row['users_count'] > 0 else 0
+        print(f"  [{row['revenue_d3_min']:.1f}, {row['revenue_d3_max']:.1f}]: "
+              f"{row['users_count']:,} 用户, "
+              f"${row['total_revenue_d3']:,.2f} 收入, "
+              f"平均 ${avg_revenue:.2f}")
+    
+    return comparison_df
+    
+
 
 if __name__ == '__main__':
     # main()
     # createAosGpirUidRevenueView2()
     # print(getAosGpirCountryMediaRawR3R7Data(startDay='20250101', endDay='20250810'))
-    print(getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810', N=8))
+    # print(getAosGpirCountryMediaGroupR3Data(startDay='20250101', endDay='20250810', N=8))
+
+    debug()
