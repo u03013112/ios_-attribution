@@ -752,13 +752,13 @@ FROM
 
 
 def createPaybackTable():
-	sql1 = """
-DROP TABLE IF EXISTS lw_20250815_country_milestone_profit_payback_table_by_j;
-	"""
-	print(f"Executing SQL: {sql1}")
-	execSql2(sql1)
+# 	sql1 = """
+# DROP TABLE IF EXISTS lw_20250815_country_milestone_profit_payback_table_by_j;
+# 	"""
+# 	print(f"Executing SQL: {sql1}")
+# 	execSql2(sql1)
 	sql2 = """
-CREATE TABLE lw_20250815_country_milestone_profit_payback_table_by_j (
+CREATE OR REPLACE TABLE lw_20250815_country_milestone_profit_payback_table_by_j (
 select
 	pred.app_package,
 	pred.country_group,
@@ -840,18 +840,18 @@ WHERE
 	return
 
 def main():
-	# createCostAndRevenueView()
-	# createPaybackView()
-	# createRealPaybackView()
+	createCostAndRevenueView()
+	createPaybackView()
+	createRealPaybackView()
 	
 
-	# createAosCostAndRevenueView()
-	# createIosCostAndRevenueView()
-	# createAosAndIosCostAndRevenueView()
-	# createCostAndRevenueView2()
-	# createPaybackView2()
+	createAosCostAndRevenueView()
+	createIosCostAndRevenueView()
+	createAosAndIosCostAndRevenueView()
+	createCostAndRevenueView2()
+	createPaybackView2()
 
-	# createPaybackTable()
+	createPaybackTable()
 	createRateTable()
 
 if __name__ == "__main__":
