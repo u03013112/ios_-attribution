@@ -6554,7 +6554,7 @@ ORDER BY
 
 # 有先后顺序，依赖关系
 def createViewsAndTables():
-	createCountryGroupTable()
+	# createCountryGroupTable()
 	# createMonthView()
 	# createAdtypeView()
 

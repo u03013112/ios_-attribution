@@ -1406,13 +1406,8 @@ ORDER BY
 # 与原始数据的分国家7日总收入进行join
 # 合成一个误差监测view
 def createIosAfCostRevenueDayFitCheckTable():
-	sql1 = """
-DROP TABLE IF EXISTS lw_20250806_af_cohort_cost_revenue_day_fit_table_check_by_j;
-	"""
-	print(f"Executing SQL: {sql1}")
-	execSql2(sql1)
 	sql2 = """
-CREATE TABLE lw_20250806_af_cohort_cost_revenue_day_fit_table_check_by_j AS
+CREATE OR REPLACE TABLE lw_20250806_af_cohort_cost_revenue_day_fit_table_check_by_j AS
 WITH original_data AS (
 	-- 获取原始数据的分国家7日总收入
 	SELECT
@@ -4516,21 +4511,21 @@ def createViewsAndTables():
 
 	# 只保留cohort，忽略非cohort数据
 
-	# # AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
-	# createAfAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfAppCountryCohortCostRevenueMonthyView()
-	# createAfAppCohortCostRevenueMonthyView()
-	# createAfCohortCostRevenueMonthyTable()
+	# AF 花费、收入24小时cohort数据，包括普通、添加adtype、大盘、只分国家 4种
+	createAfAppMediaCountryCohortCostRevenueMonthyView()
+	createAfAppCountryCohortCostRevenueMonthyView()
+	createAfAppCohortCostRevenueMonthyView()
+	createAfCohortCostRevenueMonthyTable()
 
-	# # GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
-	# createGPIRAppMediaCountryCohortCostRevenueMonthyView()
-	# createGPIRCohortCostRevenueMonthyTable()
+	# GPIR 花费、收入24小时cohort数据数据，包括普通、添加adtype 2种 
+	createGPIRAppMediaCountryCohortCostRevenueMonthyView()
+	createGPIRCohortCostRevenueMonthyTable()
 
-	# # AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
-	# createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
-	# createAfOnlyprofitAppCohortCostRevenueMonthyView()
-	# createAfOnlyProfitCohortCostRevenueMonthyTable()
+	# AF纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
+	createAfOnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCountryCohortCostRevenueMonthyView()
+	createAfOnlyprofitAppCohortCostRevenueMonthyView()
+	createAfOnlyProfitCohortCostRevenueMonthyTable()
 
 	# GPIR纯利 花费、收入24小时cohort数据，包括普通、添加adtype 2种
 	createGPIROnlyprofitAppMediaCountryCohortCostRevenueMonthyView()
@@ -4539,22 +4534,22 @@ def createViewsAndTables():
 	createIosOnlyprofitCohortCostRevenueMonthyForPaybackView()
 	createGPIROnlyProfitCohortCostRevenueMonthyTable()
 
-	# createForUaCostRevenueMonthyView()
-	# createAppLovinRatioView()
-	# createForUaCostRevenueMonthyTable()
+	createForUaCostRevenueMonthyView()
+	createAppLovinRatioView()
+	createForUaCostRevenueMonthyTable()
 
-	# createAfIosAppMediaCountryCohortCostRevenueMonthyView()
+	createAfIosAppMediaCountryCohortCostRevenueMonthyView()
 	
 
-	# # 拟合iOS结果相关
-	# createIosAfCostRevenueDayView()
-	# createIosAfCostRevenueDayFixTable()
-	# createIosAfCostRevenueMonthyFixView()
-	# createIosAfCostRevenueDayFitTable()
+	# 拟合iOS结果相关
+	createIosAfCostRevenueDayView()
+	createIosAfCostRevenueDayFixTable()
+	createIosAfCostRevenueMonthyFixView()
+	createIosAfCostRevenueDayFitTable()
 
-	# createIosAfCostRevenueDayFitCheckTable()
+	createIosAfCostRevenueDayFitCheckTable()
 
-	# createIosTagCostRevenueMonthyView()
+	createIosTagCostRevenueMonthyView()
 
 	# 所有的花费、收入数据汇总
 	createCostRevenueMonthyView()
@@ -4579,41 +4574,41 @@ def createViewsAndTables():
 	createKpiWithDiscountView()
 	createKpiTable()
 
-	# # 推算动态KPI
-	# createKpi2View()
-	# createKpi2ViewFix()
-	# createKpi2FixTable()
+	# 推算动态KPI
+	createKpi2View()
+	createKpi2ViewFix()
+	createKpi2FixTable()
 
-	# # 自然量收入占比
-	# createAfAndroidOrganicMonthView()
-	# createAfCohortAndroidOrganicMonthView()
-	# createAfOnlyprofitCohortAndroidOrganicMonthView()
-	# createGpirAndroidOrganic2MonthView()
-	# createGpirCohortAndroidOrganic2MonthView()
-	# createGpirOnlyprofitCohortAndroidOrganic2MonthView()
-	# createForUaAndroidOrganic2MonthView()
+	# 自然量收入占比
+	createAfAndroidOrganicMonthView()
+	createAfCohortAndroidOrganicMonthView()
+	createAfOnlyprofitCohortAndroidOrganicMonthView()
+	createGpirAndroidOrganic2MonthView()
+	createGpirCohortAndroidOrganic2MonthView()
+	createGpirOnlyprofitCohortAndroidOrganic2MonthView()
+	createForUaAndroidOrganic2MonthView()
 
-	# createAfCohorotIosOrganicMonthView()
-	# createAfCohorotIosOrganicFixMonthView()
-	# createAfCohorotIosOrganicFitMonthView()
+	createAfCohorotIosOrganicMonthView()
+	createAfCohorotIosOrganicFixMonthView()
+	createAfCohorotIosOrganicFitMonthView()
 
-	# createOrganicMonthTable()
+	createOrganicMonthTable()
 	
-	# # 只用自然量收入占比计算含自然量回本目标
-	# createKpiTargetWithOrganicView()
+	# 只用自然量收入占比计算含自然量回本目标
+	createKpiTargetWithOrganicView()
 
-	# # 回本周期计算
-	# createPayback1View()
-	# createPayback1ViewFix()
-	# createPayback2View()
-	# createPayback2ViewFix()
-	# createPaybackTable()
+	# 回本周期计算
+	createPayback1View()
+	createPayback1ViewFix()
+	createPayback2View()
+	createPayback2ViewFix()
+	createPaybackTable()
 
-	# createPayback1OrganicView()
-	# createPayback1OrganicViewFix()
-	# createPayback2OrganicView()
-	# createPayback2OrganicViewFix()
-	# createPaybackOrganicTable()
+	createPayback1OrganicView()
+	createPayback1OrganicViewFix()
+	createPayback2OrganicView()
+	createPayback2OrganicViewFix()
+	createPaybackOrganicTable()
 
 	pass
 
