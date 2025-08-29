@@ -43,7 +43,7 @@ FROM milestone m
 JOIN `data_science`.`default`.`lw_20250703_af_revenue_rise_ratio_predict2_month_view_by_j` t
 	ON m.startmonth = t.install_month
 WHERE
-		t.tag = 'onlyprofit_forpayback_cohort'
+		t.tag in ('for_ua','20250808_20')
 ;
 	"""
 	print(f"Executing SQL: {sql}")
@@ -551,10 +551,10 @@ ON (j.monday <= m.endday AND j.sunday >= m.startday)
 
 def main():
 	createMilestonePredRevenueGrowthrateView()
-	# createAosOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createIosOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createOnlyprofitCohortCostRevenueDailyForCheckView()
-	# createOnlyprofitCohortCostRevenueWeeklyForCheckView()
+	createAosOnlyprofitCohortCostRevenueDailyForCheckView()
+	createIosOnlyprofitCohortCostRevenueDailyForCheckView()
+	createOnlyprofitCohortCostRevenueDailyForCheckView()
+	createOnlyprofitCohortCostRevenueWeeklyForCheckView()
 
 	createAosCohortCostRevenueDailyForCheckView()
 	createIosCohortCostRevenueDailyForCheckView()
