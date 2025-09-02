@@ -3846,102 +3846,102 @@ SELECT
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			 AND k.tag = 'for_ua' 
-			 AND r.applovin_int_other_r1_ratio IS NOT NULL
+			AND k.tag = 'for_ua' 
+			AND r.applovin_int_other_r1_ratio IS NOT NULL
 		THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d7' 
-			 AND b.applovin_int_d7_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d7' 
+			AND b.applovin_int_d7_coeff IS NOT NULL
 		THEN ROUND(k.kpi1 / b.applovin_int_d7_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d28' 
-			 AND b.applovin_int_d28_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d28' 
+			AND b.applovin_int_d28_coeff IS NOT NULL
 		THEN ROUND(k.kpi1 / b.applovin_int_d28_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'Facebook Ads' 
-			 AND b.facebook_ads_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'Facebook Ads' 
+			AND b.facebook_ads_coeff IS NOT NULL
 		THEN ROUND(k.kpi1 / b.facebook_ads_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'moloco_int' 
-			 AND b.moloco_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'moloco_int' 
+			AND b.moloco_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi1 / b.moloco_int_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'bytedanceglobal_int' 
-			 AND b.bytedanceglobal_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'bytedanceglobal_int' 
+			AND b.bytedanceglobal_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi1 / b.bytedanceglobal_int_coeff, 4)
 		ELSE k.kpi1
 	END AS kpi1,
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			 AND k.tag = 'for_ua' 
-			 AND r.applovin_int_other_r3_ratio IS NOT NULL
+			AND k.tag = 'for_ua' 
+			AND r.applovin_int_other_r3_ratio IS NOT NULL
 		THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d7' 
-			 AND b.applovin_int_d7_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d7' 
+			AND b.applovin_int_d7_coeff IS NOT NULL
 		THEN ROUND(k.kpi3 / b.applovin_int_d7_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d28' 
-			 AND b.applovin_int_d28_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d28' 
+			AND b.applovin_int_d28_coeff IS NOT NULL
 		THEN ROUND(k.kpi3 / b.applovin_int_d28_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'Facebook Ads' 
-			 AND b.facebook_ads_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'Facebook Ads' 
+			AND b.facebook_ads_coeff IS NOT NULL
 		THEN ROUND(k.kpi3 / b.facebook_ads_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'moloco_int' 
-			 AND b.moloco_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'moloco_int' 
+			AND b.moloco_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi3 / b.moloco_int_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'bytedanceglobal_int' 
-			 AND b.bytedanceglobal_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'bytedanceglobal_int' 
+			AND b.bytedanceglobal_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi3 / b.bytedanceglobal_int_coeff, 4)
 		ELSE k.kpi3
 	END AS kpi3,
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			 AND k.tag = 'for_ua' 
-			 AND r.applovin_int_other_r7_ratio IS NOT NULL
+			AND k.tag = 'for_ua' 
+			AND r.applovin_int_other_r7_ratio IS NOT NULL
 		THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d7' 
-			 AND b.applovin_int_d7_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d7' 
+			AND b.applovin_int_d7_coeff IS NOT NULL
 		THEN ROUND(k.kpi7 / b.applovin_int_d7_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'applovin_int_d28' 
-			 AND b.applovin_int_d28_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'applovin_int_d28' 
+			AND b.applovin_int_d28_coeff IS NOT NULL
 		THEN ROUND(k.kpi7 / b.applovin_int_d28_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'Facebook Ads' 
-			 AND b.facebook_ads_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'Facebook Ads' 
+			AND b.facebook_ads_coeff IS NOT NULL
 		THEN ROUND(k.kpi7 / b.facebook_ads_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'moloco_int' 
-			 AND b.moloco_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'moloco_int' 
+			AND b.moloco_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi7 / b.moloco_int_coeff, 4)
 		WHEN k.app_package = 'id6448786147' 
-			 AND k.tag IN ('20250806_10', '20250806_20', '20250808_20')
-			 AND k.mediasource = 'bytedanceglobal_int' 
-			 AND b.bytedanceglobal_int_coeff IS NOT NULL
+			AND k.tag IN ('20250806_10', '20250806_20', '20250808_20','20250808_20_135')
+			AND k.mediasource = 'bytedanceglobal_int' 
+			AND b.bytedanceglobal_int_coeff IS NOT NULL
 		THEN ROUND(k.kpi7 / b.bytedanceglobal_int_coeff, 4)
 		ELSE k.kpi7
 	END AS kpi7
@@ -3951,7 +3951,32 @@ FROM
 		ON k.app_package = r.app_package 
 		AND k.install_month = r.install_month 
 		AND k.country_group = r.country_group
-	LEFT JOIN lw_20250703_ios_bayesian_result_by_j b
+	LEFT JOIN (
+		select
+			country_group,
+			organic_revenue,
+			applovin_int_d7_coeff,
+			applovin_int_d28_coeff,
+			facebook_ads_coeff,
+			moloco_int_coeff,
+			bytedanceglobal_int_coeff,
+			tag
+		from
+		lw_20250703_ios_bayesian_result_by_j
+		union all
+		select
+			country_group,
+			organic_revenue,
+			applovin_int_d7_coeff,
+			applovin_int_d28_coeff,
+			facebook_ads_coeff,
+			moloco_int_coeff,
+			bytedanceglobal_int_coeff,
+			'20250808_20_135' as tag
+		from
+		lw_20250703_ios_bayesian_result_by_j
+		where tag = '20250808_20'
+	) b
 		ON k.country_group = b.country_group
 		AND k.tag = b.tag
 ORDER BY
@@ -3967,13 +3992,8 @@ ORDER BY
 	return
 
 def createKpiTable():
-	sql1 = """
-DROP TABLE IF EXISTS lw_20250703_af_kpi_month_table_by_j;
-	"""
-	print(f"Executing SQL: {sql1}")
-	execSql2(sql1)
 	sql2 = """
-CREATE TABLE lw_20250703_af_kpi_month_table_by_j AS
+CREATE OR REPLACE TABLE lw_20250703_af_kpi_month_table_by_j AS
 SELECT * FROM lw_20250703_af_kpi_month_with_discount_view_by_j;
 	"""
 	print(f"Executing SQL: {sql2}")
