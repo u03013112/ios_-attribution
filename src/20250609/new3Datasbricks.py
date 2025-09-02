@@ -3846,7 +3846,7 @@ SELECT
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			AND k.tag = 'for_ua' 
+			AND k.tag in ('for_ua' ,'for_ua_135')
 			AND r.applovin_int_other_r1_ratio IS NOT NULL
 		THEN ROUND(k.kpi1 * (1 - r.applovin_int_other_r1_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
@@ -3880,7 +3880,7 @@ SELECT
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			AND k.tag = 'for_ua' 
+			AND k.tag in ('for_ua' ,'for_ua_135')
 			AND r.applovin_int_other_r3_ratio IS NOT NULL
 		THEN ROUND(k.kpi3 * (1 - r.applovin_int_other_r3_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
@@ -3914,7 +3914,7 @@ SELECT
 	CASE
 		-- 原有逻辑：applovin折扣
 		WHEN k.mediasource IN ('applovin_int_d7', 'applovin_int_d28') 
-			AND k.tag = 'for_ua' 
+			AND k.tag in ('for_ua' ,'for_ua_135')
 			AND r.applovin_int_other_r7_ratio IS NOT NULL
 		THEN ROUND(k.kpi7 * (1 - r.applovin_int_other_r7_ratio), 4)
 		-- 20250804新增：iOS媒体系数折扣
