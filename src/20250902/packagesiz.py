@@ -2,6 +2,9 @@ import pandas as pd
 import sys
 from scipy.stats import pearsonr, spearmanr
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # 使用非交互式后端
 
 sys.path.append('/src')
 from src.dataBricks import execSql, execSql2
@@ -221,11 +224,58 @@ def print_analysis_summary(correlation_df):
     print(f"\n分析完成！详细结果已保存到CSV文件中。")
 
 
-# 画图，x坐标是package_size_mb，y坐标是cpi
-# 每个国家画一张图
-# 不用show，直接保存到/src/data/20250902_package_size_{country_tier}.png
 def drawPic(df):
-    pass
+    """
+    绘制各国家/地区安装包大小与CPI的散点图
+    
+    Args:
+        df (pd.DataFrame): 原始数据，包含country_tier, package_size_mb, cpi等字段
+    """
+    print("开始生成图表...")
+    
+    # 按国家分组绘图
+    for country_tier in df['country_tier'].unique():
+        country_data = df[df['country_tier'] == country_tier].copy()
+        
+        # 过滤掉CPI为空值的数据
+        country_data = country_data.dropna(subset=['cpi'])
+        
+        if len(country_data) >= 3:  # 确保有足够的数据点
+            # 创建图形
+            plt.figure(figsize=(10, 6))
+            
+            # 绘制散点图
+            plt.scatter(country_data['package_size_mb'], country_data['cpi'], 
+                       alpha=0.7, s=60, color='blue', edgecolors='black', linewidth=0.5)
+            
+            # 添加趋势线
+            try:
+                z = np.polyfit(country_data['package_size_mb'], country_data['cpi'], 1)
+                p = np.poly1d(z)
+                plt.plot(country_data['package_size_mb'], p(country_data['package_size_mb']), 
+                        "r--", alpha=0.8, linewidth=2)
+            except:
+                pass  # 如果无法拟合趋势线，跳过
+            
+            # 设置标题和标签（英文）
+            plt.title(f'Package Size vs CPI - {country_tier}', fontsize=14, fontweight='bold')
+            plt.xlabel('Package Size (MB)', fontsize=12)
+            plt.ylabel('CPI (USD)', fontsize=12)
+            
+            # 设置网格
+            plt.grid(True, alpha=0.3)
+            
+            # 调整布局
+            plt.tight_layout()
+            
+            # 保存图片
+            filename = f'/src/data/20250902_package_size_{country_tier}.png'
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.close()  # 关闭图形以释放内存
+            
+            print(f"已保存 {country_tier} 的图表到: {filename}")
+    
+    print("所有图表生成完成！")
 
 def main():
     """
@@ -241,7 +291,10 @@ def main():
         # 3. 保存结果
         save_results(raw_data, correlation_results)
         
-        # 4. 打印分析摘要
+        # 4. 生成图表
+        drawPic(raw_data)
+        
+        # 5. 打印分析摘要
         print_analysis_summary(correlation_results)
         
     except Exception as e:

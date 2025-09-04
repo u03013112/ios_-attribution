@@ -467,8 +467,8 @@ FROM lw_20250815_ios_profit_cost_revenue_view_by_j
 # 收入是分媒体的
 def createCostAndRevenueView2():
 	sql = """
-CREATE
-OR REPLACE VIEW lw_20250815_country_milestone_profit_cost_revenue_view2_by_j AS WITH milestone AS (
+CREATE OR REPLACE VIEW lw_20250815_country_milestone_profit_cost_revenue_view2_by_j AS 
+WITH milestone AS (
 	SELECT
 		startday,
 		COALESCE(
