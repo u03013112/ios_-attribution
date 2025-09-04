@@ -221,9 +221,27 @@ from
 	execSql2(sql)
 	return
 
+
+def createAosAllView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250903_aos_all_view_by_j as
+SELECT
+*
+FROM lw_20250903_aos_gpir_cohort_raw_view_by_j
+UNION ALL
+SELECT
+*
+FROM lw_20250903_aos_gpir_cohort_avg_21_view_by_j
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 def main():
-    # createAosGpirCohortRawView()
+    createAosGpirCohortRawView()
     createAosGpirCohortAvgNView(21)
+    createAosAllView()
     
 
 if __name__ == "__main__":
