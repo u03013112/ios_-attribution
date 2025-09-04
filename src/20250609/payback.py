@@ -813,10 +813,11 @@ WITH milestone AS (
 	SELECT
 		startday,
 		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd')) AS endday,
-		substr(startday, 1, 6) AS startmonth
+		date_format(date_add(MONTH, -2, to_date(startday, 'yyyyMMdd')), 'yyyyMM') AS startmonth
 	FROM marketing.attribution.cdm_ext_milestone_config
 	WHERE
 		app = 502
+		and startday <> 'startday'
 	GROUP BY
 		startday,
 		COALESCE(endday, date_format(date_sub(current_date(), 8), 'yyyyMMdd'))
