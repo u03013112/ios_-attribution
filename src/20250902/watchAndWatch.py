@@ -238,10 +238,37 @@ FROM lw_20250903_aos_gpir_cohort_avg_21_view_by_j
     execSql2(sql)
     return
 
+def createRevenueGrowthRateView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250903_revenue_growth_rate_view_by_j as
+select 
+    app_package,
+    country_group,
+    mediasource,
+    tag,
+    install_day,
+    try_divide(revenue_d3, revenue_d1) as r3_r1,
+    try_divide(revenue_d7, revenue_d3) as r7_r3,
+    try_divide(revenue_d14, revenue_d7) as r14_r7,
+    try_divide(revenue_d30, revenue_d14) as r30_r14,
+    try_divide(revenue_d60, revenue_d30) as r60_r30,
+    try_divide(revenue_d90, revenue_d60) as r90_r60,
+    try_divide(revenue_d120, revenue_d90) as r120_r90,
+    try_divide(revenue_d135, revenue_d120) as r135_r120,
+    try_divide(revenue_d150, revenue_d135) as r150_r135
+from lw_20250903_aos_all_view_by_j
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 def main():
-    createAosGpirCohortRawView()
-    createAosGpirCohortAvgNView(21)
-    createAosAllView()
+    # createAosGpirCohortRawView()
+    # createAosGpirCohortAvgNView(21)
+    # createAosAllView()
+    createRevenueGrowthRateView()
     
 
 if __name__ == "__main__":
