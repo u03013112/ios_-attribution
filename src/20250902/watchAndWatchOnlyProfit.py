@@ -604,8 +604,34 @@ ORDER BY
     execSql2(sql)
     return
 
+
+def createOrganicRevenueRateView():
+    sql = """
+CREATE OR REPLACE VIEW lw_20250903_onlyprofit_organic_revenue_rate_view_by_j as
+SELECT
+    app_package,
+    country_group,
+    tag,
+    install_day,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d7 ELSE 0 END) / SUM(revenue_d7) AS organic_revenue_rate_d7,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d14 ELSE 0 END) / SUM(revenue_d14) AS organic_revenue_rate_d14,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d30 ELSE 0 END) / SUM(revenue_d30) AS organic_revenue_rate_d30,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d60 ELSE 0 END) / SUM(revenue_d60) AS organic_revenue_rate_d60,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d90 ELSE 0 END) / SUM(revenue_d90) AS organic_revenue_rate_d90,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d120 ELSE 0 END) / SUM(revenue_d120) AS organic_revenue_rate_d120,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d135 ELSE 0 END) / SUM(revenue_d135) AS organic_revenue_rate_d135,
+    SUM(CASE WHEN mediasource IN ('organic', 'Organic') THEN revenue_d150 ELSE 0 END) / SUM(revenue_d150) AS organic_revenue_rate_d150
+FROM data_science.default.lw_20250903_onlyprofit_real_and_predict_revenue_table_by_j
+GROUP BY app_package, country_group, tag, install_day
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+
 def main():
-    # createAosGpirCohortOnlyProfitRawView()
+    createAosGpirCohortOnlyProfitRawView()
     createAosGpirCohortOnlyProfitAvgNView(28)
     createAosGpirCohortOnlyProfitAvgNView(56)
     createAosGpirCohortOnlyProfitAvgNView(84)
@@ -614,6 +640,7 @@ def main():
     createPredictRevenueGrowthRateView()
     createPredictRevenueView()
     createRealAndPredictRevenueView()
+    createOrganicRevenueRateView()
     
 
 if __name__ == "__main__":
