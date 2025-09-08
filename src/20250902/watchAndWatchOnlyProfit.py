@@ -41,14 +41,7 @@ FROM
 WHERE
 	roi.app_package in ('com.fun.lastwar.gp','com.fun.lastwar.vn.gp')
 GROUP BY
-	app_package,
-	roi.install_day,
-	COALESCE(cg.country_group, 'other'),
-	case
-	when roi.mediasource = 'applovin_int' and pub.campaign_name like '%D7%' then 'applovin_int_d7'
-	when roi.mediasource = 'applovin_int' and pub.campaign_name like '%D28%' then 'applovin_int_d28'
-	when roi.mediasource = 'applovin_int' then 'applovin_int'
-	else roi.mediasource end
+	1,2,3,4,5
 ;
     """
     print(f"Executing SQL: {sql}")
@@ -220,6 +213,203 @@ from
 	execSql2(sql)
 	return
 
+def createAosGpirCohortOnlyProfitEMAView(N=21):
+    alpha = 2.0 / (N + 1)  # 平滑因子
+    one_minus_alpha = 1 - alpha
+    
+    sql = f"""
+CREATE OR REPLACE VIEW lw_20250903_aos_gpir_cohort_onlyprofit_ema_{N}_view_by_j as
+with base_data as (
+    select
+        app_package,
+        country_group,
+        mediasource,
+        tag,
+        install_day,
+        cost,
+        revenue_d1,
+        revenue_d3,
+        revenue_d7,
+        revenue_d14,
+        revenue_d30,
+        revenue_d60,
+        revenue_d90,
+        revenue_d120,
+        revenue_d135,
+        revenue_d150,
+        row_number() over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day
+        ) as rn
+    from
+        data_science.default.lw_20250903_aos_gpir_cohort_onlyprofit_raw_view_by_j
+),
+windowed_data as (
+    select 
+        *,
+        -- 为窗口内每行计算相对位置（0到N-1）
+        collect_list(cost) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as cost_window,
+        collect_list(revenue_d1) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d1_window,
+        collect_list(revenue_d3) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d3_window,
+        collect_list(revenue_d7) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d7_window,
+        collect_list(revenue_d14) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d14_window,
+        collect_list(revenue_d30) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d30_window,
+        collect_list(revenue_d60) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d60_window,
+        collect_list(revenue_d90) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d90_window,
+        collect_list(revenue_d120) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d120_window,
+        collect_list(revenue_d135) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d135_window,
+        collect_list(revenue_d150) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        ) as revenue_d150_window,
+        size(collect_list(cost) over (
+            partition by app_package, country_group, mediasource, tag
+            order by install_day 
+            rows between {N-1} preceding and current row
+        )) as window_size
+    from base_data
+)
+select
+    app_package,
+    country_group,
+    mediasource,
+    'aos_gpir_cohort_ema_{N}' as tag,
+    install_day,
+    -- 只有当窗口大小达到N时才计算EMA
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + cost_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as cost,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d1_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d1,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d3_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d3,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d7_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d7,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d14_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d14,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d30_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d30,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d60_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d60,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d90_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d90,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d120_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d120,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d135_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d135,
+    
+    case when window_size >= {N} then
+        aggregate(
+            sequence(0, {N-1}),
+            cast(0.0 as double),
+            (acc, i) -> acc + revenue_d150_window[i] * {alpha} * power({one_minus_alpha}, {N-1} - i)
+        ) / (1 - power({one_minus_alpha}, {N}))
+    else null end as revenue_d150
+from
+    windowed_data;
+    """
+    print(f"Executing SQL for EMA with N={N}, alpha={alpha:.4f}")
+    execSql2(sql)
+    return
 
 def createAosGpirCohortOnlyprofitAllFuncView():
     sql = """
@@ -235,6 +425,18 @@ UNION ALL
 SELECT
 *
 FROM lw_20250903_aos_gpir_cohort_onlyprofit_avg_84_view_by_j
+UNION ALL
+SELECT
+*   
+FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_28_view_by_j
+UNION ALL
+SELECT
+*   
+FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_56_view_by_j
+UNION ALL
+SELECT
+*   
+FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_84_view_by_j
 ;
     """
     print(f"Executing SQL: {sql}")
@@ -629,18 +831,35 @@ GROUP BY app_package, country_group, tag, install_day
     execSql2(sql)
     return
 
+def createRealAndPredictRevenueTable():
+    sql = """
+create or replace table data_science.default.lw_20250903_onlyprofit_real_and_predict_revenue_table_by_j as 
+select * from data_science.default.lw_20250903_onlyprofit_real_and_predict_revenue_view_by_j
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
 
 def main():
     createAosGpirCohortOnlyProfitRawView()
     createAosGpirCohortOnlyProfitAvgNView(28)
     createAosGpirCohortOnlyProfitAvgNView(56)
     createAosGpirCohortOnlyProfitAvgNView(84)
+    createAosGpirCohortOnlyProfitEMAView(28)
+    createAosGpirCohortOnlyProfitEMAView(56)
+    createAosGpirCohortOnlyProfitEMAView(84)
     createAosGpirCohortOnlyprofitAllFuncView()
     createRevenueGrowthRateView()
     createPredictRevenueGrowthRateView()
     createPredictRevenueView()
     createRealAndPredictRevenueView()
     createOrganicRevenueRateView()
+
+    createRealAndPredictRevenueTable()
+
+    
     
 
 if __name__ == "__main__":
