@@ -1769,10 +1769,10 @@ join ema84 e84 on a28.app_package = e84.app_package and a28.country_group = e84.
     return
 
 def main():
-    # createAosGpirCohortOnlyProfitRawView()
-    # createIosAfCohortOnlyProfitRawView()
-    # createIosAfCohortOnlyProfitFixTable()
-    # createIosAfCohortOnlyProfitFitTable()
+    createAosGpirCohortOnlyProfitRawView()
+    createIosAfCohortOnlyProfitRawView()
+    createIosAfCohortOnlyProfitFixTable()
+    createIosAfCohortOnlyProfitFitTable()
 
     # 创建各种视图
     avg_views = []
