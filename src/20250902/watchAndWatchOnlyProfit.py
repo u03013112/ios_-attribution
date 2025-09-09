@@ -832,7 +832,7 @@ select
     app_package,
     country_group,
     mediasource,
-    'aos_gpir_cohort_avg_{N}' as tag,
+    'avg_{N}' as tag,
     install_day,
     avg_cost as cost,
     avg_revenue_d1 as revenue_d1,
@@ -957,7 +957,7 @@ select
     app_package,
     country_group,
     mediasource,
-    'aos_gpir_cohort_ema_{N}' as tag,
+    'ema_{N}' as tag,
     install_day,
     -- 只有当窗口大小达到N时才计算EMA
     case when window_size >= {N} then
@@ -1054,32 +1054,34 @@ from
     execSql2(sql)
     return viewName
 
-def createAosGpirCohortOnlyprofitAllFuncView(viewNames):
-    sql = """
-CREATE OR REPLACE VIEW lw_20250903_aos_gpir_cohort_onlyprofit_all_func_view_by_j as
-SELECT
-*
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_avg_28_view_by_j
-UNION ALL
-SELECT
-*
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_avg_56_view_by_j
-UNION ALL
-SELECT
-*
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_avg_84_view_by_j
-UNION ALL
-SELECT
-*   
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_28_view_by_j
-UNION ALL
-SELECT
-*   
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_56_view_by_j
-UNION ALL
-SELECT
-*   
-FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_84_view_by_j
+def createOnlyprofitAllFuncView(viewNames=None):
+    """
+    创建汇总视图，动态读取视图名称列表
+    
+    Args:
+        viewNames: 视图名称列表，如果为None则使用默认配置
+    """
+    if viewNames is None:
+        # 默认配置
+        viewNames = [
+            'lw_20250903_aos_gpir_cohort_onlyprofit_avg_28_view_by_j',
+            'lw_20250903_aos_gpir_cohort_onlyprofit_avg_56_view_by_j',
+            'lw_20250903_aos_gpir_cohort_onlyprofit_avg_84_view_by_j',
+            'lw_20250903_aos_gpir_cohort_onlyprofit_ema_28_view_by_j',
+            'lw_20250903_aos_gpir_cohort_onlyprofit_ema_56_view_by_j',
+            'lw_20250903_aos_gpir_cohort_onlyprofit_ema_84_view_by_j'
+        ]
+    
+    # 动态构建UNION ALL语句
+    union_statements = []
+    for view_name in viewNames:
+        union_statements.append(f"SELECT\n*\nFROM {view_name}")
+    
+    union_sql = "\nUNION ALL\n".join(union_statements)
+    
+    sql = f"""
+CREATE OR REPLACE VIEW lw_20250903_onlyprofit_all_func_view_by_j as
+{union_sql}
 ;
     """
     print(f"Executing SQL: {sql}")
@@ -1088,7 +1090,7 @@ FROM lw_20250903_aos_gpir_cohort_onlyprofit_ema_84_view_by_j
 
 def createRevenueGrowthRateView():
     sql = """
-CREATE OR REPLACE VIEW lw_20250903_aos_gpir_cohort_onlyprofit_revenue_growth_rate_view_by_j as
+CREATE OR REPLACE VIEW lw_20250903_onlyprofit_revenue_growth_rate_view_by_j as
 select 
     app_package,
     country_group,
@@ -1104,7 +1106,7 @@ select
     try_divide(revenue_d120, revenue_d90) as r120_r90,
     try_divide(revenue_d135, revenue_d120) as r135_r120,
     try_divide(revenue_d150, revenue_d135) as r150_r135
-from lw_20250903_aos_gpir_cohort_onlyprofit_all_func_view_by_j
+from lw_20250903_onlyprofit_all_func_view_by_j
 ;
     """
     print(f"Executing SQL: {sql}")
@@ -1132,7 +1134,7 @@ select
     lag(r120_r90, 120) over (partition by app_package, country_group, mediasource, tag order by to_date(install_day, 'yyyyMMdd')) as p_r120_r90,
     lag(r135_r120, 135) over (partition by app_package, country_group, mediasource, tag order by to_date(install_day, 'yyyyMMdd')) as p_r135_r120,
     lag(r150_r135, 150) over (partition by app_package, country_group, mediasource, tag order by to_date(install_day, 'yyyyMMdd')) as p_r150_r135
-from lw_20250903_aos_gpir_cohort_onlyprofit_revenue_growth_rate_view_by_j
+from lw_20250903_onlyprofit_revenue_growth_rate_view_by_j
 order by app_package, country_group, mediasource, tag, to_date(install_day, 'yyyyMMdd')
 ;
     """
@@ -1178,7 +1180,12 @@ revenue_data AS (
         revenue_d120,
         revenue_d135,
         revenue_d150
-    FROM lw_20250903_aos_gpir_cohort_onlyprofit_raw_view_by_j
+    FROM 
+        (
+			select * from data_science.default.lw_20250903_aos_gpir_cohort_onlyprofit_raw_view_by_j
+			union all
+			select * from data_science.default.lw_20250903_ios_af_cohort_onlyprofit_fit_view_by_j
+        )
 )
 SELECT
     r.app_package,
@@ -1484,6 +1491,282 @@ select * from data_science.default.lw_20250903_onlyprofit_real_and_predict_reven
     execSql2(sql)
     return
 
+# debug-cost&revenue不同均线表现
+def forDebug1():
+    sql = """
+CREATE OR REPLACE TABLE lw_20250903_onlyprofit_debug_cost_revenue_table_by_j as
+SELECT
+    raw.app_package,
+    raw.country_group,
+    raw.mediasource,
+    to_date(raw.install_day,'yyyyMMdd') as install_day,
+    
+    -- 原始数据
+    raw.cost AS cost_raw,
+    raw.revenue_d1 AS revenue_raw_d1,
+    raw.revenue_d3 AS revenue_raw_d3,
+    raw.revenue_d7 AS revenue_raw_d7,
+    raw.revenue_d14 AS revenue_raw_d14,
+    raw.revenue_d30 AS revenue_raw_d30,
+    raw.revenue_d60 AS revenue_raw_d60,
+    raw.revenue_d90 AS revenue_raw_d90,
+    raw.revenue_d120 AS revenue_raw_d120,
+    raw.revenue_d135 AS revenue_raw_d135,
+    raw.revenue_d150 AS revenue_raw_d150,
+    
+    -- 28天平均
+    avg_28.cost AS cost_avg_28,
+    avg_28.revenue_d1 AS revenue_avg_28_d1,
+    avg_28.revenue_d3 AS revenue_avg_28_d3,
+    avg_28.revenue_d7 AS revenue_avg_28_d7,
+    avg_28.revenue_d14 AS revenue_avg_28_d14,
+    avg_28.revenue_d30 AS revenue_avg_28_d30,
+    avg_28.revenue_d60 AS revenue_avg_28_d60,
+    avg_28.revenue_d90 AS revenue_avg_28_d90,
+    avg_28.revenue_d120 AS revenue_avg_28_d120,
+    avg_28.revenue_d135 AS revenue_avg_28_d135,
+    avg_28.revenue_d150 AS revenue_avg_28_d150,
+    
+    -- 56天平均
+    avg_56.cost AS cost_avg_56,
+    avg_56.revenue_d1 AS revenue_avg_56_d1,
+    avg_56.revenue_d3 AS revenue_avg_56_d3,
+    avg_56.revenue_d7 AS revenue_avg_56_d7,
+    avg_56.revenue_d14 AS revenue_avg_56_d14,
+    avg_56.revenue_d30 AS revenue_avg_56_d30,
+    avg_56.revenue_d60 AS revenue_avg_56_d60,
+    avg_56.revenue_d90 AS revenue_avg_56_d90,
+    avg_56.revenue_d120 AS revenue_avg_56_d120,
+    avg_56.revenue_d135 AS revenue_avg_56_d135,
+    avg_56.revenue_d150 AS revenue_avg_56_d150,
+    
+    -- 84天平均
+    avg_84.cost AS cost_avg_84,
+    avg_84.revenue_d1 AS revenue_avg_84_d1,
+    avg_84.revenue_d3 AS revenue_avg_84_d3,
+    avg_84.revenue_d7 AS revenue_avg_84_d7,
+    avg_84.revenue_d14 AS revenue_avg_84_d14,
+    avg_84.revenue_d30 AS revenue_avg_84_d30,
+    avg_84.revenue_d60 AS revenue_avg_84_d60,
+    avg_84.revenue_d90 AS revenue_avg_84_d90,
+    avg_84.revenue_d120 AS revenue_avg_84_d120,
+    avg_84.revenue_d135 AS revenue_avg_84_d135,
+    avg_84.revenue_d150 AS revenue_avg_84_d150,
+    
+    -- 28天EMA
+    ema_28.cost AS cost_ema_28,
+    ema_28.revenue_d1 AS revenue_ema_28_d1,
+    ema_28.revenue_d3 AS revenue_ema_28_d3,
+    ema_28.revenue_d7 AS revenue_ema_28_d7,
+    ema_28.revenue_d14 AS revenue_ema_28_d14,
+    ema_28.revenue_d30 AS revenue_ema_28_d30,
+    ema_28.revenue_d60 AS revenue_ema_28_d60,
+    ema_28.revenue_d90 AS revenue_ema_28_d90,
+    ema_28.revenue_d120 AS revenue_ema_28_d120,
+    ema_28.revenue_d135 AS revenue_ema_28_d135,
+    ema_28.revenue_d150 AS revenue_ema_28_d150,
+    
+    -- 56天EMA
+    ema_56.cost AS cost_ema_56,
+    ema_56.revenue_d1 AS revenue_ema_56_d1,
+    ema_56.revenue_d3 AS revenue_ema_56_d3,
+    ema_56.revenue_d7 AS revenue_ema_56_d7,
+    ema_56.revenue_d14 AS revenue_ema_56_d14,
+    ema_56.revenue_d30 AS revenue_ema_56_d30,
+    ema_56.revenue_d60 AS revenue_ema_56_d60,
+    ema_56.revenue_d90 AS revenue_ema_56_d90,
+    ema_56.revenue_d120 AS revenue_ema_56_d120,
+    ema_56.revenue_d135 AS revenue_ema_56_d135,
+    ema_56.revenue_d150 AS revenue_ema_56_d150,
+    
+    -- 84天EMA
+    ema_84.cost AS cost_ema_84,
+    ema_84.revenue_d1 AS revenue_ema_84_d1,
+    ema_84.revenue_d3 AS revenue_ema_84_d3,
+    ema_84.revenue_d7 AS revenue_ema_84_d7,
+    ema_84.revenue_d14 AS revenue_ema_84_d14,
+    ema_84.revenue_d30 AS revenue_ema_84_d30,
+    ema_84.revenue_d60 AS revenue_ema_84_d60,
+    ema_84.revenue_d90 AS revenue_ema_84_d90,
+    ema_84.revenue_d120 AS revenue_ema_84_d120,
+    ema_84.revenue_d135 AS revenue_ema_84_d135,
+    ema_84.revenue_d150 AS revenue_ema_84_d150
+    
+FROM
+    (
+        select * from data_science.default.lw_20250903_aos_gpir_cohort_onlyprofit_raw_view_by_j
+        union all
+        select * from data_science.default.lw_20250903_ios_af_cohort_onlyprofit_fit_view_by_j
+    ) AS raw
+    
+-- 28天平均
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_avg_28_view_by_j AS avg_28
+ON
+    raw.app_package = avg_28.app_package AND
+    raw.country_group = avg_28.country_group AND
+    raw.mediasource = avg_28.mediasource AND
+    raw.install_day = avg_28.install_day
+    
+-- 56天平均
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_avg_56_view_by_j AS avg_56
+ON
+    raw.app_package = avg_56.app_package AND
+    raw.country_group = avg_56.country_group AND
+    raw.mediasource = avg_56.mediasource AND
+    raw.install_day = avg_56.install_day
+    
+-- 84天平均
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_avg_84_view_by_j AS avg_84
+ON
+    raw.app_package = avg_84.app_package AND
+    raw.country_group = avg_84.country_group AND
+    raw.mediasource = avg_84.mediasource AND
+    raw.install_day = avg_84.install_day
+    
+-- 28天EMA
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_ema_28_view_by_j AS ema_28
+ON
+    raw.app_package = ema_28.app_package AND
+    raw.country_group = ema_28.country_group AND
+    raw.mediasource = ema_28.mediasource AND
+    raw.install_day = ema_28.install_day
+    
+-- 56天EMA
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_ema_56_view_by_j AS ema_56
+ON
+    raw.app_package = ema_56.app_package AND
+    raw.country_group = ema_56.country_group AND
+    raw.mediasource = ema_56.mediasource AND
+    raw.install_day = ema_56.install_day
+    
+-- 84天EMA
+LEFT JOIN
+    lw_20250903_cohort_onlyprofit_ema_84_view_by_j AS ema_84
+ON
+    raw.app_package = ema_84.app_package AND
+    raw.country_group = ema_84.country_group AND
+    raw.mediasource = ema_84.mediasource AND
+    raw.install_day = ema_84.install_day;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
+
+# debug-付费增长率不同均线表现
+def forDebug2():
+    sql = """
+CREATE OR REPLACE TABLE lw_20250903_onlyprofit_debug_revenue_growth_rate_table_by_j as
+with avg28 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'avg_28'
+),
+avg56 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'avg_56'
+),
+avg84 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'avg_84'
+),
+ema28 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'ema_28'
+),
+ema56 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'ema_56'
+),
+ema84 as (
+  select
+    app_package,
+    country_group,
+    mediasource,
+    install_day,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 as p_r120_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 as p_r135_r7,
+    p_r14_r7 * p_r30_r14 * p_r60_r30 * p_r90_r60 * p_r120_r90 * p_r135_r120 * p_r150_r135 as p_r150_r7
+  from lw_20250903_onlyprofit_predict_revenue_growth_rate_view_by_j
+  where tag = 'ema_84'
+)
+select
+  a28.app_package,
+  a28.country_group,
+  a28.mediasource,
+  to_date(a28.install_day,'yyyyMMdd') as install_day,
+  a28.p_r120_r7 as avg28_p_r120_r7,
+  a28.p_r135_r7 as avg28_p_r135_r7,
+  a28.p_r150_r7 as avg28_p_r150_r7,
+  a56.p_r120_r7 as avg56_p_r120_r7,
+  a56.p_r135_r7 as avg56_p_r135_r7,
+  a56.p_r150_r7 as avg56_p_r150_r7,
+  a84.p_r120_r7 as avg84_p_r120_r7,
+  a84.p_r135_r7 as avg84_p_r135_r7,
+  a84.p_r150_r7 as avg84_p_r150_r7,
+  e28.p_r120_r7 as ema28_p_r120_r7,
+  e28.p_r135_r7 as ema28_p_r135_r7,
+  e28.p_r150_r7 as ema28_p_r150_r7,
+  e56.p_r120_r7 as ema56_p_r120_r7,
+  e56.p_r135_r7 as ema56_p_r135_r7,
+  e56.p_r150_r7 as ema56_p_r150_r7,
+  e84.p_r120_r7 as ema84_p_r120_r7,
+  e84.p_r135_r7 as ema84_p_r135_r7,
+  e84.p_r150_r7 as ema84_p_r150_r7
+from avg28 a28
+join avg56 a56 on a28.app_package = a56.app_package and a28.country_group = a56.country_group and a28.mediasource = a56.mediasource and a28.install_day = a56.install_day
+join avg84 a84 on a28.app_package = a84.app_package and a28.country_group = a84.country_group and a28.mediasource = a84.mediasource and a28.install_day = a84.install_day
+join ema28 e28 on a28.app_package = e28.app_package and a28.country_group = e28.country_group and a28.mediasource = e28.mediasource and a28.install_day = e28.install_day
+join ema56 e56 on a28.app_package = e56.app_package and a28.country_group = e56.country_group and a28.mediasource = e56.mediasource and a28.install_day = e56.install_day
+join ema84 e84 on a28.app_package = e84.app_package and a28.country_group = e84.country_group and a28.mediasource = e84.mediasource and a28.install_day = e84.install_day
+;
+    """
+    print(f"Executing SQL: {sql}")
+    execSql2(sql)
+    return
 
 def main():
     # createAosGpirCohortOnlyProfitRawView()
@@ -1491,27 +1774,36 @@ def main():
     # createIosAfCohortOnlyProfitFixTable()
     # createIosAfCohortOnlyProfitFitTable()
 
-    createAvgNView(28)
-    # createAvgNView(56)
-    # createAvgNView(84)
-    # createEMAView(28)
-    # createEMAView(56)
-    # createEMAView(84)
-
-    createAosGpirCohortOnlyprofitAllFuncView()
-    # createRevenueGrowthRateView()
-    # createPredictRevenueGrowthRateView()
-    # createPredictRevenueView()
-    # createRealAndPredictRevenueView()
-    # createOrganicRevenueRateView()
-
-    # createRealAndPredictRevenueTable()
-
+    # 创建各种视图
+    avg_views = []
+    ema_views = []
     
+    for n in [28, 56, 84]:
+        view_name = createAvgNView(n)
+        avg_views.append(view_name)
+        view_name = createEMAView(n)
+        ema_views.append(view_name)
+    
+    # 合并所有视图名称
+    all_view_names = avg_views + ema_views
+    
+    # 动态创建汇总视图
+    createOnlyprofitAllFuncView(all_view_names)
+    
+    createRevenueGrowthRateView()
+    createPredictRevenueGrowthRateView()
+    createPredictRevenueView()
+    createRealAndPredictRevenueView()
+    createOrganicRevenueRateView()
+
+    createRealAndPredictRevenueTable()
+
+
+    forDebug1()
+    forDebug2()    
 
     
     
 
 if __name__ == "__main__":
     main()
-    
