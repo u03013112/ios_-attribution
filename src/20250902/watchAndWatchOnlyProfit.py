@@ -14,7 +14,7 @@ SELECT
 	case
 	when roi.mediasource = 'applovin_int' and pub.campaign_name like '%D7%' then 'applovin_int_d7'
 	when roi.mediasource = 'applovin_int' and pub.campaign_name like '%D28%' then 'applovin_int_d28'
-	when roi.mediasource = 'applovin_int' then 'applovin_int'
+	WHEN mediasource in ('Organic', 'organic') THEN 'Organic'
 	else roi.mediasource end as mediasource,
 	'aos_gpir_cohort_onlyprofit_raw' as tag,
     roi.install_day,
