@@ -2,5 +2,26 @@
     "python.analysis.typeCheckingMode": "off",
     "python.analysis.autoImportCompletions": true,
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "sqltools.connections": [
+        {
+            "connectionMethod": "Hostname and Token",
+            "catalog": "data_science",
+            "previewLimit": 1000,
+            "driver": "Databricks",
+            "host": "dbc-3941a7a9-8d80.cloud.databricks.com",
+            "path": "/sql/protocolv1/o/1306609078058820/0827-034908-25ycafbl",
+            "name": "songzhijing@gamespark.net's Cluster 2025-08-27 11:30:58",
+            "schema": "data_science.default"
+        },
+        {
+            "connectionMethod": "Hostname and Token",
+            "catalog": "data_science",
+            "previewLimit": 100,
+            "driver": "Databricks",
+            "name": "dashboard-L",
+            "host": "dbc-3941a7a9-8d80.cloud.databricks.com",
+            "path": "/sql/1.0/warehouses/13169ead2af1759a"
+        }
+    ]
 }
